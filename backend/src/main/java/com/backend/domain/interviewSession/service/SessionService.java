@@ -1,0 +1,159 @@
+package com.backend.domain.interviewSession.service;
+
+import com.backend.domain.interviewSession.dto.request.ParticipantStatusRequest;
+import com.backend.domain.interviewSession.dto.request.SessionCreateRequest;
+import com.backend.domain.interviewSession.dto.request.SessionStatusRequest;
+import com.backend.domain.interviewSession.dto.response.*;
+import com.backend.domain.interviewSession.dto.response.ParticipantStatusResponse;
+import com.backend.domain.interviewSession.entity.*;
+import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
+import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
+import com.backend.domain.member.entity.Member;
+import com.backend.domain.member.entity.Role;
+import com.backend.domain.member.repository.MemberRepository;
+import com.backend.global.exception.CustomException;
+import com.backend.global.exception.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class SessionService {
+
+    private final InterviewSessionRepository sessionRepository;
+    private final SessionParticipantRepository participantRepository;
+    private final MemberRepository memberRepository;
+
+    @Transactional
+    public SessionCreateResponse createSession(Long mentorId, SessionCreateRequest request) {
+        Member mentor = memberRepository.findById(mentorId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        InterviewSession session = InterviewSession.builder()
+                .mentor(mentor)
+                .jobCategory(request.jobCategory())
+                .scheduledAt(java.time.LocalDateTime.now())
+                .build();
+
+        return SessionCreateResponse.from(sessionRepository.save(session));
+    }
+
+    public SessionDetailResponse getSession(Long memberId, Long sessionId) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+
+        validateSessionAccess(memberId, session);
+
+        List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
+
+        List<ParticipantInfo> participantInfos = participants.stream()
+                .map(p -> {
+                    String role = p.getMember().getId().equals(session.getMentor().getId()) ? "mentor" : "mentee";
+                    return ParticipantInfo.of(p, role);
+                })
+                .toList();
+
+        return SessionDetailResponse.of(session, participantInfos);
+    }
+
+    public SessionListResponse getMySessions(Long memberId, String status, Pageable pageable) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        SessionStatus sessionStatus = status != null
+                ? SessionStatus.valueOf(status.toUpperCase())
+                : null;
+
+        Page<SessionSummaryResponse> page;
+
+        if (member.getRole() == Role.MENTOR) {
+            page = sessionStatus != null
+                    ? sessionRepository.findAllByMentorAndStatus(member, sessionStatus, pageable).map(SessionSummaryResponse::from)
+                    : sessionRepository.findAllByMentor(member, pageable).map(SessionSummaryResponse::from);
+        } else {
+            page = sessionStatus != null
+                    ? participantRepository.findAllByMemberAndInterviewSession_Status(member, sessionStatus, pageable)
+                        .map(p -> SessionSummaryResponse.from(p.getInterviewSession()))
+                    : participantRepository.findAllByMember(member, pageable)
+                        .map(p -> SessionSummaryResponse.from(p.getInterviewSession()));
+        }
+
+        return SessionListResponse.from(page);
+    }
+
+    @Transactional
+    public SessionStatusResponse updateSessionStatus(Long mentorId, Long sessionId, SessionStatusRequest request) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+
+        if (!session.getMentor().getId().equals(mentorId)) {
+            throw new CustomException(ErrorCode.ACCESS_DENIED);
+        }
+
+        session.progressStatus();
+
+        return SessionStatusResponse.from(session);
+    }
+
+    @Transactional
+    public SessionJoinResponse joinSession(Long memberId, Long sessionId) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        if (participantRepository.existsByInterviewSessionAndMember(session, member)) {
+            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        }
+
+        AnswerStatus answerStatus = member.getRole() == Role.MENTEE ? AnswerStatus.WAITING : null;
+
+        SessionParticipant participant = SessionParticipant.builder()
+                .interviewSession(session)
+                .member(member)
+                .answerStatus(answerStatus)
+                .build();
+
+        return SessionJoinResponse.from(participantRepository.save(participant));
+    }
+
+    @Transactional
+    public ParticipantStatusResponse updateParticipantStatus(Long memberId, Long sessionId, Long userId, ParticipantStatusRequest request) {
+        if (!memberId.equals(userId)) {
+            throw new CustomException(ErrorCode.ACCESS_DENIED);
+        }
+
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        SessionParticipant participant = participantRepository.findByInterviewSessionAndMember(session, member)
+                .orElseThrow(() -> new CustomException(ErrorCode.INVALID_REQUEST));
+
+        AnswerStatus answerStatus = AnswerStatus.valueOf(request.answerStatus().toUpperCase());
+        participant.updateAnswerStatus(answerStatus);
+
+        return ParticipantStatusResponse.from(participant);
+    }
+
+    private void validateSessionAccess(Long memberId, InterviewSession session) {
+        boolean isMentor = session.getMentor().getId().equals(memberId);
+        boolean isParticipant = participantRepository
+                .findByInterviewSessionAndMember(session,
+                        memberRepository.getReferenceById(memberId))
+                .isPresent();
+
+        if (!isMentor && !isParticipant) {
+            throw new CustomException(ErrorCode.ACCESS_DENIED);
+        }
+    }
+}

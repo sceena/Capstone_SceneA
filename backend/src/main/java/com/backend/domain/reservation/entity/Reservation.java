@@ -37,8 +37,8 @@ public class Reservation extends BaseEntity {
         this.status = ReservationStatus.CONFIRMED;
     }
 
-    public void reject() {
-        this.status = ReservationStatus.REJECTED;
+    public void cancel() {
+        this.status = ReservationStatus.CANCELLED;
         this.mentorAvailability.unbook();
     }
 }

@@ -1,0 +1,21 @@
+package com.backend.domain.reservation.dto.response;
+
+import com.backend.domain.reservation.entity.Reservation;
+import com.backend.domain.reservation.entity.ReservationStatus;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.time.LocalDateTime;
+
+public record ReservationAcceptResponse(
+        Long id,
+        ReservationStatus status,
+        @JsonProperty("updated_at") LocalDateTime updatedAt
+) {
+    public static ReservationAcceptResponse from(Reservation reservation) {
+        return new ReservationAcceptResponse(
+                reservation.getId(),
+                reservation.getStatus(),
+                reservation.getModifyDate()
+        );
+    }
+}

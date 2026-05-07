@@ -22,6 +22,8 @@ public class InterviewSession extends BaseEntity {
     @JoinColumn(name = "mentor_id", nullable = false)
     private Member mentor;
 
+    private String jobCategory;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private SessionStatus status = SessionStatus.SCHEDULED;
@@ -29,17 +31,24 @@ public class InterviewSession extends BaseEntity {
     @Column(nullable = false)
     private LocalDateTime scheduledAt;
 
+    private LocalDateTime startedAt;
+
+    private LocalDateTime endedAt;
+
     @Builder
-    public InterviewSession(Member mentor, LocalDateTime scheduledAt) {
+    public InterviewSession(Member mentor, String jobCategory, LocalDateTime scheduledAt) {
         this.mentor = mentor;
+        this.jobCategory = jobCategory;
         this.scheduledAt = scheduledAt;
     }
 
     public void progressStatus() {
         if (this.status == SessionStatus.SCHEDULED) {
             this.status = SessionStatus.IN_PROGRESS;
+            this.startedAt = LocalDateTime.now();
         } else if (this.status == SessionStatus.IN_PROGRESS) {
             this.status = SessionStatus.COMPLETED;
+            this.endedAt = LocalDateTime.now();
         } else {
             throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
         }

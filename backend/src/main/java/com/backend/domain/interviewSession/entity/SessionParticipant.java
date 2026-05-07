@@ -23,13 +23,13 @@ public class SessionParticipant extends BaseEntity {
     private Member member;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private AnswerStatus answerStatus = AnswerStatus.WAITING;
+    private AnswerStatus answerStatus;
 
     @Builder
-    public SessionParticipant(InterviewSession interviewSession, Member member) {
+    public SessionParticipant(InterviewSession interviewSession, Member member, AnswerStatus answerStatus) {
         this.interviewSession = interviewSession;
         this.member = member;
+        this.answerStatus = answerStatus;
     }
 
     public void updateAnswerStatus(AnswerStatus answerStatus) {

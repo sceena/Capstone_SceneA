@@ -31,7 +31,7 @@ public enum ErrorCode {
 
     // 질문
     QUESTION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 질문입니다."),
-    QUESTION_MODIFICATION_LOCKED(HttpStatus.BAD_REQUEST, "면접 시작 후에는 질문을 수정하거나 삭제할 수 없습니다."),
+    QUESTION_MODIFICATION_LOCKED(HttpStatus.FORBIDDEN, "면접 시작 후에는 질문을 수정하거나 삭제할 수 없습니다."),
 
     // 답변
     ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 답변입니다."),

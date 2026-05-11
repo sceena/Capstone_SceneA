@@ -18,12 +18,23 @@ public class JobPosting extends BaseEntity {
     @JoinColumn(name = "session_id", nullable = false, unique = true)
     private InterviewSession interviewSession;
 
+    @Column(nullable = false)
+    private String company;
+
+    @Column(nullable = false)
+    private String jobCategory;
+
     @Column(nullable = false, columnDefinition = "TEXT")
-    private String content;
+    private String rawText;
+
+    private String url;
 
     @Builder
-    public JobPosting(InterviewSession interviewSession, String content) {
+    public JobPosting(InterviewSession interviewSession, String company, String jobCategory, String rawText, String url) {
         this.interviewSession = interviewSession;
-        this.content = content;
+        this.company = company;
+        this.jobCategory = jobCategory;
+        this.rawText = rawText;
+        this.url = url;
     }
 }

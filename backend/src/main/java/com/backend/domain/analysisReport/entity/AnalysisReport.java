@@ -28,10 +28,26 @@ public class AnalysisReport extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String mentorFeedback;
 
+    private Float totalScore;
+
+    private Float alignmentScore;
+
+    @Column(columnDefinition = "TEXT")
+    private String bestMoment;
+
+    @Column(columnDefinition = "TEXT")
+    private String worstMoment;
+
     @Builder
-    public AnalysisReport(InterviewSession interviewSession, String aiSummary) {
+    public AnalysisReport(InterviewSession interviewSession, String aiSummary,
+                          Float totalScore, Float alignmentScore,
+                          String bestMoment, String worstMoment) {
         this.interviewSession = interviewSession;
         this.aiSummary = aiSummary;
+        this.totalScore = totalScore;
+        this.alignmentScore = alignmentScore;
+        this.bestMoment = bestMoment;
+        this.worstMoment = worstMoment;
     }
 
     public void completeFinal(String mentorFeedback) {

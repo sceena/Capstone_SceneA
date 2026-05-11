@@ -1,0 +1,71 @@
+package com.backend.domain.analysisReport.controller;
+
+import com.backend.domain.analysisReport.dto.request.MentorFeedbackRequest;
+import com.backend.domain.analysisReport.dto.response.FitGapResponse;
+import com.backend.domain.analysisReport.dto.response.MentorFeedbackResponse;
+import com.backend.domain.analysisReport.dto.response.ReportResponse;
+import com.backend.domain.analysisReport.service.ReportService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+@Tag(name = "리포트", description = "리포트 조회 / 피드백 작성")
+@RestController
+@RequestMapping("/api/sessions")
+@RequiredArgsConstructor
+@SecurityRequirement(name = "bearer-key")
+public class ReportController {
+
+    private final ReportService reportService;
+
+    @Operation(summary = "리포트 조회", description = "세션의 리포트를 조회한다. report_status가 first이면 1차 AI 리포트, final이면 최종 리포트.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음 또는 만료"),
+            @ApiResponse(responseCode = "403", description = "해당 세션 접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "리포트 없음")
+    })
+    @GetMapping("/{id}/report")
+    public ResponseEntity<ReportResponse> getReport(
+            @AuthenticationPrincipal Long memberId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(reportService.getReport(memberId, id));
+    }
+
+    @Operation(summary = "Fit-Gap 역량 분석 조회", description = "채용공고 역량 vs 자소서 역량 비교 결과를 조회한다. AI가 추출한 skill 목록 기반으로 일치/불일치 역량을 반환한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음 또는 만료"),
+            @ApiResponse(responseCode = "403", description = "해당 세션 접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "리포트 / 채용공고 / 자소서 없음")
+    })
+    @GetMapping("/{id}/report/fit-gap")
+    public ResponseEntity<FitGapResponse> getFitGap(
+            @AuthenticationPrincipal Long memberId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(reportService.getFitGap(memberId, id));
+    }
+
+    @Operation(summary = "멘토 종합 피드백 작성", description = "멘토가 멘토링 세션 후 종합 피드백을 작성한다. 저장 시 report_status가 final로 변경되며 최종 리포트가 완성된다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "멘토 피드백 저장 성공, 리포트 final로 확정"),
+            @ApiResponse(responseCode = "400", description = "mentor_feedback 누락 또는 빈 문자열"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음 또는 만료"),
+            @ApiResponse(responseCode = "403", description = "멘토 외 입력 시도"),
+            @ApiResponse(responseCode = "404", description = "리포트 없음")
+    })
+    @PatchMapping("/{id}/report/mentor-feedback")
+    public ResponseEntity<MentorFeedbackResponse> addMentorFeedback(
+            @AuthenticationPrincipal Long memberId,
+            @PathVariable Long id,
+            @Valid @RequestBody MentorFeedbackRequest request) {
+        return ResponseEntity.ok(reportService.addMentorFeedback(memberId, id, request));
+    }
+}

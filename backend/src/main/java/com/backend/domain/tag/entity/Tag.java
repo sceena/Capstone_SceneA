@@ -18,8 +18,12 @@ public class Tag extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String name;
 
+    @Column
+    private String category;
+
     @Builder
-    public Tag(String name) {
+    public Tag(String name, String category) {
         this.name = name;
+        this.category = category;
     }
 }

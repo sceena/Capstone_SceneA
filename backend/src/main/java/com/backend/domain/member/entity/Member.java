@@ -49,4 +49,9 @@ public class Member extends BaseEntity {
     public boolean isDeleted() {
         return this.deletedAt != null;
     }
+
+    public void update(String name, String encodedPassword) {
+        if (name != null) this.name = name;
+        if (encodedPassword != null) this.password = encodedPassword;
+    }
 }

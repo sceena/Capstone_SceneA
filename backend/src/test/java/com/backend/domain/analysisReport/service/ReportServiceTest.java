@@ -161,7 +161,7 @@ class ReportServiceTest {
 
     @Test
     void getFitGap_성공_matched_unmatched_정확히_계산() {
-        JobPosting jobPosting = JobPosting.builder().interviewSession(session).content("채용공고").build();
+        JobPosting jobPosting = JobPosting.builder().interviewSession(session).company("네이버").jobCategory("백엔드").rawText("채용공고").build();
         JobSkill springSkill = JobSkill.builder().jobPosting(jobPosting).skill("Spring Boot").skillType(SkillType.REQUIRED).build();
         JobSkill k8sSkill = JobSkill.builder().jobPosting(jobPosting).skill("Kubernetes").skillType(SkillType.PREFERRED).build();
 
@@ -191,7 +191,7 @@ class ReportServiceTest {
 
     @Test
     void getFitGap_대소문자_무시하고_matched_계산() {
-        JobPosting jobPosting = JobPosting.builder().interviewSession(session).content("채용공고").build();
+        JobPosting jobPosting = JobPosting.builder().interviewSession(session).company("네이버").jobCategory("백엔드").rawText("채용공고").build();
         JobSkill skill = JobSkill.builder().jobPosting(jobPosting).skill("Spring Boot").skillType(SkillType.REQUIRED).build();
 
         Resume resume = Resume.builder().member(mentor).interviewSession(session).content("자소서").build();
@@ -251,7 +251,7 @@ class ReportServiceTest {
 
     @Test
     void getFitGap_자소서없음_예외() {
-        JobPosting jobPosting = JobPosting.builder().interviewSession(session).content("채용공고").build();
+        JobPosting jobPosting = JobPosting.builder().interviewSession(session).company("네이버").jobCategory("백엔드").rawText("채용공고").build();
 
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);

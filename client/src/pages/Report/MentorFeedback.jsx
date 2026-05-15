@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getSessionReport, saveMentorScore, saveMentorFeedback } from "../../api/sessions";
 
 // ─── 상수 ────────────────────────────────────────────────────────
 const NAVY = "#0D2240";
@@ -253,12 +254,19 @@ export default function MentorFeedbackPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams(); // /mentor/feedback/:sessionId
 
-  const [session] = useState(MOCK_SESSION);
+  const [session, setSession] = useState(MOCK_SESSION);
   const [feedbacks, setFeedbacks] = useState({});
   const [totalFeedback, setTotalFeedback] = useState("");
   const [mentorScore, setMentorScore] = useState(4.0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState(null);
+
+  // 세션 리포트 조회
+  useEffect(() => {
+    getSessionReport(sessionId)
+      .then(data => setSession(prev => ({ ...prev, ...data })))
+      .catch(() => {});
+  }, [sessionId]);
 
   // 초기 피드백 세팅 (AI 점수 기본값)
   useEffect(() => {
@@ -274,6 +282,12 @@ export default function MentorFeedbackPage() {
       ...prev,
       [qId]: { ...prev[qId], [field]: value },
     }));
+    if (field === "score") {
+      const qna = session.qnas.find(q => q.id === qId);
+      if (qna?.answerId) {
+        saveMentorScore(sessionId, qId, qna.answerId, value).catch(() => {});
+      }
+    }
   };
 
   const TEMPLATES = [
@@ -315,22 +329,10 @@ export default function MentorFeedbackPage() {
       return;
     }
     setIsSubmitting(true);
+    try {
+      await saveMentorFeedback(sessionId, totalFeedback);
+    } catch {}
 
-    // ── API 연동 포인트 ────────────────────────────────────────────
-    // const payload = {
-    //   sessionId: session.sessionId,
-    //   mentorScore,
-    //   totalFeedback,
-    //   qnaFeedbacks: Object.entries(feedbacks).map(([qId, fb]) => ({
-    //     questionId: qId,
-    //     mentorScore: fb.score,
-    //     mentorComment: fb.comment,
-    //   })),
-    // };
-    // await api.submitMentorFeedback(payload);
-    // ──────────────────────────────────────────────────────────────
-
-    // 최종 리포트 데이터를 state로 전달하며 이동
     setTimeout(() => {
       navigate("/report/final", {
         state: {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
+import { getSessionReport } from "../../api/sessions";
 
 // ─── 상수 ────────────────────────────────────────────────────────
 const NAVY = "#0D2240";
@@ -415,7 +416,7 @@ export default function MentoringSessionPage() {
   const { sessionId } = useParams(); // /session/:sessionId
   const { user } = useAuthStore(); // { role: 'mentor' | 'mentee', name: '...' }
 
-  const [session] = useState(MOCK_SESSION);
+  const [session, setSession] = useState(MOCK_SESSION);
   const [elapsed, setElapsed] = useState(0);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
@@ -423,6 +424,13 @@ export default function MentoringSessionPage() {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
   const timerRef = useRef(null);
+
+  // 세션 리포트 조회
+  useEffect(() => {
+    getSessionReport(sessionId)
+      .then(data => setSession(prev => ({ ...prev, ...data })))
+      .catch(() => {});
+  }, [sessionId]);
 
   // 세션 타이머
   useEffect(() => {

@@ -126,3 +126,112 @@ export async function getAnswerSegments(sessionId, questionId, answerId) {
   if (!res.ok) throw new Error("세그먼트 조회 실패");
   return res.json();
 }
+
+function authHeadersNoBody() {
+  const user = getAuthUser();
+  return user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {};
+}
+
+/**
+ * GET /api/sessions/{id}/report
+ * 세션 리포트 조회. report_status: "first" | "final"
+ */
+export async function getSessionReport(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/report`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("리포트 조회 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/report/fit-gap
+ * 채용공고 역량 vs 자소서 역량 비교 결과 조회
+ */
+export async function getFitGapAnalysis(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/report/fit-gap`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Fit-Gap 분석 조회 실패");
+  return res.json();
+}
+
+/**
+ * PATCH /api/sessions/{id}/report/mentor-feedback
+ * 멘토 종합 피드백 작성. 저장 시 report_status가 final로 변경됨.
+ * @param {string} feedback
+ */
+export async function saveMentorFeedback(sessionId, feedback) {
+  const res = await fetch(`/api/sessions/${sessionId}/report/mentor-feedback`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ feedback }),
+  });
+  if (!res.ok) throw new Error("멘토 피드백 저장 실패");
+  return res.json();
+}
+
+/**
+ * POST /api/sessions/{id}/questions/{questionId}/answers
+ * 멘티 답변 오디오 업로드. 업로드 후 STT·AI 분석 비동기 진행.
+ * @param {Blob} audioBlob
+ */
+export async function uploadAnswerAudio(sessionId, questionId, audioBlob) {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "answer.webm");
+  const res = await fetch(
+    `/api/sessions/${sessionId}/questions/${questionId}/answers`,
+    {
+      method: "POST",
+      headers: authHeadersNoBody(),
+      body: formData,
+    }
+  );
+  if (!res.ok) throw new Error("오디오 업로드 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/questions/{questionId}/answers
+ * 특정 질문의 답변 목록 조회 (그룹 면접 시 전체 멘티 답변 포함)
+ */
+export async function getQuestionAnswers(sessionId, questionId) {
+  const res = await fetch(
+    `/api/sessions/${sessionId}/questions/${questionId}/answers`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) throw new Error("답변 목록 조회 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/questions/{questionId}/answers/{answerId}/audio
+ * 저장된 답변 오디오 스트리밍. 반환값: Blob URL (재생용)
+ */
+export async function getAnswerAudio(sessionId, questionId, answerId) {
+  const res = await fetch(
+    `/api/sessions/${sessionId}/questions/${questionId}/answers/${answerId}/audio`,
+    { headers: authHeadersNoBody() }
+  );
+  if (!res.ok) throw new Error("오디오 조회 실패");
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * PATCH /api/sessions/{id}/questions/{questionId}/answers/{answerId}/mentor-score
+ * 멘토 답변 별점 입력. AI 별점을 덮어쓰며 gap 자동 계산됨. (멘토링 세션 중 호출)
+ * @param {number} score 1~5
+ */
+export async function saveMentorScore(sessionId, questionId, answerId, score) {
+  const res = await fetch(
+    `/api/sessions/${sessionId}/questions/${questionId}/answers/${answerId}/mentor-score`,
+    {
+      method: "PATCH",
+      headers: authHeaders(),
+      body: JSON.stringify({ score }),
+    }
+  );
+  if (!res.ok) throw new Error("멘토 별점 저장 실패");
+  return res.json();
+}

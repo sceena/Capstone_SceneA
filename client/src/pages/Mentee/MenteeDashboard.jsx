@@ -114,7 +114,7 @@ const QuoteIcon = () => (
 /* ── 면접 세션 카드 (검정 배경) ── */
 const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
   <div style={{
-    background:"#111111", borderRadius:12,
+    background:"#0D2240", borderRadius:12,
     padding:"18px 22px",
     display:"flex", alignItems:"center",
     justifyContent:"space-between", gap:16,
@@ -218,7 +218,7 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
 };
 
 /* ── 히스토리 리포트 아이템 ── */
-const HistoryItem = ({ date, title, mentor, score, tag, tagColor }) => (
+const HistoryItem = ({ date, title, mentor, score, tag, tagColor, onView }) => (
   <div style={{
     display:"flex", alignItems:"center", gap:14,
     padding:"13px 0", borderBottom:`1px solid ${C.border}`,
@@ -242,7 +242,7 @@ const HistoryItem = ({ date, title, mentor, score, tag, tagColor }) => (
       }}>
         {tag}
       </span>
-      <button style={{
+      <button onClick={onView} style={{
         background:"transparent", border:`1px solid ${C.border}`,
         borderRadius:6, padding:"5px 10px",
         fontSize:11, fontWeight:500, color:C.textSub,
@@ -258,6 +258,15 @@ const HistoryItem = ({ date, title, mentor, score, tag, tagColor }) => (
   </div>
 );
 
+/* ── 더미 세션 데이터 (API 미연결 시 표시용) ── */
+const DUMMY_SESSIONS = [
+  { id:"demo-1", status:"scheduled", title:"백엔드 개발자 모의 면접", scheduledAt:"2026-05-15T19:00", mentorName:"박지훈", sessionType:"1:1" },
+  { id:"demo-2", status:"scheduled", title:"Spring Boot 기술 면접 대비", scheduledAt:"2026-05-20T20:00", mentorName:"이수연", sessionType:"1:1" },
+  { id:"demo-3", status:"completed", title:"카카오 서버 개발 면접 대비", scheduledAt:"2026-04-02T19:00", mentorName:"박지훈", aiScore:"87", tag:"최종 리포트" },
+  { id:"demo-4", status:"completed", title:"네이버 백엔드 코딩 인터뷰", scheduledAt:"2026-03-15T18:00", mentorName:"한기욱", aiScore:"72", tag:"AI 리포트" },
+  { id:"demo-5", status:"completed", title:"토스 iOS 직무 인성 면접", scheduledAt:"2026-02-20T17:00", mentorName:"정민서", aiScore:"64", tag:"AI 리포트" },
+];
+
 /* ════════════════════════════════════════
    메인 컴포넌트
 ════════════════════════════════════════ */
@@ -266,9 +275,11 @@ export default function MenteeDashboard() {
   const { user } = useAuthStore();
   const userName = user?.email?.split("@")[0] || "사용자";
 
-  const [sessions, setSessions] = useState([]);
+  const [sessions, setSessions] = useState(DUMMY_SESSIONS);
   useEffect(() => {
-    getMySessions().then(setSessions).catch(() => {});
+    getMySessions()
+      .then(data => { if (data?.length) setSessions(data); })
+      .catch(() => {});
   }, []);
 
   /* API 응답에서 UI 데이터 파생 */
@@ -345,9 +356,9 @@ export default function MenteeDashboard() {
           {/* 우측 미니 스탯 */}
           <div style={{ display:"flex", gap:24, flexShrink:0 }}>
             {[
-              { n:"3회", label:"완료된 면접" },
-              { n:"87점", label:"평균 점수" },
-              { n:"2건", label:"예정된 일정" },
+              { n:`${completedSessions.length}회`, label:"완료된 면접" },
+              { n: completedSessions.length > 0 ? `${Math.round(completedSessions.reduce((a,s) => a + (Number(s.aiScore) || 0), 0) / completedSessions.length)}점` : "-", label:"평균 점수" },
+              { n:`${scheduledSessions.length}건`, label:"예정된 일정" },
             ].map((s, i) => (
               <div key={i} style={{ textAlign:"center" }}>
                 <p style={{ fontSize:22, fontWeight:700, color:C.navy, letterSpacing:"-0.03em" }}>{s.n}</p>
@@ -359,14 +370,23 @@ export default function MenteeDashboard() {
 
         {/* ── 오늘 예정된 일정 ── */}
         <DashCard title="오늘 예정된 일정" style={{ marginBottom:24 }}>
-          <SessionCard
-            title={todaySession.title}
-            date={todaySession.date}
-            mentor={todaySession.mentor}
-            type={todaySession.type}
-            time={todaySession.time}
-            onEnter={() => navigate(`/interview/ready/${todaySession.id}`)}
-          />
+          {todaySession ? (
+            <SessionCard
+              title={todaySession.title}
+              date={todaySession.date}
+              mentor={todaySession.mentor}
+              type={todaySession.type}
+              time={todaySession.time}
+              onEnter={() => navigate(`/interview/ready/${todaySession.id}`)}
+            />
+          ) : (
+            <div style={{ textAlign:"center", padding:"40px 0", color:C.textMuted, fontSize:14 }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.4" style={{ display:"block", margin:"0 auto 12px" }}>
+                <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+              </svg>
+              오늘 예정된 면접 세션이 없습니다
+            </div>
+          )}
         </DashCard>
 
         {/* ── 하단 2열 ── */}
@@ -378,8 +398,12 @@ export default function MenteeDashboard() {
           <DashCard title="나의 면접 히스토리 & 리포트">
             {history.length > 0 ? (
               <div>
-                {history.map((h, i) => <HistoryItem key={i} {...h}/>)}
-                <Link to="/my/history" style={{
+                {history.map((h, i) => (
+                  <HistoryItem key={i} {...h}
+                    onView={() => navigate(`/report/ai/${h.id}`, { state: { role: "mentee" } })}
+                  />
+                ))}
+                <Link to="/dashboard/mentee" style={{
                   display:"block", textAlign:"center",
                   marginTop:16, fontSize:13, color:C.textMuted,
                   textDecoration:"none",

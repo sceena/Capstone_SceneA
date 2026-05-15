@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { getSessionAnalysisSummary, getAnswerAnalysis, getAnswerSegments } from "../../api/sessions";
+import { getSessionAnalysisSummary, getAnswerAnalysis, getAnswerSegments, getFitGapAnalysis, getAnswerAudio } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
@@ -148,11 +148,23 @@ function MenteeReport({ sessionId }) {
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
   const [qnaAnalysis, setQnaAnalysis] = useState({});
+  const [fitGap, setFitGap] = useState(null);
+  const audioRef = useRef(new Audio());
 
   /* 세션 AI 분석 요약 조회 */
   useEffect(() => {
     getSessionAnalysisSummary(sessionId).then(setSummary).catch(() => {});
+    getFitGapAnalysis(sessionId).then(setFitGap).catch(() => {});
   }, [sessionId]);
+
+  const handlePlayAudio = async (questionId, answerId) => {
+    if (!questionId || !answerId) return;
+    try {
+      const url = await getAnswerAudio(sessionId, questionId, answerId);
+      audioRef.current.src = url;
+      audioRef.current.play();
+    } catch {}
+  };
 
   /* 요약에 질문 목록이 있으면 각 답변의 분석 + 세그먼트 조회 */
   useEffect(() => {
@@ -268,7 +280,9 @@ function MenteeReport({ sessionId }) {
         <p style={{ fontSize: 12, fontWeight: 700, color: "#666", letterSpacing: 1, marginBottom: 12 }}>핏-갭 (Fit-Gap) 역량 분석</p>
         <div style={{ background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 22, marginBottom: 28 }}>
           <p style={{ fontSize: 12, color: "#999", marginBottom: 16, margin: "0 0 16px" }}>채용 공고 요구 역량 대비 자소서 & 답변 커버리지</p>
-          {[["Java / Spring Boot", 92], ["대규모 트래픽 경험", 78], ["CI/CD · DevOps", 51], ["MSA · 분산 시스템", 44], ["데이터 파이프라인", 22]].map(([l, p]) => (
+          {(fitGap?.skills?.map(s => [s.label, s.pct]) ?? [
+            ["Java / Spring Boot", 92], ["대규모 트래픽 경험", 78], ["CI/CD · DevOps", 51], ["MSA · 분산 시스템", 44], ["데이터 파이프라인", 22]
+          ]).map(([l, p]) => (
             <FitGapBar key={l} label={l} pct={p} />
           ))}
           <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
@@ -298,7 +312,10 @@ function MenteeReport({ sessionId }) {
                   <Stars score={qa.score} />
                   <span style={{ fontSize: 12, color: "#888" }}>AI {qa.score}.0</span>
                 </div>
-                <button style={{ fontSize: 12, color: GREEN, border: `1px solid ${GREEN}`, background: "transparent", borderRadius: 99, padding: "4px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <button
+                  onClick={() => handlePlayAudio(qa.questionId, qa.answerId)}
+                  style={{ fontSize: 12, color: GREEN, border: `1px solid ${GREEN}`, background: "transparent", borderRadius: 99, padding: "4px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   답변 듣기 · {qa.time}
                 </button>

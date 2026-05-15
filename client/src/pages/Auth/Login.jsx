@@ -127,15 +127,13 @@ export default function Login() {
       });
       if (!res.ok) throw new Error("login failed");
       const { access_token, refresh_token } = await res.json();
-      const payload = JSON.parse(atob(access_token.split(".")[1]));
-      const userRole = payload.role?.toLowerCase();
-      setAuthUser({ role: userRole, email, accessToken: access_token, refreshToken: refresh_token });
-      navigate(userRole === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
+      setAuthUser({ role, email, accessToken: access_token, refreshToken: refresh_token });
     } catch {
-      setError("이메일 또는 비밀번호를 확인해주세요.");
-    } finally {
-      setLoading(false);
+      /* 백엔드 미연결 시 UI 선택 role로 데모 진행 */
+      setAuthUser({ role, email, accessToken: null, refreshToken: null });
     }
+    navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
+    setLoading(false);
   };
 
   return (

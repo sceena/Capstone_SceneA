@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { updateSessionStatus, updateParticipantStatus } from "../../api/sessions";
+import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
 
 /* ============================================================
@@ -41,8 +41,11 @@ export default function InterviewSession({ role = "mentee" }) {
   const [chatMsg,    setChatMsg]    = useState("");
   const [chatHistory,setChatHistory]= useState([]);
 
-  /* ── 멘티 전용: 답변 상태 (화자 분리) ── */
+  /* ── 멘티 전용: 답변 상태 (화자 분리) + 오디오 녹음 ── */
   const [answerStatus, setAnswerStatus] = useState("idle"); // idle | answering | done
+  const [currentQuestionId, setCurrentQuestionId] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   /* ── 더미 참가자 ── */
   const isMentor = role === "mentor";
@@ -87,6 +90,28 @@ export default function InterviewSession({ role = "mentee" }) {
       const user = getAuthUser();
       if (user?.id) await updateParticipantStatus(id, user.id, nextStatus);
     } catch {}
+
+    if (nextStatus === "answering") {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunksRef.current = [];
+        const recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
+        mediaRecorderRef.current = recorder;
+        recorder.start();
+      } catch {}
+    } else if (nextStatus === "done" && mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        if (currentQuestionId) {
+          uploadAnswerAudio(id, currentQuestionId, blob).catch(() => {});
+        }
+        mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorderRef.current.stop();
+    }
   };
 
   const sendChat = () => {

@@ -1,3 +1,5 @@
+import logging
+
 from app.model.inference import ModelInference, ModelUnavailable
 from app.model.json_utils import ModelJsonError
 from app.model.prompts import build_answer_evaluation_prompt
@@ -6,12 +8,14 @@ from app.schemas.report import InterviewAnswer, MetricsSummary, QuestionReport, 
 from app.schemas.report import ReportRequest
 from app.services.text_signals import has_action, has_result, infer_sentence_clarity, infer_star
 
+logger = logging.getLogger(__name__)
+
 
 class AnswerEvaluator:
     """Step 1: evaluate each question-answer pair.
 
-    The current implementation is deterministic. Later, this class is the main
-    replacement point for SFT model inference.
+    SFT inference is used when AI_MODEL_ENABLED=true. The deterministic path is
+    retained for local integration and mock interview data.
     """
 
     def __init__(self, model_inference: ModelInference | None = None) -> None:
@@ -30,11 +34,25 @@ class AnswerEvaluator:
         answer: InterviewAnswer,
         request: ReportRequest,
     ) -> ModelAnswerEvaluation | None:
+        if not self.model_inference.settings.enabled and not self.model_inference.settings.required:
+            return None
+
         try:
             prompt = build_answer_evaluation_prompt(answer, request)
             raw = self.model_inference.generate_json(prompt)
             return ModelAnswerEvaluation.model_validate(raw)
-        except (ModelUnavailable, ModelJsonError, ValueError):
+        except (ModelUnavailable, ModelJsonError, ValueError) as exc:
+            if self.model_inference.settings.required:
+                logger.exception(
+                    "model evaluation failed for question_id=%s and AI_MODEL_REQUIRED=true",
+                    answer.question_id,
+                )
+                raise
+            logger.warning(
+                "model evaluation failed for question_id=%s; using fallback evaluator: %s",
+                answer.question_id,
+                exc,
+            )
             return None
 
     def _from_model(self, answer: InterviewAnswer, model_evaluation: ModelAnswerEvaluation) -> AnswerEvaluation:

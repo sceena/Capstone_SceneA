@@ -29,12 +29,12 @@ def _strip_code_fence(text: str) -> str:
 
 def _loads_first_object(text: str) -> dict[str, Any]:
     start = text.find("{")
-    end = text.rfind("}")
-    if start < 0 or end <= start:
+    if start < 0:
         raise ModelJsonError("no JSON object found")
 
+    decoder = json.JSONDecoder()
     try:
-        value = json.loads(text[start : end + 1])
+        value, _ = decoder.raw_decode(text[start:])
     except json.JSONDecodeError as exc:
         raise ModelJsonError("invalid JSON object") from exc
 

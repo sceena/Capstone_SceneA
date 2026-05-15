@@ -27,8 +27,8 @@ class ReportComposer:
         if not evaluations:
             raise ValueError("interview_answers must not be empty")
 
-        best = max(evaluations, key=lambda item: item.report.score)
-        worst = min(evaluations, key=lambda item: item.report.score)
+        best = max(evaluations, key=self._best_rank_score)
+        worst = min(evaluations, key=self._worst_rank_score)
         overall_score = round(
             sum(item.report.score for item in evaluations) / len(evaluations),
             1,
@@ -54,6 +54,48 @@ class ReportComposer:
             fit_gap=self._build_fit_gap(request, evaluations),
             question_reports=[item.report for item in evaluations],
         )
+
+    def _best_rank_score(self, evaluation: AnswerEvaluation) -> float:
+        metrics_score = self._metrics_rank_score(evaluation)
+        star_score = self._star_rank_score(evaluation.metrics_summary.star_structure)
+        return (evaluation.report.score * 0.7) + (metrics_score * 0.2) + (star_score * 0.1)
+
+    def _worst_rank_score(self, evaluation: AnswerEvaluation) -> float:
+        metrics_score = self._metrics_rank_score(evaluation)
+        star_score = self._star_rank_score(evaluation.metrics_summary.star_structure)
+        return (evaluation.report.score * 0.6) + (metrics_score * 0.25) + (star_score * 0.15)
+
+    def _metrics_rank_score(self, evaluation: AnswerEvaluation) -> float:
+        summary = evaluation.metrics_summary
+        score = 10.0
+
+        if summary.speaking_speed in {"빠름", "느림"}:
+            score -= 1.5
+        elif summary.speaking_speed == "미측정":
+            score -= 0.5
+
+        if summary.silence in {"많음", "긴 침묵", "불안정"}:
+            score -= 1.5
+        elif summary.silence == "미측정":
+            score -= 0.5
+
+        if summary.sentence_clarity in {"장황함", "짧음"}:
+            score -= 1.2
+        elif summary.sentence_clarity == "미측정":
+            score -= 0.5
+
+        return max(1.0, min(10.0, score))
+
+    def _star_rank_score(self, star_structure: str) -> float:
+        if star_structure == "S/T/A/R 모두 충족":
+            return 10.0
+        if star_structure == "Action/Result 충족":
+            return 8.0
+        if star_structure == "Result 부족":
+            return 5.0
+        if star_structure == "Action/Result 부족":
+            return 3.0
+        return 5.0
 
     def _build_fit_gap(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> FitGap:
         job_text = request.company_context.job_posting_summary or ""

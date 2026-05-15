@@ -16,6 +16,9 @@ class ModelSettings:
     required: bool
     base_model: str
     adapter_path: str | None
+    device_map: str
+    offload_dir: str | None
+    load_in_4bit: bool
     max_new_tokens: int
     temperature: float
     prompt_format: str
@@ -36,6 +39,9 @@ def get_model_settings() -> ModelSettings:
         required=_bool_env("AI_MODEL_REQUIRED"),
         base_model=getenv("AI_BASE_MODEL", "Qwen/Qwen2.5-7B-Instruct"),
         adapter_path=getenv("AI_ADAPTER_PATH") or None,
+        device_map=getenv("AI_DEVICE_MAP", "auto"),
+        offload_dir=getenv("AI_OFFLOAD_DIR") or None,
+        load_in_4bit=_bool_env("AI_LOAD_IN_4BIT"),
         max_new_tokens=int(getenv("AI_MAX_NEW_TOKENS", "512")),
         temperature=float(getenv("AI_TEMPERATURE", "0.0")),
         prompt_format=prompt_format,

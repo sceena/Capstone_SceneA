@@ -46,21 +46,37 @@ class ModelInference:
         try:
             import torch
             from peft import PeftModel
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
         except ImportError as exc:
             raise ModelUnavailable("transformers/peft/torch are not installed") from exc
 
         logger.info("loading base model: %s", self.settings.base_model)
         tokenizer = AutoTokenizer.from_pretrained(self.settings.base_model)
-        model = AutoModelForCausalLM.from_pretrained(
-            self.settings.base_model,
-            torch_dtype="auto",
-            device_map="auto",
-        )
+
+        load_options = {
+            "device_map": self.settings.device_map,
+        }
+        if self.settings.offload_dir:
+            load_options["offload_folder"] = self.settings.offload_dir
+
+        if self.settings.load_in_4bit:
+            logger.info("loading model with 4bit quantization")
+            load_options["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+            )
+        else:
+            load_options["torch_dtype"] = "auto"
+
+        model = AutoModelForCausalLM.from_pretrained(self.settings.base_model, **load_options)
 
         if self.settings.adapter_path:
             logger.info("loading LoRA adapter: %s", self.settings.adapter_path)
-            model = PeftModel.from_pretrained(model, self.settings.adapter_path)
+            adapter_options = {}
+            if self.settings.offload_dir:
+                adapter_options["offload_folder"] = self.settings.offload_dir
+            model = PeftModel.from_pretrained(model, self.settings.adapter_path, **adapter_options)
 
         model.eval()
         return tokenizer, model

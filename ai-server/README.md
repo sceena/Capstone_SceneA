@@ -62,6 +62,8 @@ export AI_MODEL_REQUIRED=true
 export AI_BASE_MODEL=Qwen/Qwen2.5-7B-Instruct
 export AI_ADAPTER_PATH=/content/drive/MyDrive/AI/models/lora_adapters/qwen2_5_7b_sft_debiased
 export AI_PROMPT_FORMAT=plain
+export AI_LOAD_IN_4BIT=true
+export AI_OFFLOAD_DIR=/content/model_offload
 ```
 
 The model boundary lives in:
@@ -90,6 +92,8 @@ export AI_MODEL_REQUIRED=true
 export AI_BASE_MODEL=Qwen/Qwen2.5-7B-Instruct
 export AI_ADAPTER_PATH=/content/drive/MyDrive/AI/models/lora_adapters/qwen2_5_7b_sft_debiased
 export AI_PROMPT_FORMAT=plain
+export AI_LOAD_IN_4BIT=true
+export AI_OFFLOAD_DIR=/content/model_offload
 
 python scripts/smoke_model_report.py
 ```

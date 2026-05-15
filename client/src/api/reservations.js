@@ -28,11 +28,11 @@ export async function requestReservation(data) {
  * 멘토가 예약 요청에 수락 또는 거절한다.
  * @param {{ reservationId: number, accepted: boolean }} data
  */
-export async function respondReservation(data) {
-  const res = await fetch("/api/reservation/response", {
+export async function respondReservation(reservationId, accepted) {
+  const res = await fetch(`/api/reservation/${reservationId}/response`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify(data),
+    body: JSON.stringify({ accepted }),
   });
   if (!res.ok) throw new Error("예약 응답 실패");
   return res.json();

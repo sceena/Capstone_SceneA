@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { requestReservation } from "../../api/reservations";
+import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 
 const C = {
   navy:"#0D2240",navyMid:"#1B4F7A",cream:"#F2EDE4",creamDark:"#E8E0D0",
@@ -50,6 +51,7 @@ const MENTOR={
 
 export default function MentorApply(){
   const navigate=useNavigate();
+  const { state: navState } = useLocation();
   const mentor=MENTOR;
   const [sessType,setSessType]=useState("1:1");
   const [participants,setParticipants]=useState(2);
@@ -65,12 +67,40 @@ export default function MentorApply(){
     if(!canSubmit)return;
     setLoading(true);
     try {
+      const selectedSlot = mentor.availableDates[selDateIdx];
+      const jobPosting = navState?.jobPosting;
+      const resumeContent = navState?.resumeContent;
+
+      let sessionId = null;
+      let jobPostingId = null;
+
+      try {
+        const session = await createSession({
+          mentor_id: mentor.id,
+          job_category: jobPosting?.jobCategory || mentor.job,
+        });
+        sessionId = session?.id;
+      } catch {}
+
+      if (sessionId && jobPosting?.company) {
+        try {
+          const jp = await saveJobPosting(sessionId, {
+            company: jobPosting.company,
+            jobCategory: jobPosting.jobCategory || mentor.job,
+            rawText: jobPosting.rawText || jobPosting.company,
+          });
+          jobPostingId = jp?.id;
+        } catch {}
+      }
+
+      if (sessionId && resumeContent) {
+        try { await saveResume(sessionId, resumeContent); } catch {}
+      }
+
       await requestReservation({
-        mentorId: mentor.id,
-        sessionType: sessType,
-        participants: sessType==="그룹" ? participants : 1,
-        date: mentor.availableDates[selDateIdx].date,
-        time: selTime,
+        mentor_id: mentor.id,
+        availability_id: selectedSlot.availabilityId ?? 1,
+        job_posting_id: jobPostingId ?? null,
       });
     } catch {}
     setLoading(false);

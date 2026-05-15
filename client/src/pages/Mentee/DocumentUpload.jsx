@@ -245,19 +245,19 @@ export default function DocumentUpload() {
     setItems(prev => prev.filter((_,idx)=>idx!==i));
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    await new Promise(r=>setTimeout(r,900));
-    setSaving(false);
+  const handleSave = () => {
     setSaved(true);
     setTimeout(()=>setSaved(false), 3000);
   };
 
-  const handleComplete = async () => {
-    setSaving(true);
-    await new Promise(r=>setTimeout(r,900));
-    setSaving(false);
-    navigate("/interview/ready/1");
+  const handleComplete = () => {
+    const resumeContent = items.map(it => `[${it.title}]\n${it.content}`).join("\n\n");
+    navigate("/mentor/search", {
+      state: {
+        jobPosting: { company: targetCompany, jobCategory: targetJob, rawText: targetCompany + " " + targetJob },
+        resumeContent,
+      },
+    });
   };
 
   const isValid = items.some(it=>it.content.trim().length>0) || resumeFile;

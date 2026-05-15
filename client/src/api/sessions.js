@@ -165,7 +165,7 @@ export async function saveMentorFeedback(sessionId, feedback) {
   const res = await fetch(`/api/sessions/${sessionId}/report/mentor-feedback`, {
     method: "PATCH",
     headers: authHeaders(),
-    body: JSON.stringify({ feedback }),
+    body: JSON.stringify({ mentor_feedback: feedback }),
   });
   if (!res.ok) throw new Error("멘토 피드백 저장 실패");
   return res.json();
@@ -176,11 +176,16 @@ export async function saveMentorFeedback(sessionId, feedback) {
  * 멘티 답변 오디오 업로드. 업로드 후 STT·AI 분석 비동기 진행.
  * @param {Blob} audioBlob
  */
-export async function uploadAnswerAudio(sessionId, questionId, audioBlob) {
+export async function uploadAnswerAudio(sessionId, questionId, audioBlob, { answerStart, answerEnd, menteeId }) {
   const formData = new FormData();
   formData.append("audio", audioBlob, "answer.webm");
+  const params = new URLSearchParams({
+    answer_start: answerStart,
+    answer_end: answerEnd,
+    mentee_id: menteeId,
+  });
   const res = await fetch(
-    `/api/sessions/${sessionId}/questions/${questionId}/answers`,
+    `/api/sessions/${sessionId}/questions/${questionId}/answers?${params}`,
     {
       method: "POST",
       headers: authHeadersNoBody(),
@@ -218,6 +223,134 @@ export async function getAnswerAudio(sessionId, questionId, answerId) {
   return URL.createObjectURL(blob);
 }
 
+/* ── 면접 질문 ─────────────────────────────────────────────── */
+
+/**
+ * POST /api/sessions/{id}/questions
+ * AI가 생성한 질문 목록을 세션에 저장한다.
+ * @param {string[]} contents 질문 텍스트 배열
+ */
+export async function createQuestions(sessionId, contents) {
+  const res = await fetch(`/api/sessions/${sessionId}/questions`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ questions: contents.map(content => ({ content })) }),
+  });
+  if (!res.ok) throw new Error("질문 생성 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/questions
+ * 특정 세션의 전체 질문 목록을 조회한다.
+ */
+export async function getQuestions(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/questions`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("질문 목록 조회 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/questions/{questionId}
+ * 특정 질문 하나를 조회한다.
+ */
+export async function getQuestion(sessionId, questionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/questions/${questionId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("질문 조회 실패");
+  return res.json();
+}
+
+/**
+ * PATCH /api/sessions/{id}/questions/{questionId}
+ * 멘토가 AI 생성 질문을 수정한다. 면접 시작 전(scheduled)에만 허용.
+ * @param {string} content 수정할 질문 내용
+ */
+export async function updateQuestion(sessionId, questionId, content) {
+  const res = await fetch(`/api/sessions/${sessionId}/questions/${questionId}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) throw new Error("질문 수정 실패");
+  return res.json();
+}
+
+/**
+ * DELETE /api/sessions/{id}/questions/{questionId}
+ * 멘토가 AI 생성 질문을 삭제한다. 면접 시작 전(scheduled)에만 허용.
+ */
+export async function deleteQuestion(sessionId, questionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/questions/${questionId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("질문 삭제 실패");
+}
+
+/* ── 채용공고 ────────────────────────────────────────────── */
+
+/**
+ * POST /api/sessions/{id}/job-posting
+ * 멘티가 채용공고 원문을 저장한다. 세션과 연결됨.
+ * @param {{ company: string, jobCategory: string, rawText: string, url?: string }} data
+ */
+export async function saveJobPosting(sessionId, { company, jobCategory, rawText, url }) {
+  const res = await fetch(`/api/sessions/${sessionId}/job-posting`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ company, job_category: jobCategory, raw_text: rawText, url }),
+  });
+  if (!res.ok) throw new Error("채용공고 저장 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/job-posting/skills
+ * AI가 채용공고에서 추출한 필수/우대 역량 키워드 목록을 조회한다.
+ */
+export async function getJobSkills(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/job-posting/skills`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("채용공고 역량 조회 실패");
+  return res.json();
+}
+
+/* ── 자소서 ─────────────────────────────────────────────── */
+
+/**
+ * POST /api/sessions/{id}/resume
+ * 멘티가 자소서 텍스트를 저장한다. 텍스트로만 저장(파일 업로드 없음).
+ * @param {string} content 자소서 전문
+ */
+export async function saveResume(sessionId, content) {
+  const res = await fetch(`/api/sessions/${sessionId}/resume`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) throw new Error("자소서 저장 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/resume/skills
+ * AI가 자소서에서 추출한 역량 키워드 목록을 조회한다.
+ */
+export async function getResumeSkills(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/resume/skills`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("자소서 역량 조회 실패");
+  return res.json();
+}
+
+/* ── 멘토 별점 ───────────────────────────────────────────── */
+
 /**
  * PATCH /api/sessions/{id}/questions/{questionId}/answers/{answerId}/mentor-score
  * 멘토 답변 별점 입력. AI 별점을 덮어쓰며 gap 자동 계산됨. (멘토링 세션 중 호출)
@@ -229,7 +362,7 @@ export async function saveMentorScore(sessionId, questionId, answerId, score) {
     {
       method: "PATCH",
       headers: authHeaders(),
-      body: JSON.stringify({ score }),
+      body: JSON.stringify({ mentor_score: score }),
     }
   );
   if (!res.ok) throw new Error("멘토 별점 저장 실패");

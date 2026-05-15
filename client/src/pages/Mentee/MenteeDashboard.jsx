@@ -456,7 +456,7 @@ export default function MenteeDashboard() {
             </div>
 
             {/* 멘토 신청 바로가기 */}
-            <Link to="/mentor/search" style={{
+            <Link to="/mentee/documents" style={{
               display:"block", marginTop:20,
               padding:"12px", borderRadius:10,
               background:C.bg, textAlign:"center",

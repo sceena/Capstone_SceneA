@@ -75,7 +75,7 @@ public class ReportService {
         AnalysisReport report = reportRepository.findByInterviewSession(session)
                 .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
-        return ReportResponse.from(report);
+        return ReportResponse.from(report, parseAiReport(report.getRawAiResponseJson()));
     }
 
     @Transactional
@@ -103,7 +103,7 @@ public class ReportService {
                 rawAiResponseJson
         );
 
-        return ReportResponse.from(reportRepository.save(report));
+        return ReportResponse.from(reportRepository.save(report), aiResponse);
     }
 
     public FitGapResponse getFitGap(Long memberId, Long sessionId) {
@@ -301,6 +301,18 @@ public class ReportService {
             return objectMapper.writeValueAsString(response);
         } catch (JsonProcessingException e) {
             throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private AiReportResponse parseAiReport(String rawAiResponseJson) {
+        if (rawAiResponseJson == null || rawAiResponseJson.isBlank()) {
+            return null;
+        }
+
+        try {
+            return objectMapper.readValue(rawAiResponseJson, AiReportResponse.class);
+        } catch (JsonProcessingException e) {
+            return null;
         }
     }
 

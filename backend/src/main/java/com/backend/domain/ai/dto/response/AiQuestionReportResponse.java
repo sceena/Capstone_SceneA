@@ -9,8 +9,10 @@ public record AiQuestionReportResponse(
         String question,
         String answer,
         Float score,
+        String reasoning,
         List<String> strengths,
         List<String> improvements,
+        @JsonProperty("evaluation_source") String evaluationSource,
         AiReplayResponse replay
 ) {
 }

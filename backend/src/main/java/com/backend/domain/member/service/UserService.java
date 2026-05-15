@@ -1,0 +1,81 @@
+package com.backend.domain.member.service;
+
+import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.interviewSession.entity.InterviewSession;
+import com.backend.domain.interviewSession.entity.SessionParticipant;
+import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
+import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
+import com.backend.domain.member.dto.request.UserProfileUpdateRequest;
+import com.backend.domain.member.dto.response.MySessionHistoryResponse;
+import com.backend.domain.member.dto.response.UserProfileResponse;
+import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
+import com.backend.domain.member.entity.Member;
+import com.backend.domain.member.entity.Role;
+import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.tag.entity.MemberTag;
+import com.backend.domain.tag.repository.MemberTagRepository;
+import com.backend.global.exception.CustomException;
+import com.backend.global.exception.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class UserService {
+
+    private final MemberRepository memberRepository;
+    private final MemberTagRepository memberTagRepository;
+    private final InterviewSessionRepository sessionRepository;
+    private final SessionParticipantRepository participantRepository;
+    private final AnalysisReportRepository reportRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public UserProfileResponse getMyProfile(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        List<MemberTag> memberTags = memberTagRepository.findAllByMember(member);
+        return UserProfileResponse.of(member, memberTags);
+    }
+
+    @Transactional
+    public UserProfileUpdateResponse updateMyProfile(Long memberId, UserProfileUpdateRequest request) {
+        if (request.name() == null && request.password() == null) {
+            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        }
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        String encodedPassword = request.password() != null ? passwordEncoder.encode(request.password()) : null;
+        member.update(request.name(), encodedPassword);
+        return UserProfileUpdateResponse.from(member);
+    }
+
+    public MySessionHistoryResponse getMySessionHistory(Long memberId, Pageable pageable) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        Page<InterviewSession> sessionPage;
+        if (member.getRole() == Role.MENTOR) {
+            sessionPage = sessionRepository.findAllByMentor(member, pageable);
+        } else {
+            sessionPage = participantRepository.findAllByMember(member, pageable)
+                    .map(SessionParticipant::getInterviewSession);
+        }
+
+        List<InterviewSession> sessions = sessionPage.getContent();
+        Map<Long, AnalysisReport> reportMap = sessions.isEmpty() ? Map.of() :
+                reportRepository.findAllByInterviewSessionIn(sessions).stream()
+                        .collect(Collectors.toMap(r -> r.getInterviewSession().getId(), r -> r));
+
+        return MySessionHistoryResponse.of(sessionPage, reportMap);
+    }
+}

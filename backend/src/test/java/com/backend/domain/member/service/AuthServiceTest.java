@@ -6,6 +6,8 @@ import com.backend.domain.member.dto.response.LoginResponse;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.global.exception.CustomException;
+import com.backend.global.exception.ErrorCode;
 import com.backend.global.jwt.JwtProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,8 +56,8 @@ class AuthServiceTest {
         given(memberRepository.existsByEmail(request.email())).willReturn(true);
 
         assertThatThrownBy(() -> authService.signup(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이미 사용 중인 이메일입니다.");
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_EMAIL));
     }
 
     @Test
@@ -86,8 +88,8 @@ class AuthServiceTest {
         given(memberRepository.findByEmail(request.email())).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이메일 또는 비밀번호가 올바르지 않습니다.");
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
     }
 
     @Test
@@ -105,8 +107,8 @@ class AuthServiceTest {
         given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(false);
 
         assertThatThrownBy(() -> authService.login(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이메일 또는 비밀번호가 올바르지 않습니다.");
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
     }
 
     @Test
@@ -124,8 +126,8 @@ class AuthServiceTest {
         given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
 
         assertThatThrownBy(() -> authService.login(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("탈퇴한 회원입니다.");
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.WITHDRAWN_MEMBER));
     }
 
     @Test
@@ -149,7 +151,7 @@ class AuthServiceTest {
         given(memberRepository.findById(999L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.withdraw(999L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("존재하지 않는 회원입니다.");
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.MEMBER_NOT_FOUND));
     }
 }

@@ -5,6 +5,8 @@ import com.backend.domain.member.dto.request.SignupRequest;
 import com.backend.domain.member.dto.response.LoginResponse;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.global.exception.CustomException;
+import com.backend.global.exception.ErrorCode;
 import com.backend.global.jwt.JwtProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,7 +25,7 @@ public class AuthService {
     @Transactional
     public void signup(SignupRequest request) {
         if (memberRepository.existsByEmail(request.email())) {
-            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+            throw new CustomException(ErrorCode.DUPLICATE_EMAIL);
         }
 
         Member member = Member.builder()
@@ -39,14 +41,14 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request) {
         Member member = memberRepository.findByEmail(request.email())
-                .orElseThrow(() -> new IllegalArgumentException("이메일 또는 비밀번호가 올바르지 않습니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.INVALID_CREDENTIALS));
 
         if (member.isDeleted()) {
-            throw new IllegalArgumentException("탈퇴한 회원입니다.");
+            throw new CustomException(ErrorCode.WITHDRAWN_MEMBER);
         }
 
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
-            throw new IllegalArgumentException("이메일 또는 비밀번호가 올바르지 않습니다.");
+            throw new CustomException(ErrorCode.INVALID_CREDENTIALS);
         }
 
         String accessToken = jwtProvider.generateAccessToken(member.getId(), member.getRole().name());
@@ -58,7 +60,7 @@ public class AuthService {
     @Transactional
     public void withdraw(Long memberId) {
         Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
         member.softDelete();
     }

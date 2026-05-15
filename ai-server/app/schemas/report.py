@@ -99,8 +99,10 @@ class QuestionReport(BaseModel):
     question: str
     answer: str
     score: float
+    reasoning: str
     strengths: list[str]
     improvements: list[str]
+    evaluation_source: str
     replay: Replay
 
 

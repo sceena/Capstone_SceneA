@@ -69,8 +69,10 @@ class AnswerEvaluator:
                 question=answer.question,
                 answer=answer_text,
                 score=score,
+                reasoning=model_evaluation.reasoning or self._build_reason(score, metrics_summary),
                 strengths=strengths,
                 improvements=improvements,
+                evaluation_source="sft",
                 replay=Replay(
                     audio_url=answer.audio_url,
                     start_time=answer.answer_start,
@@ -133,8 +135,10 @@ class AnswerEvaluator:
                 question=answer.question,
                 answer=answer_text,
                 score=score,
+                reasoning=self._build_reason(score, metrics_summary),
                 strengths=strengths,
                 improvements=improvements,
+                evaluation_source="fallback",
                 replay=Replay(
                     audio_url=answer.audio_url,
                     start_time=answer.answer_start,

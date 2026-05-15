@@ -78,6 +78,26 @@ Install model dependencies only in a GPU runtime:
 pip install -r requirements-model.txt
 ```
 
+GPU 환경에서 SFT 모델이 실제로 하단 질문별 평가를 생성하는지 먼저 확인한다.
+이 테스트는 모든 `question_reports`의 `evaluation_source`가 `sft`인지 검사한다.
+
+```bash
+cd ai-server
+pip install -r requirements-model.txt
+
+export AI_MODEL_ENABLED=true
+export AI_MODEL_REQUIRED=true
+export AI_BASE_MODEL=Qwen/Qwen2.5-7B-Instruct
+export AI_ADAPTER_PATH=/content/drive/MyDrive/AI/models/lora_adapters/qwen2_5_7b_sft_debiased
+export AI_PROMPT_FORMAT=plain
+
+python scripts/smoke_model_report.py
+```
+
+성공하면 질문별로 `score`, `reasoning`, `strengths`, `improvements`,
+`evaluation_source=sft`가 출력된다. 실패하면 fallback으로 숨기지 않고
+즉시 에러가 나야 한다.
+
 The current SFT adapter was trained to output exactly:
 
 ```json

@@ -4,12 +4,17 @@ import com.backend.domain.ai.dto.request.AiReportRequest;
 import com.backend.domain.ai.dto.response.AiReportResponse;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Component
+@Slf4j
 public class FastApiAiReportClient implements AiReportClient {
 
     private final RestClient restClient;
@@ -19,6 +24,7 @@ public class FastApiAiReportClient implements AiReportClient {
             @Value("${ai.server.base-url:http://localhost:8000}") String baseUrl) {
         this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
+                .requestFactory(new SimpleClientHttpRequestFactory())
                 .build();
     }
 
@@ -27,6 +33,7 @@ public class FastApiAiReportClient implements AiReportClient {
         try {
             AiReportResponse response = restClient.post()
                     .uri("/report")
+                    .contentType(MediaType.APPLICATION_JSON)
                     .body(request)
                     .retrieve()
                     .body(AiReportResponse.class);
@@ -35,7 +42,11 @@ public class FastApiAiReportClient implements AiReportClient {
                 throw new CustomException(ErrorCode.AI_SERVER_ERROR);
             }
             return response;
+        } catch (RestClientResponseException e) {
+            log.warn("AI report server returned {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new CustomException(ErrorCode.AI_SERVER_ERROR);
         } catch (RestClientException e) {
+            log.warn("AI report server request failed", e);
             throw new CustomException(ErrorCode.AI_SERVER_ERROR);
         }
     }

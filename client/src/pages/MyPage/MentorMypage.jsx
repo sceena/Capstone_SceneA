@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
 
 /* ============================================================
    멘토 마이페이지  (pages/mentor/MyPage.jsx)
@@ -121,12 +122,80 @@ const ReviewCard = ({ initials, name, role, company, stars, text, bgColor }) => 
   </div>
 );
 
+/* ── 프로필 수정 모달 ── */
+function EditProfileModal({ onClose }) {
+  const [name, setName]     = useState("");
+  const [pw, setPw]         = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone]     = useState(false);
+
+  const handleSave = async () => {
+    const data = {};
+    if (name.trim())  data.name     = name.trim();
+    if (pw.trim())    data.password = pw.trim();
+    if (!Object.keys(data).length) { onClose(); return; }
+    setSaving(true);
+    try { await updateMyProfile(data); } catch {}
+    setDone(true);
+    setTimeout(onClose, 800);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:380, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
+        <h3 style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:20 }}>프로필 수정</h3>
+        {done ? (
+          <p style={{ textAlign:"center", color:C.teal, fontWeight:600, padding:"20px 0" }}>저장되었습니다!</p>
+        ) : (
+          <>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>이름 (변경할 경우 입력)</label>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="새 이름"
+                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
+                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
+              />
+            </div>
+            <div style={{ marginBottom:24 }}>
+              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 비밀번호 (변경할 경우 입력)</label>
+              <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="새 비밀번호"
+                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
+                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
+              />
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:10, border:`1px solid ${C.border}`, background:C.white, color:C.textSub, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>취소</button>
+              <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:saving?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
+                {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════ 메인 ══════════════ */
 export default function MentorMyPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const userName = user?.email?.split("@")[0] || "사용자";
   const [activeTab, setActiveTab] = useState("pending");
+
+  const [profile, setProfile]   = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
+
+  useEffect(() => {
+    getMyProfile().then(setProfile).catch(() => {});
+    getUserSessions().then(data => {
+      if (!data?.length) return;
+      const pending   = data.filter(s => s.status === "pending");
+      const confirmed = data.filter(s => s.status === "scheduled");
+      if (pending.length)   setRequests(pending.map(s => ({ id:s.id, date:s.scheduledAt?.slice(5,10).replace("-",".") ?? "", time:s.scheduledAt?.slice(11,16) ?? "", title:s.title ?? "", detail:`${s.sessionType ?? "1:1"} · ${s.menteeName ?? ""}` })));
+    }).catch(() => {});
+  }, []);
+
+  const displayName = profile?.name ?? userName;
 
   const handleWithdraw = async () => {
     if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
@@ -189,7 +258,7 @@ export default function MentorMyPage() {
           </div>
           <div style={{ display:"flex", gap:10 }}>
             {["가능 시간 관리","프로필 수정"].map((l,i)=>(
-              <button key={i} style={{
+              <button key={i} onClick={l==="프로필 수정"?()=>setShowEdit(true):undefined} style={{
                 padding:"10px 18px",
                 background:C.white, color:C.text,
                 border:`1.5px solid ${C.border}`, borderRadius:8,
@@ -226,7 +295,7 @@ export default function MentorMyPage() {
                   display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:22, fontWeight:700, color:C.white,
                 }}>이J</div>
-                <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>이준호</p>
+                <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>{displayName}</p>
                 <p style={{ fontSize:12, color:C.textSub }}>카카오 · 백엔드 개발 5년</p>
               </div>
 
@@ -384,6 +453,8 @@ export default function MentorMyPage() {
           </div>
         </div>
       </main>
+
+      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} />}
     </>
   );
 }

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
 
 /* ============================================================
    멘티 마이페이지  (pages/mentee/MyPage.jsx)
@@ -200,12 +201,102 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
   );
 };
 
+/* ── 더미 히스토리 (API 미연결 시 표시용) ── */
+const DUMMY_HISTORY = [
+  { num:5, title:"백엔드 개발자 모의 면접", wpm:118, wpmLevel:"안정", star:"4/4", ai:4.4, silence:2, mentor:"박지훈", date:"2026.04.02", type:"1:1", hasAudio:true },
+  { num:4, title:"프론트엔드 그룹 면접 연습", wpm:129, wpmLevel:"양호", star:"3/4", ai:4.1, silence:null, mentor:"이수연", date:"2026.03.20", type:"그룹 3인", hasAudio:true },
+  { num:3, title:"인성 면접 집중 코칭", wpm:141, wpmLevel:"양호", star:"3/4", ai:3.9, silence:4, mentor:"박지훈", date:"2026.03.05", type:"1:1", hasAudio:true },
+  { num:2, title:"기술 면접 기초 세션", wpm:158, wpmLevel:"빠름", star:"2/4", ai:3.5, silence:null, mentor:"김도현", date:"2026.02.18", type:"1:1", hasAudio:false },
+  { num:1, title:"첫 모의 면접 세션", wpm:182, wpmLevel:"매우 빠름", star:"1/4", ai:2.8, silence:7, mentor:"박지훈", date:"2026.02.01", type:"1:1", hasAudio:false },
+];
+
+/* ── 프로필 수정 모달 ── */
+function EditProfileModal({ onClose }) {
+  const [name, setName]     = useState("");
+  const [pw, setPw]         = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone]     = useState(false);
+
+  const handleSave = async () => {
+    const data = {};
+    if (name.trim())  data.name     = name.trim();
+    if (pw.trim())    data.password = pw.trim();
+    if (!Object.keys(data).length) { onClose(); return; }
+    setSaving(true);
+    try { await updateMyProfile(data); } catch {}
+    setDone(true);
+    setTimeout(onClose, 800);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:380, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
+        <h3 style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:20 }}>프로필 수정</h3>
+        {done ? (
+          <p style={{ textAlign:"center", color:C.teal, fontWeight:600, padding:"20px 0" }}>저장되었습니다!</p>
+        ) : (
+          <>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>이름 (변경할 경우 입력)</label>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="새 이름"
+                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
+                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
+              />
+            </div>
+            <div style={{ marginBottom:24 }}>
+              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 비밀번호 (변경할 경우 입력)</label>
+              <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="새 비밀번호"
+                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
+                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
+              />
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:10, border:`1px solid ${C.border}`, background:C.white, color:C.textSub, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>취소</button>
+              <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:saving?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
+                {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════ 메인 ══════════════ */
 export default function MenteeMyPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const userName = user?.email?.split("@")[0] || "사용자";
   const [activeTab, setActiveTab] = useState("all");
+  const [profile, setProfile]     = useState(null);
+  const [apiSessions, setApiSessions] = useState([]);
+  const [showEdit, setShowEdit]   = useState(false);
+
+  useEffect(() => {
+    getMyProfile().then(setProfile).catch(() => {});
+    getUserSessions().then(data => { if (data?.length) setApiSessions(data); }).catch(() => {});
+  }, []);
+
+  /* API 세션 → historyAll 파생 (없으면 더미 사용) */
+  const historyAll = apiSessions.length > 0
+    ? apiSessions.map((s, i, arr) => ({
+        id: s.id,
+        num: arr.length - i,
+        title: s.title ?? "",
+        wpm: s.wpm ?? 0,
+        wpmLevel: s.wpmLevel ?? "양호",
+        star: s.star ?? "-",
+        ai: s.aiScore ?? 0,
+        silence: s.silence ?? null,
+        mentor: s.mentorName ?? "",
+        date: s.scheduledAt?.slice(0, 10).replace(/-/g, ".") ?? "",
+        type: s.sessionType ?? "1:1",
+        hasAudio: !!s.reportStatus,
+      }))
+    : DUMMY_HISTORY;
+
+  const displayName = profile?.name ?? userName;
 
   const handleWithdraw = async () => {
     if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
@@ -219,15 +310,7 @@ export default function MenteeMyPage() {
     navigate("/");
   };
 
-  const historyAll = [
-    { num:5, title:"백엔드 개발자 모의 면접", wpm:118, wpmLevel:"안정", star:"4/4", ai:4.4, silence:2, mentor:"박지훈", date:"2026.04.02", type:"1:1", hasAudio:true },
-    { num:4, title:"프론트엔드 그룹 면접 연습", wpm:129, wpmLevel:"양호", star:"3/4", ai:4.1, silence:null, mentor:"이수연", date:"2026.03.20", type:"그룹 3인", hasAudio:true },
-    { num:3, title:"인성 면접 집중 코칭", wpm:141, wpmLevel:"양호", star:"3/4", ai:3.9, silence:4, mentor:"박지훈", date:"2026.03.05", type:"1:1", hasAudio:true },
-    { num:2, title:"기술 면접 기초 세션", wpm:158, wpmLevel:"빠름", star:"2/4", ai:3.5, silence:null, mentor:"김도현", date:"2026.02.18", type:"1:1", hasAudio:false },
-    { num:1, title:"첫 모의 면접 세션", wpm:182, wpmLevel:"매우 빠름", star:"1/4", ai:2.8, silence:7, mentor:"박지훈", date:"2026.02.01", type:"1:1", hasAudio:false },
-  ];
-
-  const historyUnread = historyAll.slice(0,1);
+  const historyUnread = historyAll.slice(0, 1);
 
   const growthData = [
     { label:"STAR 구조화",    value:75, change:28, color:C.teal },
@@ -268,7 +351,7 @@ export default function MenteeMyPage() {
             <p style={{ fontSize:13, color:C.textMuted }}>나의 면접 성장 기록을 확인하세요</p>
           </div>
           <div style={{ display:"flex", gap:10 }}>
-            <button style={{
+            <button onClick={() => setShowEdit(true)} style={{
               padding:"10px 18px",
               background:C.white, color:C.text,
               border:`1.5px solid ${C.border}`, borderRadius:8,
@@ -304,7 +387,7 @@ export default function MenteeMyPage() {
                   display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:22, fontWeight:700, color:C.white,
                 }}>김M</div>
-                <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>김민준</p>
+                <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>{displayName}</p>
                 <p style={{ fontSize:12, color:C.textSub }}>백엔드 개발자 지망 · 신입</p>
               </div>
 
@@ -424,6 +507,8 @@ export default function MenteeMyPage() {
           </div>
         </div>
       </main>
+
+      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} />}
     </>
   );
 }

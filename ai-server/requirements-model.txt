@@ -1,0 +1,5 @@
+-r requirements.txt
+accelerate
+peft
+torch
+transformers

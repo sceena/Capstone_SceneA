@@ -59,7 +59,7 @@ To enable SFT inference later:
 ```bash
 export AI_MODEL_ENABLED=true
 export AI_BASE_MODEL=Qwen/Qwen2.5-7B-Instruct
-export AI_ADAPTER_PATH=/path/to/lora_adapter
+export AI_ADAPTER_PATH=/content/drive/MyDrive/AI/models/lora_adapters/qwen2_5_7b_sft_debiased
 ```
 
 The model boundary lives in:
@@ -69,6 +69,26 @@ app/model/inference.py
 app/model/prompts.py
 app/services/answer_evaluator.py
 ```
+
+Install model dependencies only in a GPU runtime:
+
+```bash
+pip install -r requirements-model.txt
+```
+
+The current SFT adapter was trained to output exactly:
+
+```json
+{
+  "reasoning": "점수 판단 이유",
+  "overall_score": 7,
+  "strengths": ["장점 1", "장점 2"],
+  "improvements": ["개선점 1", "개선점 2"]
+}
+```
+
+Do not ask this SFT adapter to emit `star_structure`. STAR, fit-gap, and
+speech-metric interpretation are handled outside the answer-scoring model.
 
 ## Smoke Test
 

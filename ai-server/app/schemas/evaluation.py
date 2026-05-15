@@ -17,4 +17,3 @@ class ModelAnswerEvaluation(BaseModel):
     overall_score: float = Field(default=5.0, ge=1.0, le=10.0)
     strengths: list[str] = Field(default_factory=list)
     improvements: list[str] = Field(default_factory=list)
-    star_structure: str = "AI 판단 필요"

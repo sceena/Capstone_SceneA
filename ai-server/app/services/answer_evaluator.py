@@ -39,7 +39,7 @@ class AnswerEvaluator:
 
     def _from_model(self, answer: InterviewAnswer, model_evaluation: ModelAnswerEvaluation) -> AnswerEvaluation:
         answer_text = (answer.answer or "").strip()
-        metrics_summary = self._metrics_summary(answer, model_evaluation.star_structure)
+        metrics_summary = self._metrics_summary(answer)
         score = max(1.0, min(10.0, round(model_evaluation.overall_score, 1)))
 
         strengths = model_evaluation.strengths or ["질문 의도를 일부 파악하고 답변을 시도했습니다."]
@@ -127,12 +127,10 @@ class AnswerEvaluator:
             metrics_summary=metrics_summary,
         )
 
-    def _metrics_summary(self, answer: InterviewAnswer, model_star_structure: str | None = None) -> MetricsSummary:
+    def _metrics_summary(self, answer: InterviewAnswer) -> MetricsSummary:
         metrics = answer.metrics
         answer_text = answer.answer or ""
         star = infer_star(answer_text)
-        if model_star_structure and model_star_structure != "AI 판단 필요":
-            star = model_star_structure
 
         return MetricsSummary(
             speaking_speed=(metrics.speaking_speed if metrics else None) or "미측정",

@@ -11,7 +11,7 @@ class ModelPrompt:
 
 ANSWER_EVALUATION_SYSTEM = (
     "다음은 IT 직군 면접 질문과 지원자의 답변입니다. "
-    "답변을 평가 기준에 따라 채점하고 정해진 JSON 형식으로 결과를 출력하세요."
+    "답변을 평가 기준에 따라 채점하고 정해진 JSON 형식으로 결과만 출력하세요."
 )
 
 ANSWER_EVALUATION_SCHEMA = """{
@@ -45,7 +45,7 @@ user:
 {answer.answer or ""}
 
 assistant:
-{ANSWER_EVALUATION_SCHEMA}""".strip()
+""".strip()
 
     return ModelPrompt(
         plain_text=plain_text,

@@ -42,7 +42,7 @@ def get_model_settings() -> ModelSettings:
         device_map=getenv("AI_DEVICE_MAP", "auto"),
         offload_dir=getenv("AI_OFFLOAD_DIR") or None,
         load_in_4bit=_bool_env("AI_LOAD_IN_4BIT"),
-        max_new_tokens=int(getenv("AI_MAX_NEW_TOKENS", "512")),
+        max_new_tokens=int(getenv("AI_MAX_NEW_TOKENS", "384")),
         temperature=float(getenv("AI_TEMPERATURE", "0.0")),
         prompt_format=prompt_format,
     )

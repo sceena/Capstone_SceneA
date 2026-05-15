@@ -5,6 +5,7 @@ from threading import Lock
 from typing import Any
 
 from app.core.config import ModelSettings, get_model_settings
+from app.model.json_utils import ModelJsonError
 from app.model.json_utils import extract_json_object
 from app.model.prompts import ModelPrompt
 
@@ -32,7 +33,11 @@ class ModelInference:
             raise ModelUnavailable("model inference is disabled")
 
         raw = self._generate_text(prompt)
-        return extract_json_object(raw)
+        try:
+            return extract_json_object(raw)
+        except ModelJsonError:
+            logger.error("model output did not contain valid JSON: %r", raw[:500])
+            raise
 
     @property
     def _pipeline(self):

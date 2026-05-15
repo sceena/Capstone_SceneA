@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { getSessionAnalysisSummary, getAnswerAnalysis, getAnswerSegments } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
@@ -145,7 +146,42 @@ function StarText({ text, highlights }) {
 // ─── Mentee Report ────────────────────────────────────────────────
 function MenteeReport({ sessionId }) {
   const navigate = useNavigate();
-  const qnas = [
+  const [summary, setSummary] = useState(null);
+  const [qnaAnalysis, setQnaAnalysis] = useState({});
+
+  /* 세션 AI 분석 요약 조회 */
+  useEffect(() => {
+    getSessionAnalysisSummary(sessionId).then(setSummary).catch(() => {});
+  }, [sessionId]);
+
+  /* 요약에 질문 목록이 있으면 각 답변의 분석 + 세그먼트 조회 */
+  useEffect(() => {
+    if (!summary?.questions) return;
+    summary.questions.forEach(({ questionId, answerId }) => {
+      Promise.all([
+        getAnswerAnalysis(sessionId, questionId, answerId).catch(() => null),
+        getAnswerSegments(sessionId, questionId, answerId).catch(() => null),
+      ]).then(([analysis, segments]) => {
+        setQnaAnalysis(prev => ({
+          ...prev,
+          [`${questionId}_${answerId}`]: { analysis, segments },
+        }));
+      });
+    });
+  }, [summary, sessionId]);
+
+  /* API 데이터 우선, 없으면 하드코딩 fallback */
+  const qnas = summary?.questions?.map(q => ({
+    q: q.questionText ?? "",
+    text: qnaAnalysis[`${q.questionId}_${q.answerId}`]?.analysis?.sttText ?? q.sttText ?? "",
+    highlights: qnaAnalysis[`${q.questionId}_${q.answerId}`]?.segments ?? null,
+    score: q.aiScore ?? 0,
+    time: q.duration ?? "",
+    bad: q.isBest === false && q.isWorst === true,
+    note: q.note ?? null,
+    questionId: q.questionId,
+    answerId: q.answerId,
+  })) ?? [
     {
       q: "Q1 · 본인이 경험한 가장 큰 기술적 도전과 해결 과정을 말해주세요.",
       text: "카카오 인턴 당시 결제 서버가 피크 타임에 응답 지연이 3초를 넘는 상황이 발생했습니다. 원인 분석과 성능 개선을 2주 내에 마무리해야 했고, DB 쿼리 최적화와 Redis 캐싱을 도입했습니다. N+1 문제를 해결하고 캐시 히트율을 80%까지 끌어올렸습니다. 결과적으로 평균 응답 시간을 340ms까지 줄이는 데 성공했습니다.",

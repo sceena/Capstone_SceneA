@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { requestReservation } from "../../api/reservations";
 
 const C = {
   navy:"#0D2240",navyMid:"#1B4F7A",cream:"#F2EDE4",creamDark:"#E8E0D0",
@@ -63,7 +64,15 @@ export default function MentorApply(){
   const handleSubmit=async()=>{
     if(!canSubmit)return;
     setLoading(true);
-    await new Promise(r=>setTimeout(r,1000));
+    try {
+      await requestReservation({
+        mentorId: mentor.id,
+        sessionType: sessType,
+        participants: sessType==="그룹" ? participants : 1,
+        date: mentor.availableDates[selDateIdx].date,
+        time: selTime,
+      });
+    } catch {}
     setLoading(false);
     setSubmitted(true);
   };

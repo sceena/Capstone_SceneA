@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMySessions } from "../../api/sessions";
+import { respondReservation } from "../../api/reservations";
 
 /* ============================================================
    멘토 대시보드  (pages/Dashboard/MentorDashboard.jsx)
@@ -348,8 +349,14 @@ export default function MentorDashboard() {
       status: "confirmed",
     }));
 
-  const handleAccept  = (id) => setRequests(r => r.filter(x => x.id !== id));
-  const handleDecline = (id) => setRequests(r => r.filter(x => x.id !== id));
+  const handleAccept = async (id) => {
+    try { await respondReservation({ reservationId: id, accepted: true }); } catch {}
+    setRequests(r => r.filter(x => x.id !== id));
+  };
+  const handleDecline = async (id) => {
+    try { await respondReservation({ reservationId: id, accepted: false }); } catch {}
+    setRequests(r => r.filter(x => x.id !== id));
+  };
 
   return (
     <>

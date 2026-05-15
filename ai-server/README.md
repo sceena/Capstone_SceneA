@@ -41,6 +41,35 @@ The current generator is input-driven and deterministic. Replace
 `app/services/report_generator.py` internals with SFT model inference later
 while keeping the same request/response schema.
 
+## Model Inference
+
+The server is split into two report stages:
+
+```text
+AnswerEvaluator
+  question + answer + context -> score, strengths, improvements, STAR
+
+ReportComposer
+  answer evaluations + metrics + job posting -> best/worst, fit-gap, recommendations
+```
+
+By default, model inference is disabled and the deterministic evaluator is used.
+To enable SFT inference later:
+
+```bash
+export AI_MODEL_ENABLED=true
+export AI_BASE_MODEL=Qwen/Qwen2.5-7B-Instruct
+export AI_ADAPTER_PATH=/path/to/lora_adapter
+```
+
+The model boundary lives in:
+
+```text
+app/model/inference.py
+app/model/prompts.py
+app/services/answer_evaluator.py
+```
+
 ## Smoke Test
 
 ```bash

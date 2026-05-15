@@ -1,45 +1,66 @@
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class CandidateContext(BaseModel):
-    candidate_id: int | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    candidate_id: int | None = Field(default=None, validation_alias=AliasChoices("candidate_id", "candidateId"))
     name: str | None = None
     level: str | None = None
-    target_role: str | None = None
-    resume_summaries: list[str] = Field(default_factory=list)
+    target_role: str | None = Field(default=None, validation_alias=AliasChoices("target_role", "targetRole"))
+    resume_summaries: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("resume_summaries", "resumeSummaries"),
+    )
 
 
 class CompanyContext(BaseModel):
-    target_company: str | None = None
-    target_role: str | None = None
-    job_posting_summary: str | None = None
-    job_posting_url: str | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    target_company: str | None = Field(default=None, validation_alias=AliasChoices("target_company", "targetCompany"))
+    target_role: str | None = Field(default=None, validation_alias=AliasChoices("target_role", "targetRole"))
+    job_posting_summary: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("job_posting_summary", "jobPostingSummary"),
+    )
+    job_posting_url: str | None = Field(default=None, validation_alias=AliasChoices("job_posting_url", "jobPostingUrl"))
 
 
 class AnswerMetrics(BaseModel):
-    duration_sec: int | None = None
-    speaking_speed: str | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    duration_sec: int | None = Field(default=None, validation_alias=AliasChoices("duration_sec", "durationSec"))
+    speaking_speed: str | None = Field(default=None, validation_alias=AliasChoices("speaking_speed", "speakingSpeed"))
     silence: str | None = None
-    sentence_clarity: str | None = None
-    star_structure: str | None = None
+    sentence_clarity: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("sentence_clarity", "sentenceClarity"),
+    )
+    star_structure: str | None = Field(default=None, validation_alias=AliasChoices("star_structure", "starStructure"))
 
 
 class InterviewAnswer(BaseModel):
-    question_id: int
+    model_config = ConfigDict(populate_by_name=True)
+
+    question_id: int = Field(validation_alias=AliasChoices("question_id", "questionId"))
     question: str
-    answer_id: int | None = None
+    answer_id: int | None = Field(default=None, validation_alias=AliasChoices("answer_id", "answerId"))
     answer: str | None = None
-    audio_url: str | None = None
-    answer_start: str | None = None
-    answer_end: str | None = None
+    audio_url: str | None = Field(default=None, validation_alias=AliasChoices("audio_url", "audioUrl"))
+    answer_start: str | None = Field(default=None, validation_alias=AliasChoices("answer_start", "answerStart"))
+    answer_end: str | None = Field(default=None, validation_alias=AliasChoices("answer_end", "answerEnd"))
     metrics: AnswerMetrics | None = None
 
 
 class ReportRequest(BaseModel):
-    session_id: int
-    candidate_context: CandidateContext
-    company_context: CompanyContext
-    interview_answers: list[InterviewAnswer]
+    model_config = ConfigDict(populate_by_name=True)
+
+    session_id: int = Field(validation_alias=AliasChoices("session_id", "sessionId"))
+    candidate_context: CandidateContext = Field(validation_alias=AliasChoices("candidate_context", "candidateContext"))
+    company_context: CompanyContext = Field(validation_alias=AliasChoices("company_context", "companyContext"))
+    interview_answers: list[InterviewAnswer] = Field(
+        validation_alias=AliasChoices("interview_answers", "interviewAnswers"),
+    )
 
 
 class MetricsSummary(BaseModel):

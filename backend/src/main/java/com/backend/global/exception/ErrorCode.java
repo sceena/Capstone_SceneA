@@ -42,7 +42,8 @@ public enum ErrorCode {
 
     // AI 분석 / 리포트
     ANALYSIS_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 분석 결과입니다."),
-    REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 리포트입니다.");
+    REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 리포트입니다."),
+    AI_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "AI 서버 호출에 실패했습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

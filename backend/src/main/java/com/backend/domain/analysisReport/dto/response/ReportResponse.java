@@ -13,10 +13,19 @@ public record ReportResponse(
         @JsonProperty("alignment_score") Float alignmentScore,
         @JsonProperty("best_moment") String bestMoment,
         @JsonProperty("worst_moment") String worstMoment,
+        @JsonProperty("ai_summary") String aiSummary,
+        @JsonProperty("raw_ai_response_json") String rawAiResponseJson,
         @JsonProperty("mentor_feedback") String mentorFeedback,
         @JsonProperty("created_at") LocalDateTime createdAt,
         @JsonProperty("updated_at") LocalDateTime updatedAt
 ) {
+    public ReportResponse(Long id, Long sessionId, String reportStatus, Float totalScore,
+                          Float alignmentScore, String bestMoment, String worstMoment,
+                          String mentorFeedback, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this(id, sessionId, reportStatus, totalScore, alignmentScore, bestMoment, worstMoment,
+                null, null, mentorFeedback, createdAt, updatedAt);
+    }
+
     public static ReportResponse from(AnalysisReport report) {
         return new ReportResponse(
                 report.getId(),
@@ -26,6 +35,8 @@ public record ReportResponse(
                 report.getAlignmentScore(),
                 report.getBestMoment(),
                 report.getWorstMoment(),
+                report.getAiSummary(),
+                report.getRawAiResponseJson(),
                 report.getMentorFeedback(),
                 report.getCreateDate(),
                 report.getModifyDate()

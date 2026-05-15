@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
 
 /* ============================================================
    멘티 마이페이지  (pages/mentee/MyPage.jsx)
@@ -29,20 +30,43 @@ const LogoIcon = ({ size=26, color=C.white }) => (
   </svg>
 );
 
-const Header = () => (
-  <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-    <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
-      <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>김민준</span>님</span>
-      <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
-      <div style={{ display:"flex", gap:32 }}>
-        {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"/mentee/mypage",bold:true}].map((x,i)=>(
-          <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
-            onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
-        ))}
-      </div>
-    </nav>
-  </header>
-);
+const Header = ({ userName, accessToken }) => {
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
+  return (
+    <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
+      <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+        <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
+        <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
+        <div style={{ display:"flex", alignItems:"center", gap:24 }}>
+          {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"/mentee/mypage",bold:true}].map((x,i)=>(
+            <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
+              onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
+          ))}
+          <button onClick={handleLogout} style={{
+            padding:"7px 16px", borderRadius:8,
+            border:"1px solid rgba(255,255,255,0.3)",
+            background:"transparent", color:"rgba(255,255,255,0.85)",
+            fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+            transition:"background 0.15s, border-color 0.15s",
+          }}
+            onMouseEnter={e=>{ e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.6)"; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.3)"; }}
+          >로그아웃</button>
+        </div>
+      </nav>
+    </header>
+  );
+};
 
 /* ── 변화 스탯 카드 ── */
 const ChangeStatCard = ({ label, before, after, unit, note, noteColor }) => (
@@ -179,7 +203,21 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
 /* ══════════════ 메인 ══════════════ */
 export default function MenteeMyPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userName = user?.email?.split("@")[0] || "사용자";
   const [activeTab, setActiveTab] = useState("all");
+
+  const handleWithdraw = async () => {
+    if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
+    try {
+      await fetch("/api/auth/withdraw", {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${user?.accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
 
   const historyAll = [
     { num:5, title:"백엔드 개발자 모의 면접", wpm:118, wpmLevel:"안정", star:"4/4", ai:4.4, silence:2, mentor:"박지훈", date:"2026.04.02", type:"1:1", hasAudio:true },
@@ -219,7 +257,7 @@ export default function MenteeMyPage() {
         @media(max-width:600px){.stat-grid{grid-template-columns:1fr 1fr!important}.growth-grid{grid-template-columns:1fr!important}}
       `}</style>
 
-      <Header/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
 
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 
@@ -229,16 +267,28 @@ export default function MenteeMyPage() {
             <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:"-0.02em", marginBottom:4 }}>마이페이지</h1>
             <p style={{ fontSize:13, color:C.textMuted }}>나의 면접 성장 기록을 확인하세요</p>
           </div>
-          <button style={{
-            padding:"10px 18px",
-            background:C.white, color:C.text,
-            border:`1.5px solid ${C.border}`, borderRadius:8,
-            fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-            transition:"border-color 0.15s",
-          }}
-            onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
-            onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-          >프로필 수정</button>
+          <div style={{ display:"flex", gap:10 }}>
+            <button style={{
+              padding:"10px 18px",
+              background:C.white, color:C.text,
+              border:`1.5px solid ${C.border}`, borderRadius:8,
+              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+              transition:"border-color 0.15s",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+            >프로필 수정</button>
+            <button onClick={handleWithdraw} style={{
+              padding:"10px 18px",
+              background:C.white, color:C.red,
+              border:`1.5px solid ${C.border}`, borderRadius:8,
+              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+              transition:"border-color 0.15s",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.red}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+            >회원탈퇴</button>
+          </div>
         </div>
 
         <div className="mypage-layout" style={{ display:"flex", gap:24, alignItems:"flex-start" }}>

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { clearAuthUser } from "../../store/authStore";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import { getMySessions } from "../../api/sessions";
 
 /* ============================================================
    멘티 대시보드  (pages/Dashboard/MenteeDashboard.jsx)
@@ -58,9 +59,18 @@ const SectionIcon = () => (
 );
 
 /* ── 헤더 ── */
-const Header = ({ userName }) => {
+const Header = ({ userName, accessToken }) => {
   const navigate = useNavigate();
-  const handleLogout = () => { clearAuthUser(); navigate("/"); };
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
   return (
     <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
       <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
@@ -253,24 +263,38 @@ const HistoryItem = ({ date, title, mentor, score, tag, tagColor }) => (
 ════════════════════════════════════════ */
 export default function MenteeDashboard() {
   const navigate = useNavigate();
-  const userName = "김민준";
+  const { user } = useAuthStore();
+  const userName = user?.email?.split("@")[0] || "사용자";
 
-  const todaySession = {
-    id:1, title:"백엔드 개발자 모의 면접",
-    date:"2026.04.02 오후 7:00", mentor:"멘토 박지훈",
-    type:"1:1 세션", time:"19:00",
-  };
+  const [sessions, setSessions] = useState([]);
+  useEffect(() => {
+    getMySessions().then(setSessions).catch(() => {});
+  }, []);
 
-  const history = [
-    { date:"03.22", title:"Java 백엔드 기술 면접", mentor:"박지훈 멘토", score:"87", tag:"우수",  tagColor:C.teal },
-    { date:"03.15", title:"자기소개 & 인성 면접",  mentor:"이수연 멘토", score:"74", tag:"보통",  tagColor:"#F59E0B" },
-    { date:"03.08", title:"CS 기초 심화 면접",     mentor:"최현아 멘토", score:"91", tag:"최우수", tagColor:"#185FA5" },
-  ];
+  /* API 응답에서 UI 데이터 파생 */
+  const completedSessions = sessions.filter(s => s.status === "completed");
+  const scheduledSessions = sessions.filter(s => s.status === "scheduled");
+  const todaySession = scheduledSessions[0] ?? null;
 
-  const upcoming = [
-    { date:"04.02", time:"19:00", title:"백엔드 개발자 모의 면접",  mentor:"박지훈 멘토", type:"1:1",    status:"confirmed" },
-    { date:"04.07", time:"20:00", title:"프론트엔드 그룹 면접 연습", mentor:"이수연 멘토", type:"그룹 3인", status:"pending"   },
-  ];
+  const history = completedSessions.map(s => ({
+    id: s.id,
+    date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
+    title: s.title ?? "",
+    mentor: s.mentorName ? `${s.mentorName} 멘토` : "",
+    score: s.aiScore ?? "-",
+    tag: s.tag ?? "완료",
+    tagColor: C.teal,
+  }));
+
+  const upcoming = scheduledSessions.map(s => ({
+    id: s.id,
+    date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
+    time: s.scheduledAt?.slice(11, 16) ?? "",
+    title: s.title ?? "",
+    mentor: s.mentorName ? `${s.mentorName} 멘토` : "",
+    type: s.sessionType ?? "1:1",
+    status: "confirmed",
+  }));
 
   return (
     <>
@@ -283,7 +307,7 @@ export default function MenteeDashboard() {
         }
       `}</style>
 
-      <Header userName={userName}/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 
         {/* ── 상단 배너 카드 (멘토 찾기 CTA) ── */}

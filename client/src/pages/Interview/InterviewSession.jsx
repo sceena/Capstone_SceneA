@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { updateSessionStatus, updateParticipantStatus } from "../../api/sessions";
+import { getAuthUser } from "../../store/authStore";
 
 /* ============================================================
    면접 진행  (pages/interview/InterviewSession.jsx)
@@ -39,6 +41,9 @@ export default function InterviewSession({ role = "mentee" }) {
   const [chatMsg,    setChatMsg]    = useState("");
   const [chatHistory,setChatHistory]= useState([]);
 
+  /* ── 멘티 전용: 답변 상태 (화자 분리) ── */
+  const [answerStatus, setAnswerStatus] = useState("idle"); // idle | answering | done
+
   /* ── 더미 참가자 ── */
   const isMentor = role === "mentor";
   const participants = [
@@ -69,8 +74,19 @@ export default function InterviewSession({ role = "mentee" }) {
   const handleEndCall = async () => {
     if(!window.confirm("면접을 종료하시겠습니까?")) return;
     setEnding(true);
+    try {
+      if (isMentor) await updateSessionStatus(id, "completed");
+    } catch {}
     await new Promise(r=>setTimeout(r,800));
     navigate(`/report/ai/${id}`, { state: { role: isMentor ? "mentor" : "mentee" } });
+  };
+
+  const handleAnswerStatus = async (nextStatus) => {
+    setAnswerStatus(nextStatus);
+    try {
+      const user = getAuthUser();
+      if (user?.id) await updateParticipantStatus(id, user.id, nextStatus);
+    } catch {}
   };
 
   const sendChat = () => {
@@ -344,6 +360,24 @@ export default function InterviewSession({ role = "mentee" }) {
                     </svg>
                   </button>
                 </div>
+              )}
+
+              {/* 멘티 전용: 답변 상태 버튼 (화자 분리) */}
+              {!isMentor && (
+                <button
+                  onClick={() => handleAnswerStatus(answerStatus === "answering" ? "done" : "answering")}
+                  style={{
+                    padding:"12px 20px",
+                    background: answerStatus === "answering" ? "#1D9E75" : "#f3f4f6",
+                    color: answerStatus === "answering" ? "#fff" : "#374151",
+                    border: `1.5px solid ${answerStatus === "answering" ? "#1D9E75" : "#d1d5db"}`,
+                    borderRadius:24,
+                    fontSize:13, fontWeight:700, cursor:"pointer",
+                    fontFamily:"inherit", transition:"all 0.18s",
+                  }}
+                >
+                  {answerStatus === "answering" ? "● 답변 중..." : "답변 시작"}
+                </button>
               )}
 
               {/* End Call */}

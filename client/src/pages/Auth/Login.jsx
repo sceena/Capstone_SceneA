@@ -120,10 +120,17 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      /* TODO: 실제 로그인 API 연동 */
-      await new Promise(r => setTimeout(r, 900));
-      setAuthUser({ role, name: email });
-      navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) throw new Error("login failed");
+      const { access_token, refresh_token } = await res.json();
+      const payload = JSON.parse(atob(access_token.split(".")[1]));
+      const userRole = payload.role?.toLowerCase();
+      setAuthUser({ role: userRole, email, accessToken: access_token, refreshToken: refresh_token });
+      navigate(userRole === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
     } catch {
       setError("이메일 또는 비밀번호를 확인해주세요.");
     } finally {

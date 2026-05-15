@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
 
 /* ============================================================
    멘토 마이페이지  (pages/mentor/MyPage.jsx)
@@ -31,20 +32,43 @@ const LogoIcon = ({ size=26, color=C.white }) => (
 );
 
 /* ── 헤더 ── */
-const Header = () => (
-  <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-    <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
-      <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>이준호</span>님</span>
-      <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
-      <div style={{ display:"flex", gap:32 }}>
-        {[{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"#",bold:true}].map((x,i)=>(
-          <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
-            onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
-        ))}
-      </div>
-    </nav>
-  </header>
-);
+const Header = ({ userName, accessToken }) => {
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
+  return (
+    <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
+      <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+        <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
+        <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
+        <div style={{ display:"flex", alignItems:"center", gap:24 }}>
+          {[{l:"대시보드",to:"/dashboard/mentor"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"/mentor/mypage",bold:true}].map((x,i)=>(
+            <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
+              onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
+          ))}
+          <button onClick={handleLogout} style={{
+            padding:"7px 16px", borderRadius:8,
+            border:"1px solid rgba(255,255,255,0.3)",
+            background:"transparent", color:"rgba(255,255,255,0.85)",
+            fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+            transition:"background 0.15s, border-color 0.15s",
+          }}
+            onMouseEnter={e=>{ e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.6)"; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.3)"; }}
+          >로그아웃</button>
+        </div>
+      </nav>
+    </header>
+  );
+};
 
 /* ── 스탯 카드 ── */
 const StatCard = ({ label, value, sub, subColor, accent }) => (
@@ -100,7 +124,21 @@ const ReviewCard = ({ initials, name, role, company, stars, text, bgColor }) => 
 /* ══════════════ 메인 ══════════════ */
 export default function MentorMyPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userName = user?.email?.split("@")[0] || "사용자";
   const [activeTab, setActiveTab] = useState("pending");
+
+  const handleWithdraw = async () => {
+    if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
+    try {
+      await fetch("/api/auth/withdraw", {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${user?.accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
   const [requests, setRequests] = useState([
     { id:1, date:"04.02", time:"19:00", title:"김민준 — 백엔드 개발자 모의 면접", detail:"1:1 · 60분 · 50P · 수락 기한 18시간 32분 남음" },
     { id:2, date:"04.07", time:"20:00", title:"박서연 외 2명 — 프론트엔드 그룹 면접", detail:"그룹 3인 · 60분 · 150P · 수락 기한 6시간 14분 남음" },
@@ -139,7 +177,7 @@ export default function MentorMyPage() {
         @media(max-width:900px){.mypage-layout{flex-direction:column!important}.mypage-sidebar{width:100%!important}}
       `}</style>
 
-      <Header/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
 
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 
@@ -162,6 +200,16 @@ export default function MentorMyPage() {
                 onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
               >{l}</button>
             ))}
+            <button onClick={handleWithdraw} style={{
+              padding:"10px 18px",
+              background:C.white, color:C.red,
+              border:`1.5px solid ${C.border}`, borderRadius:8,
+              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+              transition:"border-color 0.15s",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.red}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+            >회원탈퇴</button>
           </div>
         </div>
 

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { clearAuthUser } from "../../store/authStore";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import { getMySessions } from "../../api/sessions";
 
 /* ============================================================
    멘토 대시보드  (pages/Dashboard/MentorDashboard.jsx)
@@ -65,9 +66,15 @@ const QuoteIcon = () => (
 );
 
 /* ── 헤더 ── */
-const Header = ({ userName }) => {
+const Header = ({ userName, accessToken }) => {
   const navigate = useNavigate();
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+    } catch {}
     clearAuthUser();
     navigate("/");
   };
@@ -292,26 +299,54 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
    메인 컴포넌트
 ════════════════════════════════════════ */
 export default function MentorDashboard() {
+  const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  /* 더미 데이터 */
-  const userName = "박지훈";
+  const userName = user?.email?.split("@")[0] || "사용자";
 
-  const sessions = [
-    { id:1, title:"백엔드 개발자 모의 면접", date:"2026.04.02 오후 7:00", mentor:"멘토 박지훈", type:"1:1 세션", time:"19:00" },
-    { id:2, title:"백엔드 개발자 모의 면접", date:"2026.04.02 오후 7:00", mentor:"멘토 박지훈", type:"1:1 세션", time:"19:00" },
-  ];
+  const [allSessions, setAllSessions] = useState([]);
+  useEffect(() => {
+    getMySessions().then(setAllSessions).catch(() => {});
+  }, []);
 
-  const [requests, setRequests] = useState([
-    { id:1, name:"김민준", company:"카카오 백엔드 개발자 지원", message:"안녕하세요. 카카오 공채를 준비 중인 취준생입니다. Java/Spring 기반 백엔드 면접에 특히 약점이 있어 선생님의 도움이 필요합니다.", avatarColor:"#1B4F7A" },
-    { id:2, name:"이수현", company:"네이버 프론트엔드 지원", message:"React와 성능 최적화 관련 기술 면접을 앞두고 있어 코칭을 요청드립니다. 잘 부탁드립니다!", avatarColor:"#0F6E56" },
-  ]);
+  /* API 응답에서 UI 데이터 파생 */
+  const sessions = allSessions
+    .filter(s => s.status === "scheduled" || s.status === "in_progress")
+    .map(s => ({
+      id: s.id,
+      title: s.title ?? "",
+      date: s.scheduledAt ?? "",
+      mentor: s.menteeName ?? "",
+      type: s.sessionType ?? "1:1 세션",
+      time: s.scheduledAt?.slice(11, 16) ?? "",
+    }));
 
-  const upcoming = [
-    { date:"04.02", time:"19:00", title:"백엔드 개발자 모의 면접", mentor:"박지훈 멘토", type:"1:1",    status:"confirmed" },
-    { date:"04.07", time:"20:00", title:"프론트엔드 그룹 면접 연습", mentor:"이수연 멘토", type:"그룹 3인", status:"pending"   },
-    { date:"04.12", time:"14:00", title:"PM 직군 인성 면접",        mentor:"최현아 멘토", type:"1:1",    status:"none"      },
-  ];
+  const [requests, setRequests] = useState([]);
+  useEffect(() => {
+    setRequests(
+      allSessions
+        .filter(s => s.status === "pending")
+        .map(s => ({
+          id: s.id,
+          name: s.menteeName ?? "",
+          company: s.menteeCompany ?? "",
+          message: s.menteeMessage ?? "",
+          avatarColor: "#1B4F7A",
+        }))
+    );
+  }, [allSessions]);
+
+  const upcoming = allSessions
+    .filter(s => s.status === "scheduled")
+    .map(s => ({
+      id: s.id,
+      date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
+      time: s.scheduledAt?.slice(11, 16) ?? "",
+      title: s.title ?? "",
+      mentor: s.menteeName ?? "",
+      type: s.sessionType ?? "1:1",
+      status: "confirmed",
+    }));
 
   const handleAccept  = (id) => setRequests(r => r.filter(x => x.id !== id));
   const handleDecline = (id) => setRequests(r => r.filter(x => x.id !== id));
@@ -328,7 +363,7 @@ export default function MentorDashboard() {
         }
       `}</style>
 
-      <Header userName={userName}/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
 
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 

@@ -519,8 +519,18 @@ export default function Register() {
     e.preventDefault();
     setLoading(true);
     try {
-      /* TODO: 실제 회원가입 API 연동 */
-      await new Promise(r => setTimeout(r, 1000));
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: account.email,
+          password: account.password,
+          name: roleInfo.name,
+          nickname: roleInfo.name,
+          role: roleInfo.role.toUpperCase(),
+        }),
+      });
+      if (!res.ok) throw new Error("signup failed");
       navigate("/auth/login");
     } catch {
       setErrors({ submit:"회원가입 중 오류가 발생했습니다. 다시 시도해주세요." });

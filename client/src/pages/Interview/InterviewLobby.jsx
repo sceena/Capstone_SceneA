@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getSession, joinSession, updateSessionStatus } from "../../api/sessions";
 
 /* ============================================================
    면접 준비 화면  (pages/interview/InterviewReady.jsx)
@@ -20,6 +21,12 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [camStatus, setCamStatus] = useState("idle"); // idle | loading | ok | denied
   const [entering, setEntering] = useState(false);
   const [checklist, setChecklist] = useState([false, false, false]);
+  const [sessionData, setSessionData] = useState(null);
+
+  /* 세션 정보 로드 */
+  useEffect(() => {
+    getSession(id).then(setSessionData).catch(() => {});
+  }, [id]);
 
   /* 카메라 미리보기 */
   useEffect(() => {
@@ -35,22 +42,27 @@ export default function InterviewRobby({ role = "mentee" }) {
     return () => { stream?.getTracks().forEach(t=>t.stop()); };
   }, [camOn]);
 
-  const handleEnter = () => {
-    stream?.getTracks().forEach(t=>t.stop());
-    navigate(role==="mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
+  const handleEnter = async () => {
+    setEntering(true);
+    try {
+      await joinSession(id);
+      if (role === "mentor") await updateSessionStatus(id, "in_progress");
+    } catch {}
+    stream?.getTracks().forEach(t => t.stop());
+    navigate(role === "mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
   };
 
-  /* 더미 세션 정보 */
+  /* API 데이터 우선, 없으면 fallback */
   const session = {
-    title:    "백엔드 개발자 모의 면접",
-    date:     "2026.04.02 19:00",
-    type:     "1:1 개인 세션",
-    menteeName:  "김민준",
-    menteeInfo:  "신입 지원자 · 컴퓨터공학 전공",
-    menteeGoal:  '"실제 프로젝트 기반의 기술 질문과 꼬리 질문에 대한 대응력을 키우고 싶습니다."',
-    aiReport:    "멘티가 제출한 이력서에서 '분산 처리' 관련 경험이 돋보입니다. 해당 개념의 원리와 실제 적용 사례에 대해 심도 있게 질문을 보내세요.",
-    mentorName:  "박지훈",
-    mentorInfo:  "네이버 · 백엔드 개발 6년차",
+    title:       sessionData?.title       ?? "세션 로딩 중...",
+    date:        sessionData?.scheduledAt ?? "",
+    type:        sessionData?.sessionType ?? "1:1 개인 세션",
+    menteeName:  sessionData?.menteeName  ?? "",
+    menteeInfo:  sessionData?.menteeInfo  ?? "",
+    menteeGoal:  sessionData?.menteeGoal  ?? "",
+    aiReport:    sessionData?.aiReport    ?? "",
+    mentorName:  sessionData?.mentorName  ?? "",
+    mentorInfo:  sessionData?.mentorInfo  ?? "",
   };
 
   const isMentor = role === "mentor";

@@ -5,6 +5,7 @@ build/
 caches/
 daemon/
 native/
+wrapper/dists/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

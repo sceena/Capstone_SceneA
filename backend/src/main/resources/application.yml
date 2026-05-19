@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: backend
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+jwt:
+  access-token-expiration: 3600000
+  refresh-token-expiration: 1209600000

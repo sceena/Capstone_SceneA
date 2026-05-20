@@ -4,3 +4,4 @@ bitsandbytes
 peft
 torch
 transformers
+openai-whisper

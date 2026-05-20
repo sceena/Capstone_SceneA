@@ -15,3 +15,8 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# AI server local test artifacts
+ai-server/.cache/
+ai-server/test_audio/
+ai-server/audio_dashboard_result.json

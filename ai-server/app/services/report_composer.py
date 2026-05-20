@@ -1,5 +1,6 @@
 from app.schemas.evaluation import AnswerEvaluation
 from app.schemas.report import FitGap, QuestionHighlight, ReportRequest, ReportResponse, TopSummary
+from app.services.fit_gap_composer import FitGapComposer, FitGapComposerUnavailable
 
 
 class ReportComposer:
@@ -22,6 +23,9 @@ class ReportComposer:
         "AWS",
         "Docker",
     ]
+
+    def __init__(self, fit_gap_composer: FitGapComposer | None = None) -> None:
+        self.fit_gap_composer = fit_gap_composer or FitGapComposer()
 
     def compose(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> ReportResponse:
         if not evaluations:
@@ -98,6 +102,22 @@ class ReportComposer:
         return 5.0
 
     def _build_fit_gap(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> FitGap:
+        job_description = request.company_context.job_posting_summary or ""
+        interview_session = self._format_interview_session(evaluations)
+
+        try:
+            return self.fit_gap_composer.generate_fit_gap(job_description, interview_session)
+        except (FitGapComposerUnavailable, ValueError):
+            return self._build_keyword_fit_gap(request, evaluations)
+
+    def _format_interview_session(self, evaluations: list[AnswerEvaluation]) -> str:
+        lines = []
+        for index, item in enumerate(evaluations, start=1):
+            lines.append(f"Q{index}. {item.report.question}")
+            lines.append(f"A{index}. {item.report.answer}")
+        return "\n".join(lines)
+
+    def _build_keyword_fit_gap(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> FitGap:
         job_text = request.company_context.job_posting_summary or ""
         resume_text = " ".join(request.candidate_context.resume_summaries)
         answer_text = " ".join(item.report.answer for item in evaluations)
@@ -111,7 +131,7 @@ class ReportComposer:
         missing = [keyword for keyword in required if keyword.lower() not in evidence]
 
         if not matched:
-            matched = ["질문에 대한 기본 답변 흐름"]
+            matched = ["질문과 관련된 기본 답변 흐름"]
         if not missing:
             missing = ["성과 수치 또는 검증 근거"]
 

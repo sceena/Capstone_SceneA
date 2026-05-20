@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class FitGapRequest(BaseModel):
     job_description: str
     interview_session: str
+    resume_summary: str = ""
 
 
 class FitAnalysisItem(BaseModel):

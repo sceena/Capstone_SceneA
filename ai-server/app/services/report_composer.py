@@ -103,10 +103,11 @@ class ReportComposer:
 
     def _build_fit_gap(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> FitGap:
         job_description = request.company_context.job_posting_summary or ""
+        resume_summary = "\n".join(request.candidate_context.resume_summaries)
         interview_session = self._format_interview_session(evaluations)
 
         try:
-            return self.fit_gap_composer.generate_fit_gap(job_description, interview_session)
+            return self.fit_gap_composer.generate_fit_gap(job_description, interview_session, resume_summary)
         except (FitGapComposerUnavailable, ValueError):
             return self._build_keyword_fit_gap(request, evaluations)
 

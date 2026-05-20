@@ -18,7 +18,12 @@ class FitGapComposer:
 
     model = "gemini-3-flash-preview"
 
-    def generate(self, job_description: str, interview_session: str) -> FitGapAnalysisResponse:
+    def generate(
+        self,
+        job_description: str,
+        interview_session: str,
+        resume_summary: str = "",
+    ) -> FitGapAnalysisResponse:
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise FitGapComposerUnavailable("GEMINI_API_KEY is not set")
@@ -32,7 +37,7 @@ class FitGapComposer:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
             model=self.model,
-            contents=self._build_contents(types, job_description, interview_session),
+            contents=self._build_contents(types, job_description, interview_session, resume_summary),
             config=self._build_config(types),
         )
 
@@ -43,8 +48,13 @@ class FitGapComposer:
         payload = self._parse_json_text(text)
         return FitGapAnalysisResponse.model_validate(payload)
 
-    def generate_fit_gap(self, job_description: str, interview_session: str) -> FitGap:
-        response = self.generate(job_description, interview_session)
+    def generate_fit_gap(
+        self,
+        job_description: str,
+        interview_session: str,
+        resume_summary: str = "",
+    ) -> FitGap:
+        response = self.generate(job_description, interview_session, resume_summary)
         return FitGap(
             matched_requirements=[
                 f"{item.question_no}: {item.matched_skill} - {item.evidence}"
@@ -57,7 +67,14 @@ class FitGapComposer:
             recommendations=response.improvement_suggestions[:3],
         )
 
-    def _build_contents(self, types: Any, job_description: str, interview_session: str) -> list[Any]:
+    def _build_contents(
+        self,
+        types: Any,
+        job_description: str,
+        interview_session: str,
+        resume_summary: str = "",
+    ) -> list[Any]:
+        resume_block = resume_summary.strip() or "제공된 이력서 요약 없음"
         return [
             types.Content(
                 role="user",
@@ -129,6 +146,9 @@ A4. 주문 내역을 조회할 때 여러 테이블을 Join하다 보니 속도�
                         text=f"""[채용 공고]
 {job_description}
 
+[이력서 요약]
+{resume_block}
+
 [전체 면접 세트]
 {interview_session}"""
                     ),
@@ -143,12 +163,12 @@ A4. 주문 내역을 조회할 때 여러 테이블을 Join하다 보니 속도�
             ),
             system_instruction=[
                 types.Part.from_text(text="""너는 IT 전문 채용 컨설턴트다. 
-제공된 [채용 공고]의 핵심 요구사항과 [전체 면접 세트]의 답변들을 대조 분석하여 'Fit-Gap 리포트'를 작성하라.
+제공된 [채용 공고]의 핵심 요구사항과 [이력서 요약], [전체 면접 세트]의 답변들을 대조 분석하여 'Fit-Gap 리포트'를 작성하라.
 
 분석 원칙:
 1. 개별 질문별로 공고와의 연관성을 분석할 것.
-2. 답변에 공고 관련 키워드가 없더라도 의미적으로 상통하면 'Fit'으로 인정할 것.
-3. 공고의 필수 기술 스택이나 경험이 답변 전체에서 누락되었다면 'Gap'으로 명시할 것.
+2. 답변이나 이력서 요약에 공고 관련 키워드가 없더라도 의미적으로 상통하면 'Fit'으로 인정할 것.
+3. 공고의 필수 기술 스택이나 경험이 이력서 요약과 답변 전체에서 모두 누락되었다면 'Gap'으로 명시할 것.
 4. 공고에 기술명이 구체적으로 없으면 특정 라이브러리나 도구명을 과하게 추정하지 말고, "성능 개선", "운영 경험", "배포 자동화"처럼 공고의 역량 범주로 분석할 것.
 5. 단정적으로 "경험이 전무함", "직무 적합도가 낮음"처럼 평가하지 말고, "답변에서 확인되지 않음", "보완하면 좋음"처럼 근거 중심으로 표현할 것.
 6. improvement_suggestions는 가능하면 3개를 작성하고, 바로 실행 가능한 학습/프로젝트 개선 방향으로 제안할 것.

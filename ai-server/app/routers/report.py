@@ -21,6 +21,7 @@ def generate_fit_gap(request: FitGapRequest) -> FitGapAnalysisResponse:
         return fit_gap_composer.generate(
             job_description=request.job_description,
             interview_session=request.interview_session,
+            resume_summary=request.resume_summary,
         )
     except FitGapComposerUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

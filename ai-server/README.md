@@ -130,9 +130,9 @@ Frontend origins are configured with:
 export AI_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-Best/worst selection uses answer score plus speech metrics and STAR structure.
-Fit-gap is still keyword based; the next quality step is replacing
-`ReportComposer._build_fit_gap` with a model-based composer.
+Best/worst selection uses speech metrics plus answer-structure analysis.
+Fit-gap can use the Gemini-based composer and falls back to the existing
+keyword-based path when needed.
 
 ## Report Generation Plan
 
@@ -148,23 +148,27 @@ SFT 모델에게 직접 요구하지 않고 서버 내부의 별도 판단 로�
 전달된 정량 지표를 사용한다. 이렇게 분리하는 이유는 현재 SFT 모델이
 STAR/Fit-Gap까지 학습하지 않았기 때문이다.
 
-상단 요약은 질문별 평가 결과를 기반으로 best 문항과 worst 문항을 고른다.
-선정 기준은 점수 단독이 아니라 `답변 점수 + 말하기 정량 지표 + STAR 구조`를
-함께 본다. 점수는 답변 내용의 품질을 보고, 정량 지표는 말하기 속도와 침묵,
-문장 간결성을 보고, STAR 구조는 상황, 행동, 결과가 드러나는지를 본다.
+상단 요약은 질문/답변 오디오 분석 결과를 기반으로 best 문항과 worst 문항을
+고른다. 질문 오디오는 STT만 수행하고, 답변 오디오는 STT와 함께 CPM,
+3초 이상 침묵 횟수, 문장 간결성을 계산한다. LLM은 best/worst를 직접 고르지
+않고 질문 유형과 답변 구조 요소가 있는지만 판단한다. 최종 선정은 서버의
+`selection_score`와 동점 처리 기준으로 계산한다.
+
+질문 유형이 경험형이면 STAR 구조를 사용한다. 즉 Situation, Task, Action,
+Result가 답변에 드러나는지 확인한다. 다만 모든 질문에 STAR를 강제하지는
+않고, 의견형 질문은 주장/근거/예시, 상황형 질문은 상황 이해/행동 계획/근거처럼
+질문 유형에 맞는 구조 요소를 본다.
 
 중단의 Fit-Gap은 관심 기업 또는 희망 회사의 채용공고를 기준으로 만든다.
-현재는 채용공고 요약에서 주요 요구 키워드를 추출하고, 이력서 요약과 면접
-답변 전체에서 해당 요구사항의 근거가 있는지 비교한다. 근거가 있으면
-`충족한 요구사항`, 부족하면 `부족한 요구사항`으로 분류하고, 부족한 항목을
-기준으로 추천 보완 방향을 생성한다.
+현재는 Gemini 기반 LLM composer가 `job_description`, `resume_summary`,
+`interview_session`을
+입력으로 받아 `fit_analysis`, `gap_analysis`, `improvement_suggestions`,
+`overall_summary`를 JSON으로 생성한다. 별도 테스트 엔드포인트는
+`POST /api/fit-gap`이다.
 
-현재 Fit-Gap은 키워드 기반이라 문맥 이해에는 한계가 있다. 예를 들어
-공고의 "대용량 트래픽 처리"와 답변의 "Redis 캐싱으로 응답 시간 개선"처럼
-의미상 연결되는 내용은 단순 키워드 방식으로 놓칠 수 있다. 따라서 실제
-모델 연동이 안정되면 Fit-Gap은 별도 LLM composer로 확장한다. 이 composer는
-채용공고, 이력서 요약, 질문별 평가 결과, 답변 전체를 입력으로 받아
-충족 요구사항, 부족 요구사항, 추천 보완 방향을 문맥 기반으로 생성한다.
+Fit-Gap LLM composer를 사용하려면 `GEMINI_API_KEY`를 환경 변수로 설정해야 한다.
+실제 API 키는 커밋하지 않는다. LLM 호출이나 JSON 파싱이 실패하는 경우에는
+기존 키워드 기반 Fit-Gap 경로를 fallback으로 사용할 수 있다.
 
 하단의 질문별 상세 카드는 1단계 평가 결과를 그대로 보여준다. 각 카드에는
 질문, 답변, 점수, 장점, 개선점, 다시듣기 정보를 포함한다. 다시듣기는
@@ -186,7 +190,7 @@ Fit-Gap은 별도 composer로 분리하는 것이다. 한 모델에 모든 출�
 AI 서버
 - SFT로 질문별 답변 점수/장점/개선점 생성
 - sentence_clarity 보완 판단
-- STAR 구조 보완 판단
+- 질문 유형별 답변 구조 보완 판단(STAR 포함)
 - best/worst 선정
 - Fit-Gap 생성
 
@@ -198,38 +202,38 @@ AI 서버
 
 현재 best/worst 선정은 단순 점수만 보지 않고:
 
-답변 점수 + 말하기 정량 지표 + STAR 구조
+말하기 정량 지표 + 질문 유형별 답변 구조
 를 같이 본다.
 
 score, strengths, improvements, reasoning은 모델을 켜면 SFT 모델 결과를 사용
 모델을 끄면 fallback 규칙 기반 평가를 사용
 
-말하기 속도, 침묵은 백엔드가 넘겨주는 값이 있으면 그 값을 쓰고 없으면 "미측정"
-문장 간결성, STAR 구조는 백엔드 값이 있으면 쓰고 없으면 AI 서버의 간단한 규칙 기반 로직으로 판단한다.
+질문 오디오는 STT만 수행하고, 답변 오디오는 STT와 함께 CPM, 3초 이상 침묵 횟수,
+문장 간결성을 계산한다. LLM은 질문 유형과 답변 구조 요소가 있는지만 판단한다.
+경험형 질문은 STAR(Situation, Task, Action, Result)를 기준으로 보고, 의견형이나
+상황형 질문은 각각의 질문 유형에 맞는 구조 요소를 사용한다.
 
-SFT 모델 평가 결과 + 백엔드 정량 지표 + AI 서버 규칙 기반 STAR/간결성
-을 조합
+정량 지표 + LLM 구조 판단 + 서버의 `selection_score`
+를 조합한다. `selection_score`는 best/worst 선정을 위한 내부 값이라 사용자 화면에 그대로 보여줄 필요는 없다.
 
 중단: 채용공고 Fit-Gap
 
-중단은 아직 AI 모델 기반이 아니고 키워드 기반이야.
+중단은 Gemini 기반 LLM composer로 Fit-Gap을 생성한다.
 
 사용 정보는:
-채용공고 요약
+채용공고
 이력서 요약
 전체 면접 답변
-현재는 채용공고 요약에서 Java, Spring, JPA, Redis, AWS, 협업, 성능, 테스트 같은 미리 정의된 키워드를 찾고, 그 키워드가 이력서나 답변에 있는지 비교한다.
+LLM composer는 채용공고의 요구사항을 이력서 요약과 전체 면접 답변에서 확인되는 근거와 비교해서 fit_analysis, gap_analysis, improvement_suggestions, overall_summary를 만든다.
 
-있으면:충족한 요구사항
-없으면:부족한 요구사항
-으로 분류하고, 부족한 키워드에 대해 추천 보완 방향을 만든다.
+별도 테스트 엔드포인트는 `POST /api/fit-gap`이다.
+실제 API 키는 커밋하지 말고 `GEMINI_API_KEY` 환경 변수로만 설정한다.
 
 그래서 중단은 현재:
 
-AI 모델 X
-키워드 기반 O
-형식은 리포트 구조에 맞게 생성
-인 상태야. 품질을 높이려면 다음 단계에서 이 부분을 LLM composer로 바꾸는 게 맞아.
+Gemini LLM composer O
+JSON 파싱 후 백엔드가 바로 사용할 수 있는 구조로 반환
+실패 시 기존 키워드 기반 Fit-Gap fallback 가능
 
 하단: 질문별 상세 카드
 

@@ -130,6 +130,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             docker pull ${{ env.IMAGE_NAME }}:latest
@@ -141,14 +142,14 @@ jobs:
               --name carpoolink-backend \
               --restart unless-stopped \
               -p 8080:8080 \
-              -e DB_URL=${{ secrets.DB_URL }} \
-              -e DB_USERNAME=${{ secrets.DB_USERNAME }} \
-              -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
-              -e AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }} \
-              -e AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }} \
-              -e AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }} \
-              -e AWS_REGION=${{ secrets.AWS_REGION }} \
+              -e "DB_URL=${{ secrets.DB_URL }}" \
+              -e "DB_USERNAME=${{ secrets.DB_USERNAME }}" \
+              -e "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
+              -e "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
+              -e "AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}" \
+              -e "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" \
+              -e "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" \
+              -e "AWS_REGION=${{ secrets.AWS_REGION }}" \
               ${{ env.IMAGE_NAME }}:latest
 
             docker image prune -f

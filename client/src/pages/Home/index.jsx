@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
 /* ============================================================
@@ -67,6 +67,11 @@ const GlobalStyle = () => (
     @media (max-width: 480px) {
       .mentor-grid { grid-template-columns: 1fr !important; }
       .hero-title { font-size: 26px !important; }
+    }
+
+    @keyframes marquee {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
     }
   `}</style>
 );
@@ -285,6 +290,146 @@ const steps = [
   },
 ];
 
+/* ── STEP 03 리포트 일러스트 ── */
+const ReportIllustration = () => {
+  const ref = useRef(null);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setActive(true); },
+      { threshold: 0.35 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const bars = [
+    { pct: 72, color: "#1D9E75" },
+    { pct: 85, color: "#3A7FAF" },
+    { pct: 58, color: "#1D9E75" },
+    { pct: 80, color: "#3A7FAF" },
+  ];
+  return (
+    <div ref={ref} style={{
+      background: C.navy,
+      borderRadius: 20,
+      overflow: "hidden",
+      aspectRatio: "16/10",
+      display: "flex",
+      flexDirection: "column",
+      padding: "18px 20px",
+      gap: 12,
+      boxShadow: "0 24px 60px rgba(13,34,68,0.18)",
+      position: "relative",
+    }}>
+      <style>{`
+        @keyframes rBar {
+          0%, 5%    { transform: scaleX(0); }
+          50%       { transform: scaleX(1); }
+          82%       { transform: scaleX(1); }
+          96%, 100% { transform: scaleX(0); }
+        }
+      `}</style>
+
+      {/* 헤더 */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+          <div style={{ width:7, height:7, borderRadius:"50%", background:"#1D9E75" }}/>
+          <span style={{ color:"rgba(255,255,255,0.9)", fontSize:11, fontWeight:700, fontFamily:"'Noto Sans KR',sans-serif", letterSpacing:"-0.2px" }}>
+            면접 리포트
+          </span>
+        </div>
+        <div style={{ display:"flex", gap:6 }}>
+          {["AI 분석","멘토 평가"].map((t,i) => (
+            <div key={i} style={{
+              padding:"2px 8px", borderRadius:999, fontSize:8.5,
+              background: i===0 ? "rgba(29,158,117,0.2)" : "rgba(58,127,175,0.2)",
+              color: i===0 ? "#1D9E75" : "#3A7FAF",
+              fontFamily:"'Noto Sans KR',sans-serif", fontWeight:600,
+              border: `1px solid ${i===0 ? "rgba(29,158,117,0.35)" : "rgba(58,127,175,0.3)"}`,
+            }}>{t}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* 본문 2열 */}
+      <div style={{ flex:1, display:"flex", gap:14, minHeight:0 }}>
+
+        {/* 왼쪽: 게이지 바 */}
+        <div style={{ flex:1.1, display:"flex", flexDirection:"column", justifyContent:"space-evenly" }}>
+          {bars.map((b, i) => (
+            <div key={i} style={{ height:9, background:"rgba(255,255,255,0.07)", borderRadius:999, overflow:"hidden" }}>
+              <div style={{
+                height:"100%", borderRadius:999,
+                background:`linear-gradient(90deg, ${b.color}, ${b.color}77)`,
+                width:`${b.pct}%`,
+                transformOrigin:"left center",
+                animation: active
+                  ? `rBar 3.8s ${0.3*i}s cubic-bezier(0.4,0,0.2,1) infinite`
+                  : "none",
+              }}/>
+            </div>
+          ))}
+        </div>
+
+        {/* 구분선 */}
+        <div style={{ width:1, background:"rgba(255,255,255,0.07)", flexShrink:0 }}/>
+
+        {/* 오른쪽: 멘토 코칭 */}
+        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ fontSize:8.5, color:"rgba(255,255,255,0.4)", fontFamily:"'Noto Sans KR',sans-serif", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+            멘토 코칭
+          </div>
+          {/* 별점 */}
+          <div style={{ display:"flex", gap:2 }}>
+            {[1,2,3,4,5].map(s => (
+              <div key={s} style={{ fontSize:11, color: s<=4 ? "#F59E0B" : "rgba(255,255,255,0.15)" }}>★</div>
+            ))}
+            <span style={{ fontSize:9, color:"rgba(255,255,255,0.5)", marginLeft:4, fontFamily:"'Noto Sans KR',sans-serif" }}>4.2</span>
+          </div>
+          {/* 피드백 줄 */}
+          {[
+            { w:"90%", color:"rgba(255,255,255,0.18)" },
+            { w:"75%", color:"rgba(255,255,255,0.12)" },
+            { w:"85%", color:"rgba(255,255,255,0.18)" },
+            { w:"60%", color:"rgba(255,255,255,0.12)" },
+            { w:"80%", color:"rgba(255,255,255,0.18)" },
+          ].map((l,i) => (
+            <div key={i} style={{ height:5, background:l.color, borderRadius:999, width:l.w }}/>
+          ))}
+          {/* 개선 포인트 태그 */}
+          <div style={{ display:"flex", gap:5, marginTop:2, flexWrap:"wrap" }}>
+            {["말하기 속도","STAR 구조"].map((t,i) => (
+              <div key={i} style={{
+                padding:"2px 7px", borderRadius:999, fontSize:7.5,
+                background:"rgba(245,255,78,0.1)",
+                color:"#F5FF4E",
+                border:"1px solid rgba(245,255,78,0.25)",
+                fontFamily:"'Noto Sans KR',sans-serif",
+              }}>{t}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 하단 종합 점수 */}
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        borderTop:"1px solid rgba(255,255,255,0.07)", paddingTop:10,
+      }}>
+        <span style={{ fontSize:9, color:"rgba(255,255,255,0.4)", fontFamily:"'Noto Sans KR',sans-serif" }}>종합 역량 점수</span>
+        <div style={{ display:"flex", alignItems:"baseline", gap:3 }}>
+          <span style={{ fontSize:18, fontWeight:800, color:"#1D9E75", fontFamily:"'Noto Sans KR',sans-serif" }}>82</span>
+          <span style={{ fontSize:9, color:"rgba(255,255,255,0.3)", fontFamily:"'Noto Sans KR',sans-serif" }}>/100</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* 플레이스홀더 "화면 미리보기" 카드 */
 const ScreenPreview = ({ accent, num }) => (
   <div style={{
@@ -321,108 +466,109 @@ const ScreenPreview = ({ accent, num }) => (
   </div>
 );
 
-/* ── STEP 01 로봇 일러스트 ── */
-const RobotIllustration = () => (
-  <div style={{
-    background: C.navy,
-    borderRadius: 20,
-    overflow: "hidden",
-    aspectRatio: "16/10",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 24px 60px rgba(13,34,68,0.18)",
-    position: "relative",
-  }}>
-    <style>{`
-      @keyframes robotFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-      @keyframes eyeBlink { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.1)} }
-      @keyframes armL { 0%,100%{transform:rotate(-15deg)} 50%{transform:rotate(15deg)} }
-      @keyframes armR { 0%,100%{transform:rotate(15deg)} 50%{transform:rotate(-15deg)} }
-      @keyframes progBar { 0%{width:20%} 100%{width:85%} }
-    `}</style>
+/* ── STEP 01 3D 구 일러스트 ── */
+const NetworkGraphIllustration = () => {
+  const R = 125;
+  const kwList = [
+    { label: "역량",    size: 13, bold: true  },
+    { label: "인재상",  size: 12, bold: false },
+    { label: "자소서",  size: 11, bold: false },
+    { label: "직무",    size: 13, bold: true  },
+    { label: "강점",    size: 11, bold: false },
+    { label: "경험",    size: 12, bold: false },
+    { label: "핵심역량", size: 11, bold: true  },
+    { label: "분석",    size: 12, bold: false },
+    { label: "매칭",    size: 13, bold: false },
+    { label: "면접준비", size: 11, bold: false },
+    { label: "AI 분석", size: 13, bold: true  },
+    { label: "역량분석", size: 11, bold: false },
+  ];
+  const n = kwList.length;
+  const items = kwList.map((kw, i) => {
+    const phi   = Math.acos(1 - 2 * (i + 0.5) / n);
+    const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+    const ry = ((theta * 180 / Math.PI) % 360).toFixed(2);
+    const rx = (-(phi * 180 / Math.PI - 90)).toFixed(2);
+    return { ...kw, ry, rx };
+  });
 
-    {/* 배경 도트 */}
-    <svg style={{ position:"absolute", inset:0, opacity:0.05 }} width="100%" height="100%">
-      {Array.from({length:8}).map((_,r) => Array.from({length:14}).map((_,c) => (
-        <circle key={`${r}-${c}`} cx={c*40+20} cy={r*30+20} r="1.5" fill="white"/>
-      )))}
-    </svg>
+  return (
+    <div style={{
+      background: "#0D2240",
+      borderRadius: 20,
+      overflow: "hidden",
+      aspectRatio: "16/10",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      perspective: "600px",
+      position: "relative",
+      boxShadow: "0 24px 60px rgba(13,34,68,0.18)",
+    }}>
+      <style>{`
+        @keyframes ngSphere {
+          0%   { transform: rotateY(0deg)   rotateX(18deg); }
+          50%  { transform: rotateY(180deg) rotateX(-6deg); }
+          100% { transform: rotateY(360deg) rotateX(18deg); }
+        }
+        @keyframes ngCG { 0%,100%{opacity:0.22} 50%{opacity:0.06} }
+      `}</style>
 
-    {/* 로봇 */}
-    <div style={{ position:"relative", zIndex:1, animation:"robotFloat 3s ease-in-out infinite" }}>
-      <svg width="120" height="160" viewBox="0 0 120 160" fill="none">
-        {/* 안테나 */}
-        <line x1="60" y1="10" x2="60" y2="25" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round"/>
-        <circle cx="60" cy="8" r="4" fill="#1D9E75"/>
-        {/* 머리 */}
-        <rect x="28" y="25" width="64" height="48" rx="12" fill="#1B4F7A" stroke="rgba(255,255,255,0.12)" strokeWidth="1"/>
-        {/* 눈 */}
-        <g style={{ animation:"eyeBlink 4s ease-in-out infinite" }}>
-          <rect x="38" y="38" width="14" height="14" rx="3" fill="#1D9E75"/>
-          <rect x="68" y="38" width="14" height="14" rx="3" fill="#1D9E75"/>
-          <circle cx="45" cy="45" r="3" fill="white" opacity="0.9"/>
-          <circle cx="75" cy="45" r="3" fill="white" opacity="0.9"/>
-        </g>
-        {/* 입 */}
-        <rect x="44" y="58" width="32" height="6" rx="3" fill="rgba(255,255,255,0.15)"/>
-        <rect x="46" y="59" width="18" height="4" rx="2" fill="#1D9E75"/>
-        {/* 몸통 */}
-        <rect x="22" y="76" width="76" height="52" rx="10" fill="#1B4F7A" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
-        {/* 가슴 패널 */}
-        <rect x="34" y="84" width="52" height="32" rx="6" fill="rgba(0,0,0,0.2)"/>
-        <rect x="38" y="88" width="20" height="4" rx="2" fill="rgba(255,255,255,0.25)"/>
-        <rect x="38" y="95" width="30" height="4" rx="2" fill="rgba(29,158,117,0.6)"/>
-        <rect x="38" y="102" width="14" height="4" rx="2" fill="rgba(255,255,255,0.12)"/>
-        <circle cx="72" cy="104" r="5" fill="#1D9E75" opacity="0.8"/>
-        {/* 왼팔 */}
-        <g style={{ transformOrigin:"22px 88px", animation:"armL 2s ease-in-out infinite" }}>
-          <rect x="6" y="78" width="16" height="38" rx="8" fill="#1B4F7A" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
-          <rect x="8" y="113" width="12" height="8" rx="4" fill="#3A7FAF"/>
-        </g>
-        {/* 오른팔 */}
-        <g style={{ transformOrigin:"98px 88px", animation:"armR 2s ease-in-out infinite" }}>
-          <rect x="98" y="78" width="16" height="38" rx="8" fill="#1B4F7A" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
-          <rect x="100" y="113" width="12" height="8" rx="4" fill="#3A7FAF"/>
-        </g>
-        {/* 다리 */}
-        <rect x="34" y="128" width="20" height="26" rx="8" fill="#1B4F7A"/>
-        <rect x="66" y="128" width="20" height="26" rx="8" fill="#1B4F7A"/>
-        <rect x="30" y="148" width="28" height="8" rx="4" fill="#3A7FAF"/>
-        <rect x="62" y="148" width="28" height="8" rx="4" fill="#3A7FAF"/>
+      {/* 배경 도트 */}
+      <svg style={{ position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none" }}>
+        {[...Array(5)].map((_,r) => [...Array(10)].map((_,c) => (
+          <circle key={`${r}${c}`} cx={c*46+23} cy={r*50+25} r="1" fill="rgba(255,255,255,0.04)"/>
+        )))}
       </svg>
-    </div>
 
-    {/* 분석 중인 문서 */}
-    <div style={{
-      position:"absolute", right:"10%", top:"18%",
-      background:"rgba(255,255,255,0.05)",
-      border:"1px solid rgba(255,255,255,0.1)",
-      borderRadius:10, padding:"12px", width:88,
-    }}>
-      <div style={{ height:5, background:"rgba(255,255,255,0.3)", borderRadius:3, marginBottom:6, width:"80%" }}/>
-      <div style={{ height:4, background:"rgba(255,255,255,0.12)", borderRadius:3, marginBottom:5 }}/>
-      <div style={{ height:4, background:"rgba(255,255,255,0.12)", borderRadius:3, marginBottom:5, width:"70%" }}/>
-      <div style={{ height:4, background:"rgba(29,158,117,0.55)", borderRadius:3, marginBottom:5, animation:"progBar 2.5s ease-in-out infinite alternate" }}/>
-      <div style={{ height:3, background:"rgba(255,255,255,0.08)", borderRadius:3, marginBottom:5 }}/>
-      <div style={{ height:3, background:"rgba(255,255,255,0.08)", borderRadius:3, width:"60%" }}/>
-    </div>
-
-    {/* 왼쪽 상태 버블 */}
-    <div style={{
-      position:"absolute", left:"5%", bottom:"18%",
-      background:"rgba(29,158,117,0.12)",
-      border:"1px solid rgba(29,158,117,0.28)",
-      borderRadius:10, padding:"10px 12px",
-    }}>
-      <div style={{ width:28, height:28, borderRadius:"50%", background:"rgba(29,158,117,0.25)", margin:"0 auto 6px", display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ width:12, height:12, borderRadius:"50%", background:"#1D9E75" }}/>
+      {/* 중앙 글로우 레이어 */}
+      <div style={{
+        position:"absolute", zIndex:5, pointerEvents:"none",
+        display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+      }}>
+        <div style={{
+          width:80, height:80, borderRadius:"60%",
+          background:"radial-gradient(circle, rgba(245,255,78,0.18) 0%, rgba(245,255,78,0.03) 70%)",
+          animation:"ngCG 3s ease-in-out infinite",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:"0 0 36px rgba(245,255,78,0.25)",
+        }}>
+          <span style={{
+            color:"#eef73c", fontSize:15, fontWeight:900,
+            fontFamily:"'Noto Sans KR', sans-serif",
+            letterSpacing:"-0.5px",
+            textShadow:"0 0 16px rgba(218, 222, 145, 0.9), 0 0 32px rgba(245,255,78,0.4)",
+          }}>AI 분석</span>
+        </div>
       </div>
-      <div style={{ height:4, background:"rgba(255,255,255,0.25)", borderRadius:2, width:38, marginBottom:4 }}/>
-      <div style={{ height:3, background:"rgba(255,255,255,0.12)", borderRadius:2, width:28 }}/>
+
+      {/* 3D 회전 구 */}
+      <div style={{
+        position:"relative",
+        width:240, height:240,
+        transformStyle:"preserve-3d",
+        animation:"ngSphere 26s linear infinite",
+      }}>
+        {items.map(({ label, ry, rx, size, bold }, i) => (
+          <div key={i} style={{
+            position:"absolute",
+            left:"50%", top:"50%",
+            transform:`rotateY(${ry}deg) rotateX(${rx}deg) translateZ(${R}px) translateX(-50%) translateY(-50%)`,
+            color: bold ? "rgba(29,158,117,0.95)" : "rgba(255,255,255,0.78)",
+            fontSize: size,
+            whiteSpace:"nowrap",
+            fontFamily:"'Noto Sans KR', sans-serif",
+            fontWeight: bold ? 600 : 400,
+            letterSpacing:"-0.2px",
+            textShadow: bold ? "0 0 12px rgba(29,158,117,0.5)" : "none",
+          }}>
+            {label}
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /* ── STEP 02 화상면접 일러스트 ── */
 const VideoCallIllustration = () => (
@@ -451,6 +597,7 @@ const VideoCallIllustration = () => (
       <div style={{ width:24, height:5, background:"rgba(255,255,255,0.08)", borderRadius:3 }}/>
       <div style={{ flex:1 }}/>
       {["#1B4F7A","#3A7FAF","#1D9E75"].map((c,i) => (
+        
         <div key={i} style={{ width:20, height:20, borderRadius:"50%", background:c, marginLeft:i>0?-8:0, border:"1.5px solid #0A1929" }}/>
       ))}
       <div style={{ width:7, height:7, borderRadius:"50%", background:"#F87171", animation:"recDot 1.4s ease-in-out infinite", marginLeft:6 }}/>
@@ -551,9 +698,9 @@ const FeaturesSection = () => (
           {/* 텍스트 */}
           <div style={{ flex: 1 }}>
             <span style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: "0.18em",
+              fontSize: 22, fontWeight: 800, letterSpacing: "0.22em",
               color: C.mid, textTransform: "uppercase", display: "block",
-              marginBottom: 12,
+              marginBottom: 16,
             }}>
               {step.num}
             </span>
@@ -580,12 +727,12 @@ const FeaturesSection = () => (
           </div>
 
           {/* 비주얼 */}
-          <div style={{ flex: 1.2 }}>
+          <div style={{ flex: 0.85 }}>
             {i === 0
-              ? <RobotIllustration />
+              ? <NetworkGraphIllustration />
               : i === 1
                 ? <VideoCallIllustration />
-                : <ScreenPreview accent={step.accent} num={i} />}
+                : <ReportIllustration />}
           </div>
         </div>
       ))}
@@ -626,6 +773,8 @@ const MentorCard = ({ mentor }) => {
       border: `1px solid ${C.cream}`,
       transition: "transform 0.25s, box-shadow 0.25s",
       cursor: "pointer",
+      width: 300,
+      flexShrink: 0,
     }}
       onMouseEnter={e => {
         e.currentTarget.style.transform = "translateY(-4px)";
@@ -675,9 +824,11 @@ const MentorCard = ({ mentor }) => {
   );
 };
 
-const MentorsSection = () => (
-  <section style={{ background: C.navy, padding: "100px 5%" }}>
-      <div className="fade-up" style={{ textAlign: "center", marginBottom: 56 }}>
+const MentorsSection = () => {
+  const doubled = [...mentors, ...mentors];
+  return (
+    <section style={{ background: C.navy, padding: "100px 0" }}>
+      <div className="fade-up" style={{ textAlign: "center", marginBottom: 56, padding: "0 5%" }}>
         <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.18em",
           color: C.mid, textTransform: "uppercase", marginBottom: 14 }}>
           지금 당신을 기다리는
@@ -693,15 +844,36 @@ const MentorsSection = () => (
         </p>
       </div>
 
-      <div className="mentor-grid" style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
-        gap: 16,
-      }}>
-        {mentors.map((m, i) => <MentorCard key={i} mentor={m} />)}
+      {/* 무한 마퀴 */}
+      <div style={{ overflow: "hidden", position: "relative" }}>
+        {/* 좌우 페이드 엣지 */}
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0, width: 100,
+          background: `linear-gradient(to right, ${C.navy}, transparent)`,
+          zIndex: 2, pointerEvents: "none",
+        }} />
+        <div style={{
+          position: "absolute", right: 0, top: 0, bottom: 0, width: 100,
+          background: `linear-gradient(to left, ${C.navy}, transparent)`,
+          zIndex: 2, pointerEvents: "none",
+        }} />
+
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            padding: "8px 0 16px",
+            width: "max-content",
+            animation: "marquee 32s linear infinite",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.animationPlayState = "paused"; }}
+          onMouseLeave={e => { e.currentTarget.style.animationPlayState = "running"; }}
+        >
+          {doubled.map((m, i) => <MentorCard key={i} mentor={m} />)}
+        </div>
       </div>
 
-      <div className="fade-up" style={{ textAlign: "center", marginTop: 48 }}>
+      <div className="fade-up" style={{ textAlign: "center", marginTop: 48, padding: "0 5%" }}>
         <Link to="/mentor/search" style={{
           display: "inline-block",
           background: C.mid, color: C.white,
@@ -722,8 +894,9 @@ const MentorsSection = () => (
           전체 멘토 보기 →
         </Link>
       </div>
-  </section>
-);
+    </section>
+  );
+};
 
 /* ── 멘티 후기 섹션 ── */
 const reviews = [

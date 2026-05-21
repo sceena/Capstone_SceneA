@@ -96,7 +96,9 @@ Element judgment rules:
 Writing style:
 - Write every Korean reason in polite report style ending with '-합니다' or '-습니다'.
 - Do not use harsh expressions.
-- Mention only structure evidence.
+- Mention one concrete piece of answer evidence, such as a concept, action, result, example, or the concrete element that is missing.
+- Avoid generic reasons that could apply to any answer.
+- Keep each reason to one sentence.
 - Do not mention CPM, silence, sentence conciseness, score, best/worst, or question relevance.
 
 Return only this JSON shape:
@@ -110,7 +112,7 @@ Return only this JSON shape:
         "reason": true,
         "example": false
       },
-      "reason": "주장은 확인되지만 구체적인 예시는 충분히 드러나지 않습니다."
+      "reason": "팀 협업을 선호한다는 주장은 제시했지만, 이를 뒷받침하는 실제 협업 사례는 드러나지 않습니다."
     }
   ]
 }"""

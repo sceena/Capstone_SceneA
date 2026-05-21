@@ -145,7 +145,7 @@ class ReportComposer:
         if not structure_reason:
             return evaluation.highlight_reason
 
-        return f"{structure_reason} {evaluation.highlight_reason}"
+        return structure_reason
 
     def _best_rank_score(self, evaluation: AnswerEvaluation) -> float:
         metrics_score = self._metrics_rank_score(evaluation)

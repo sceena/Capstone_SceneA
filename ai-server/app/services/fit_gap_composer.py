@@ -55,17 +55,32 @@ class FitGapComposer:
         resume_summary: str = "",
     ) -> FitGap:
         response = self.generate(job_description, interview_session, resume_summary)
+        matched_requirement_keys = {
+            self._normalize_requirement(item.matched_skill)
+            for item in response.fit_analysis
+        }
+        gap_items = [
+            item
+            for item in response.gap_analysis
+            if self._normalize_requirement(item.missing_skill) not in matched_requirement_keys
+        ]
+
         return FitGap(
             matched_requirements=[
-                f"{item.question_no}: {item.matched_skill} - {item.evidence}"
+                f"요구사항: {item.matched_skill} / 근거({item.question_no}): {item.evidence}"
                 for item in response.fit_analysis
             ][:5],
             missing_requirements=[
-                f"{item.missing_skill} - {item.reason}"
-                for item in response.gap_analysis
+                f"요구사항: {item.missing_skill} / 부족 근거: {item.reason}"
+                for item in gap_items
             ][:5],
             recommendations=response.improvement_suggestions[:3],
         )
+
+    def _normalize_requirement(self, requirement: str) -> str:
+        normalized = re.sub(r"\s+", "", requirement or "")
+        normalized = re.sub(r"[/·,.\-()]", "", normalized)
+        return normalized.lower()
 
     def _build_contents(
         self,
@@ -110,19 +125,19 @@ A4. 주문 내역을 조회할 때 여러 테이블을 Join하다 보니 속도�
   "fit_analysis": [
     {
       "question_no": "Q1",
-      "matched_skill": "캐시를 활용한 성능 개선 경험",
-      "evidence": "Redis를 도입해 조회 빈도가 높은 데이터를 캐싱하고, DB 부하와 API 응답 시간을 개선한 경험이 확인됩니다."
+      "matched_skill": "캐시, 메시징 등 비동기 처리 기술에 대한 이해 또는 활용 경험",
+      "evidence": "Q1 답변에서 Redis 캐시를 적용해 반복 조회 데이터를 캐싱했고, DB 부하와 API 응답 시간을 개선했다고 설명합니다."
     },
     {
       "question_no": "Q4",
-      "matched_skill": "관계형 데이터베이스 활용 및 쿼리 성능 개선 경험",
-      "evidence": "주문 조회 성능 문제를 분석하고 필요한 컬럼 조회와 인덱스 설정을 통해 쿼리 성능을 개선한 경험이 확인됩니다."
+      "matched_skill": "관계형 데이터베이스 활용 역량",
+      "evidence": "Q4 답변에서 Join으로 느려진 주문 조회를 필요한 컬럼 조회와 복합 인덱스 설정으로 개선했다고 설명합니다."
     }
   ],
   "gap_analysis": [
     {
-      "missing_skill": "백엔드 서비스 운영 및 장애 대응 경험",
-      "reason": "성능 개선 경험은 확인되지만, 운영 중 장애를 분석하거나 재발 방지까지 이어간 경험은 답변에서 충분히 확인되지 않습니다."
+      "missing_skill": "백엔드 API 개발 및 운영 경험",
+      "reason": "API 개발과 성능 개선 경험은 있으나, 운영 중 장애 탐지나 재발 방지처럼 운영 단계의 근거는 답변에서 확인되지 않습니다."
     },
     {
       "missing_skill": "배포 자동화 또는 클라우드 운영 경험",
@@ -166,15 +181,22 @@ A4. 주문 내역을 조회할 때 여러 테이블을 Join하다 보니 속도�
 제공된 [채용 공고]의 핵심 요구사항과 [지원자 제출 문서], [전체 면접 세트]의 답변들을 대조 분석하여 'Fit-Gap 리포트'를 작성하라.
 
 분석 원칙:
-1. 개별 질문별로 공고와의 연관성을 분석할 것.
-2. [지원자 제출 문서]는 이력서, 자기소개서, 포트폴리오 요약 또는 그 일부일 수 있으므로 형식에 의존하지 말 것.
-3. 답변이나 지원자 제출 문서에 공고 관련 키워드가 없더라도 의미적으로 상통하면 'Fit'으로 인정할 것.
-4. 공고의 필수 기술 스택이나 경험이 지원자 제출 문서와 답변 전체에서 모두 누락되었다면 'Gap'으로 명시할 것.
-5. 공고에 기술명이 구체적으로 없으면 특정 라이브러리나 도구명을 과하게 추정하지 말고, "성능 개선", "운영 경험", "배포 자동화"처럼 공고의 역량 범주로 분석할 것.
-6. 단정적으로 "경험이 전무함", "직무 적합도가 낮음"처럼 평가하지 말고, "답변에서 확인되지 않음", "보완하면 좋음"처럼 근거 중심으로 표현할 것.
-7. improvement_suggestions는 가능하면 3개를 작성하고, 바로 실행 가능한 학습/프로젝트 개선 방향으로 제안할 것.
-8. 모든 문장은 사용자에게 보여줄 리포트 문체로 작성하고, "확인됨", "권장함", "부족함" 같은 명사형 종결 대신 "-합니다", "-습니다" 체로 통일할 것.
-9. "최적의 후보자", "완벽히 부합", "매우 우수"처럼 과도하게 긍정적인 표현도 피하고, "적합도를 높일 수 있습니다", "강점으로 볼 수 있습니다"처럼 절제된 표현을 사용할 것.
+1. 먼저 [채용 공고]에서 명시된 요구사항을 뽑고, fit_analysis와 gap_analysis는 반드시 그 요구사항을 기준으로 작성할 것.
+2. matched_skill과 missing_skill에는 후보자의 역량명이 아니라 채용공고의 요구사항 문장을 적을 것.
+3. 답변이나 지원자 제출 문서에 명시 근거가 있는 요구사항만 fit_analysis에 넣을 것. 키워드가 비슷해도 근거가 약하면 fit으로 처리하지 말 것.
+4. evidence에는 "Q1 답변", "지원자 제출 문서"처럼 근거 출처와 답변 내용을 함께 적을 것.
+5. 채용공고 요구사항이 지원자 제출 문서와 답변 전체에서 확인되지 않거나 부분적으로만 확인되면 gap_analysis에 넣을 것.
+6. [지원자 제출 문서]는 이력서, 자기소개서, 포트폴리오 요약 또는 그 일부일 수 있으므로 형식에 의존하지 말 것.
+7. 공고에 기술명이 구체적으로 없으면 특정 라이브러리나 도구명을 과하게 추정하지 말고, "성능 개선", "운영 경험", "배포 자동화"처럼 공고의 역량 범주로 분석할 것.
+8. "Spring Boot 기반 백엔드 개발 역량"처럼 공고 요구사항을 넓게 재작성하지 말고, 공고에 나온 표현이나 그에 매우 가까운 표현을 사용할 것.
+9. question_no에는 직접 근거가 있는 출처만 적을 것. 면접 답변에 직접 나오지 않은 근거는 Q번호를 붙이지 말고 "지원자 제출 문서"라고 적을 것.
+10. evidence에서 서로 다른 출처의 근거를 억지로 엮지 말 것. 예를 들어 MySQL 근거가 제출 문서에만 있으면 Q1의 Redis 답변을 함께 근거로 쓰지 말 것.
+11. Q번호를 적을 때는 해당 Q/A 안에 요구사항을 직접 뒷받침하는 내용이 있어야 한다. 개념 설명만으로 프로젝트 수행 경험을 증명했다고 판단하지 말 것.
+12. 같은 채용공고 요구사항을 fit_analysis와 gap_analysis 양쪽에 동시에 넣지 말 것. 부분적으로만 확인된 요구사항은 gap_analysis에 넣고, 이미 충분히 확인된 요구사항은 fit_analysis에만 넣을 것.
+13. 단정적으로 "경험이 전무함", "직무 적합도가 낮음"처럼 평가하지 말고, "답변에서 확인되지 않음", "보완하면 좋음"처럼 근거 중심으로 표현할 것.
+14. improvement_suggestions는 가능하면 3개를 작성하고, 바로 실행 가능한 학습/프로젝트 개선 방향으로 제안할 것.
+15. 모든 문장은 사용자에게 보여줄 리포트 문체로 작성하고, "명시함", "확인됨", "권장함", "부족함" 같은 명사형 종결 대신 "-합니다", "-습니다" 체로 통일할 것.
+16. "최적의 후보자", "완벽히 부합", "매우 우수"처럼 과도하게 긍정적인 표현도 피하고, "적합도를 높일 수 있습니다", "강점으로 볼 수 있습니다"처럼 절제된 표현을 사용할 것.
 
 반드시 아래 JSON 형식을 엄격히 준수하라:
 {

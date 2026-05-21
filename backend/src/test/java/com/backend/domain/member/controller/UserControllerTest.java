@@ -74,7 +74,7 @@ class UserControllerTest {
     @Test
     void 내_프로필_수정_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null); // tags null = 변경 없음
         UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "새이름", LocalDateTime.now());
         given(userService.updateMyProfile(any(), any())).willReturn(response);
 
@@ -91,7 +91,7 @@ class UserControllerTest {
     @Test
     void 내_프로필_수정_수정할_필드_없음_400() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null);
         given(userService.updateMyProfile(any(), any()))
                 .willThrow(new CustomException(ErrorCode.INVALID_REQUEST));
 

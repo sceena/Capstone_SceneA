@@ -165,6 +165,8 @@ Result가 답변에 드러나는지 확인한다. 다만 모든 질문에 STAR�
 입력으로 받아 `fit_analysis`, `gap_analysis`, `improvement_suggestions`,
 `overall_summary`를 JSON으로 생성한다. 별도 테스트 엔드포인트는
 `POST /api/fit-gap`이다.
+여기서 `resume_summary`는 별도 LLM 요약 결과라고 가정하지 않고, 백엔드의
+`resume.content`에서 넘어온 지원자 제출 문서 텍스트 일부로 다룬다.
 
 Fit-Gap LLM composer를 사용하려면 `GEMINI_API_KEY`를 환경 변수로 설정해야 한다.
 실제 API 키는 커밋하지 않는다. LLM 호출이나 JSON 파싱이 실패하는 경우에는
@@ -222,9 +224,10 @@ score, strengths, improvements, reasoning은 모델을 켜면 SFT 모델 결과�
 
 사용 정보는:
 채용공고
-이력서 요약
+지원자 제출 문서
 전체 면접 답변
-LLM composer는 채용공고의 요구사항을 이력서 요약과 전체 면접 답변에서 확인되는 근거와 비교해서 fit_analysis, gap_analysis, improvement_suggestions, overall_summary를 만든다.
+LLM composer는 채용공고의 요구사항을 지원자 제출 문서와 전체 면접 답변에서 확인되는 근거와 비교해서 fit_analysis, gap_analysis, improvement_suggestions, overall_summary를 만든다.
+지원자 제출 문서는 이력서, 자기소개서, 포트폴리오 요약 또는 그 일부일 수 있다.
 
 별도 테스트 엔드포인트는 `POST /api/fit-gap`이다.
 실제 API 키는 커밋하지 말고 `GEMINI_API_KEY` 환경 변수로만 설정한다.

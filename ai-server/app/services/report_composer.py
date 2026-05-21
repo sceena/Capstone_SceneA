@@ -103,11 +103,11 @@ class ReportComposer:
 
     def _build_fit_gap(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> FitGap:
         job_description = request.company_context.job_posting_summary or ""
-        resume_summary = "\n".join(request.candidate_context.resume_summaries)
+        applicant_document = "\n".join(request.candidate_context.resume_summaries)
         interview_session = self._format_interview_session(evaluations)
 
         try:
-            return self.fit_gap_composer.generate_fit_gap(job_description, interview_session, resume_summary)
+            return self.fit_gap_composer.generate_fit_gap(job_description, interview_session, applicant_document)
         except (FitGapComposerUnavailable, ValueError):
             return self._build_keyword_fit_gap(request, evaluations)
 
@@ -120,14 +120,14 @@ class ReportComposer:
 
     def _build_keyword_fit_gap(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> FitGap:
         job_text = request.company_context.job_posting_summary or ""
-        resume_text = " ".join(request.candidate_context.resume_summaries)
+        applicant_document_text = " ".join(request.candidate_context.resume_summaries)
         answer_text = " ".join(item.report.answer for item in evaluations)
 
         required = self._extract_requirements(job_text)
         if not required:
-            required = self._extract_requirements(resume_text + " " + answer_text)
+            required = self._extract_requirements(applicant_document_text + " " + answer_text)
 
-        evidence = (resume_text + " " + answer_text).lower()
+        evidence = (applicant_document_text + " " + answer_text).lower()
         matched = [keyword for keyword in required if keyword.lower() in evidence]
         missing = [keyword for keyword in required if keyword.lower() not in evidence]
 

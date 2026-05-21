@@ -154,6 +154,11 @@ STAR/Fit-Gap까지 학습하지 않았기 때문이다.
 않고 질문 유형과 답변 구조 요소가 있는지만 판단한다. 최종 선정은 서버의
 `selection_score`와 동점 처리 기준으로 계산한다.
 
+메인 `/report` 생성 흐름에서는 백엔드가 전달한 STT 텍스트와 metrics를 사용한다.
+`ReportComposer`가 `TopSummaryComposer`를 호출해 질문 유형별 답변 구조를 분석하고,
+질문별 평가 점수와 정량 지표를 함께 반영해 `top_summary`를 만든다.
+오디오 파일을 직접 읽는 `audio_dashboard.py` 파이프라인은 별도 검증용으로 남아 있다.
+
 질문 유형이 경험형이면 STAR 구조를 사용한다. 즉 Situation, Task, Action,
 Result가 답변에 드러나는지 확인한다. 다만 모든 질문에 STAR를 강제하지는
 않고, 의견형 질문은 주장/근거/예시, 상황형 질문은 상황 이해/행동 계획/근거처럼
@@ -217,6 +222,7 @@ score, strengths, improvements, reasoning은 모델을 켜면 SFT 모델 결과�
 
 정량 지표 + LLM 구조 판단 + 서버의 `selection_score`
 를 조합한다. `selection_score`는 best/worst 선정을 위한 내부 값이라 사용자 화면에 그대로 보여줄 필요는 없다.
+메인 `/report` 응답에서는 `report.ai_report.top_summary`로 내려가며, LLM 구조 판단이 실패하면 기존 점수 기반 선정으로 fallback한다.
 
 중단: 채용공고 Fit-Gap
 

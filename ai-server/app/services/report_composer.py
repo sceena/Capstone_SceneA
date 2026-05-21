@@ -1,10 +1,18 @@
 from app.schemas.evaluation import AnswerEvaluation
 from app.schemas.report import FitGap, QuestionHighlight, ReportRequest, ReportResponse, TopSummary
 from app.services.fit_gap_composer import FitGapComposer, FitGapComposerUnavailable
+from app.services.top_summary_composer import TopSummaryComposer, TopSummaryComposerUnavailable
 
 
 class ReportComposer:
     """Step 2: compose a session-level report from answer evaluations."""
+
+    STRUCTURE_ELEMENTS_BY_TYPE = {
+        "experience": ["situation", "task", "action", "result"],
+        "opinion": ["claim", "reason", "example"],
+        "situational": ["situation_understanding", "action_plan", "rationale"],
+        "knowledge": ["concept", "explanation", "example"],
+    }
 
     REQUIREMENT_KEYWORDS = [
         "Spring",
@@ -24,15 +32,18 @@ class ReportComposer:
         "Docker",
     ]
 
-    def __init__(self, fit_gap_composer: FitGapComposer | None = None) -> None:
+    def __init__(
+        self,
+        fit_gap_composer: FitGapComposer | None = None,
+        top_summary_composer: TopSummaryComposer | None = None,
+    ) -> None:
         self.fit_gap_composer = fit_gap_composer or FitGapComposer()
+        self.top_summary_composer = top_summary_composer or TopSummaryComposer()
 
     def compose(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> ReportResponse:
         if not evaluations:
             raise ValueError("interview_answers must not be empty")
 
-        best = max(evaluations, key=self._best_rank_score)
-        worst = min(evaluations, key=self._worst_rank_score)
         overall_score = round(
             sum(item.report.score for item in evaluations) / len(evaluations),
             1,
@@ -41,23 +52,100 @@ class ReportComposer:
         return ReportResponse(
             session_id=request.session_id,
             overall_score=overall_score,
-            top_summary=TopSummary(
-                best_question=QuestionHighlight(
-                    question_id=best.report.question_id,
-                    question=best.report.question,
-                    reason=best.highlight_reason,
-                    metrics_summary=best.metrics_summary,
-                ),
-                worst_question=QuestionHighlight(
-                    question_id=worst.report.question_id,
-                    question=worst.report.question,
-                    reason=worst.highlight_reason,
-                    metrics_summary=worst.metrics_summary,
-                ),
-            ),
+            top_summary=self._build_top_summary(evaluations),
             fit_gap=self._build_fit_gap(request, evaluations),
             question_reports=[item.report for item in evaluations],
         )
+
+    def _build_top_summary(self, evaluations: list[AnswerEvaluation]) -> TopSummary:
+        structure_analysis = self._try_top_structure_analysis(evaluations)
+
+        if structure_analysis:
+            best = max(
+                enumerate(evaluations, start=1),
+                key=lambda item: self._top_rank_score(item[1], structure_analysis.get(f"Session{item[0]}")),
+            )
+            worst = min(
+                enumerate(evaluations, start=1),
+                key=lambda item: self._top_rank_score(item[1], structure_analysis.get(f"Session{item[0]}")),
+            )
+
+            return TopSummary(
+                best_question=self._to_question_highlight(
+                    best[1],
+                    structure_analysis.get(f"Session{best[0]}"),
+                ),
+                worst_question=self._to_question_highlight(
+                    worst[1],
+                    structure_analysis.get(f"Session{worst[0]}"),
+                ),
+            )
+
+        best = max(evaluations, key=self._best_rank_score)
+        worst = min(evaluations, key=self._worst_rank_score)
+        return TopSummary(
+            best_question=self._to_question_highlight(best),
+            worst_question=self._to_question_highlight(worst),
+        )
+
+    def _try_top_structure_analysis(self, evaluations: list[AnswerEvaluation]) -> dict[str, dict]:
+        summary = {
+            f"Session{index}": {
+                "question_text": item.report.question,
+                "answer_text": item.report.answer,
+            }
+            for index, item in enumerate(evaluations, start=1)
+        }
+
+        try:
+            response = self.top_summary_composer.generate(summary)
+        except (TopSummaryComposerUnavailable, ValueError):
+            return {}
+
+        return {
+            item.session_id: item.model_dump()
+            for item in response.structure_analysis
+        }
+
+    def _top_rank_score(self, evaluation: AnswerEvaluation, structure_analysis: dict | None) -> float:
+        metrics_score = self._metrics_rank_score(evaluation)
+        structure_score = self._structure_rank_score(structure_analysis, evaluation)
+        return (evaluation.report.score * 0.6) + (metrics_score * 0.2) + (structure_score * 0.2)
+
+    def _structure_rank_score(self, structure_analysis: dict | None, evaluation: AnswerEvaluation) -> float:
+        if not structure_analysis:
+            return self._star_rank_score(evaluation.metrics_summary.star_structure)
+
+        question_type = structure_analysis.get("question_type")
+        expected = self.STRUCTURE_ELEMENTS_BY_TYPE.get(question_type)
+        if not expected:
+            return 5.0
+
+        elements = structure_analysis.get("elements") or {}
+        present_count = sum(1 for element in expected if elements.get(element))
+        return round((present_count / len(expected)) * 10, 1)
+
+    def _to_question_highlight(
+        self,
+        evaluation: AnswerEvaluation,
+        structure_analysis: dict | None = None,
+    ) -> QuestionHighlight:
+        return QuestionHighlight(
+            question_id=evaluation.report.question_id,
+            question=evaluation.report.question,
+            reason=self._top_summary_reason(evaluation, structure_analysis),
+            metrics_summary=evaluation.metrics_summary,
+        )
+
+    def _top_summary_reason(self, evaluation: AnswerEvaluation, structure_analysis: dict | None) -> str:
+        if not structure_analysis:
+            return evaluation.highlight_reason
+
+        structure_reason = (structure_analysis.get("reason") or "").strip()
+        if not structure_reason:
+            return evaluation.highlight_reason
+
+        return f"{structure_reason} {evaluation.highlight_reason}"
 
     def _best_rank_score(self, evaluation: AnswerEvaluation) -> float:
         metrics_score = self._metrics_rank_score(evaluation)

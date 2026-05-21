@@ -184,16 +184,22 @@ analysis_question_report
 
 ## 상단: Best/Worst 요약
 
-상단은 현재 기본 구현이 있다. 질문별 평가 결과와 정량 지표, STAR 구조를 조합해
-best/worst 문항을 고른다.
+상단은 `/report` 생성 흐름에 연결되어 있다. 질문별 평가 결과와 정량 지표에 더해
+`TopSummaryComposer`가 질문 유형별 답변 구조를 분석하고, 그 결과를 조합해
+best/worst 문항을 고른다. `TopSummaryComposer`를 사용할 수 없으면 기존 점수 기반
+선정 로직으로 fallback한다.
 
 현재 기준은 다음과 같다.
 
 ```text
 답변 점수
 + 말하기 정량 지표
-+ STAR 구조
++ 질문 유형별 답변 구조
 ```
+
+오디오 파일 기반 `audio_dashboard.py` 파이프라인은 별도 테스트로 검증했다. 현재 메인
+`/report` 흐름에서는 백엔드가 넘긴 STT 텍스트와 metrics를 사용하고, 오디오 파일을
+다시 다운로드해 Whisper를 실행하지는 않는다.
 
 현재 품질은 기본 수준이다. 상단 품질을 높일 담당자는 다음을 개선하면 된다.
 

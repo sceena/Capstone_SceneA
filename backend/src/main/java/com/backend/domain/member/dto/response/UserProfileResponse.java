@@ -13,6 +13,7 @@ public record UserProfileResponse(
         String email,
         String role,
         List<TagInfo> tags,
+        @JsonProperty("profile_image_url") String profileImageUrl,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
     public record TagInfo(Long id, String name, String category) {}
@@ -27,6 +28,7 @@ public record UserProfileResponse(
                 member.getEmail(),
                 member.getRole().name().toLowerCase(),
                 tags,
+                member.getProfileImageUrl(),
                 member.getCreateDate()
         );
     }

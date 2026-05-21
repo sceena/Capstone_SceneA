@@ -16,6 +16,7 @@ import com.backend.domain.tag.entity.MemberTag;
 import com.backend.domain.tag.entity.Tag;
 import com.backend.domain.tag.repository.MemberTagRepository;
 import com.backend.domain.tag.repository.TagRepository;
+import com.backend.global.config.S3Service;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.mockito.Mockito;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +57,9 @@ class UserServiceTest {
 
     @Mock
     private MemberTagRepository memberTagRepository;
+
+    @Mock
+    private S3Service s3Service;
 
     @Mock
     private InterviewSessionRepository sessionRepository;
@@ -116,7 +123,7 @@ class UserServiceTest {
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
 
-        UserProfileUpdateResponse response = userService.updateMyProfile(1L, request);
+        UserProfileUpdateResponse response = userService.updateMyProfile(1L, request, null);
 
         assertThat(response.name()).isEqualTo("새이름");
         verify(passwordEncoder, never()).encode(any());
@@ -132,7 +139,7 @@ class UserServiceTest {
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(passwordEncoder.encode("newpassword")).willReturn("new_enc");
 
-        userService.updateMyProfile(1L, request);
+        userService.updateMyProfile(1L, request, null);
 
         verify(passwordEncoder).encode("newpassword");
         assertThat(member.getPassword()).isEqualTo("new_enc");
@@ -149,7 +156,7 @@ class UserServiceTest {
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(tagRepository.findByNameAndCategory("Java", "기술스택")).willReturn(Optional.of(existingTag));
 
-        userService.updateMyProfile(1L, request);
+        userService.updateMyProfile(1L, request, null);
 
         verify(memberTagRepository).deleteAllByMember(member);
         verify(tagRepository, never()).save(any());
@@ -167,7 +174,7 @@ class UserServiceTest {
         given(tagRepository.findByNameAndCategory("Kotlin", "기술스택")).willReturn(Optional.empty());
         given(tagRepository.save(any(Tag.class))).willReturn(newTag);
 
-        userService.updateMyProfile(1L, request);
+        userService.updateMyProfile(1L, request, null);
 
         verify(memberTagRepository).deleteAllByMember(member);
         verify(tagRepository).save(any(Tag.class));
@@ -182,17 +189,56 @@ class UserServiceTest {
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
 
-        userService.updateMyProfile(1L, request);
+        userService.updateMyProfile(1L, request, null);
 
         verify(memberTagRepository).deleteAllByMember(member);
         verify(memberTagRepository, never()).save(any());
     }
 
     @Test
+    void 내_프로필_수정_이미지만_변경_기존이미지없음() {
+        Member member = Member.builder()
+                .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
+        MultipartFile image = new MockMultipartFile("image", "photo.jpg", "image/jpeg", new byte[]{1, 2, 3});
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(s3Service.uploadProfileImage(1L, image)).willReturn("http://s3/profile-images/1/new.jpg");
+
+        userService.updateMyProfile(1L, null, image);
+
+        assertThat(member.getProfileImageUrl()).isEqualTo("http://s3/profile-images/1/new.jpg");
+        verify(s3Service, never()).deleteFile(any());
+    }
+
+    @Test
+    void 내_프로필_수정_이미지_교체시_기존이미지_S3에서_삭제() {
+        Member member = Mockito.spy(Member.builder()
+                .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build());
+        given(member.getProfileImageUrl()).willReturn("http://s3/profile-images/1/old.jpg");
+
+        MultipartFile image = new MockMultipartFile("image", "photo.jpg", "image/jpeg", new byte[]{1, 2, 3});
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(s3Service.uploadProfileImage(1L, image)).willReturn("http://s3/profile-images/1/new.jpg");
+
+        userService.updateMyProfile(1L, null, image);
+
+        verify(s3Service).deleteFile("http://s3/profile-images/1/old.jpg");
+        verify(s3Service).uploadProfileImage(1L, image);
+    }
+
+    @Test
     void 내_프로필_수정_수정할_필드_없음_예외() {
         UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null);
 
-        assertThatThrownBy(() -> userService.updateMyProfile(1L, request))
+        assertThatThrownBy(() -> userService.updateMyProfile(1L, request, null))
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+    }
+
+    @Test
+    void 내_프로필_수정_data와_image_모두_null_예외() {
+        assertThatThrownBy(() -> userService.updateMyProfile(1L, null, null))
                 .isInstanceOf(CustomException.class)
                 .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
     }
@@ -202,7 +248,7 @@ class UserServiceTest {
         UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null);
         given(memberRepository.findById(999L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> userService.updateMyProfile(999L, request))
+        assertThatThrownBy(() -> userService.updateMyProfile(999L, request, null))
                 .isInstanceOf(CustomException.class)
                 .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.MEMBER_NOT_FOUND));
     }

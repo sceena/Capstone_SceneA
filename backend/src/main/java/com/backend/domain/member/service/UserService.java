@@ -13,8 +13,11 @@ import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.tag.dto.TagRequest;
 import com.backend.domain.tag.entity.MemberTag;
+import com.backend.domain.tag.entity.Tag;
 import com.backend.domain.tag.repository.MemberTagRepository;
+import com.backend.domain.tag.repository.TagRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,7 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final MemberRepository memberRepository;
+    private final TagRepository tagRepository;
     private final MemberTagRepository memberTagRepository;
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
@@ -49,13 +53,23 @@ public class UserService {
 
     @Transactional
     public UserProfileUpdateResponse updateMyProfile(Long memberId, UserProfileUpdateRequest request) {
-        if (request.name() == null && request.password() == null) {
+        if (request.name() == null && request.password() == null && request.tags() == null) {
             throw new CustomException(ErrorCode.INVALID_REQUEST);
         }
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
         String encodedPassword = request.password() != null ? passwordEncoder.encode(request.password()) : null;
         member.update(request.name(), encodedPassword);
+
+        if (request.tags() != null) {
+            memberTagRepository.deleteAllByMember(member);
+            request.tags().forEach(t -> {
+                Tag tag = tagRepository.findByNameAndCategory(t.name(), t.category())
+                        .orElseGet(() -> tagRepository.save(Tag.builder().name(t.name()).category(t.category()).build()));
+                memberTagRepository.save(MemberTag.builder().member(member).tag(tag).build());
+            });
+        }
+
         return UserProfileUpdateResponse.from(member);
     }
 

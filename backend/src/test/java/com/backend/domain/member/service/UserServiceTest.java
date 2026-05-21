@@ -11,9 +11,11 @@ import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.tag.dto.TagRequest;
 import com.backend.domain.tag.entity.MemberTag;
 import com.backend.domain.tag.entity.Tag;
 import com.backend.domain.tag.repository.MemberTagRepository;
+import com.backend.domain.tag.repository.TagRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -45,6 +47,9 @@ class UserServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private TagRepository tagRepository;
 
     @Mock
     private MemberTagRepository memberTagRepository;
@@ -107,7 +112,7 @@ class UserServiceTest {
     void 내_프로필_수정_이름만_변경_성공() {
         Member member = Member.builder()
                 .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
 
@@ -115,13 +120,14 @@ class UserServiceTest {
 
         assertThat(response.name()).isEqualTo("새이름");
         verify(passwordEncoder, never()).encode(any());
+        verify(memberTagRepository, never()).deleteAllByMember(any());
     }
 
     @Test
     void 내_프로필_수정_비밀번호만_변경_성공() {
         Member member = Member.builder()
                 .email("hong@test.com").password("old_enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, "newpassword");
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, "newpassword", null);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(passwordEncoder.encode("newpassword")).willReturn("new_enc");
@@ -130,11 +136,61 @@ class UserServiceTest {
 
         verify(passwordEncoder).encode("newpassword");
         assertThat(member.getPassword()).isEqualTo("new_enc");
+        verify(memberTagRepository, never()).deleteAllByMember(any());
+    }
+
+    @Test
+    void 내_프로필_수정_태그만_변경_기존태그재사용() {
+        Member member = Member.builder()
+                .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
+        Tag existingTag = Tag.builder().name("Java").category("기술스택").build();
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, List.of(new TagRequest("Java", "기술스택")));
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(tagRepository.findByNameAndCategory("Java", "기술스택")).willReturn(Optional.of(existingTag));
+
+        userService.updateMyProfile(1L, request);
+
+        verify(memberTagRepository).deleteAllByMember(member);
+        verify(tagRepository, never()).save(any());
+        verify(memberTagRepository).save(any());
+    }
+
+    @Test
+    void 내_프로필_수정_태그만_변경_신규태그생성() {
+        Member member = Member.builder()
+                .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
+        Tag newTag = Tag.builder().name("Kotlin").category("기술스택").build();
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, List.of(new TagRequest("Kotlin", "기술스택")));
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(tagRepository.findByNameAndCategory("Kotlin", "기술스택")).willReturn(Optional.empty());
+        given(tagRepository.save(any(Tag.class))).willReturn(newTag);
+
+        userService.updateMyProfile(1L, request);
+
+        verify(memberTagRepository).deleteAllByMember(member);
+        verify(tagRepository).save(any(Tag.class));
+        verify(memberTagRepository).save(any());
+    }
+
+    @Test
+    void 내_프로필_수정_태그_빈리스트_전체삭제() {
+        Member member = Member.builder()
+                .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, List.of());
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+
+        userService.updateMyProfile(1L, request);
+
+        verify(memberTagRepository).deleteAllByMember(member);
+        verify(memberTagRepository, never()).save(any());
     }
 
     @Test
     void 내_프로필_수정_수정할_필드_없음_예외() {
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null);
 
         assertThatThrownBy(() -> userService.updateMyProfile(1L, request))
                 .isInstanceOf(CustomException.class)
@@ -143,7 +199,7 @@ class UserServiceTest {
 
     @Test
     void 내_프로필_수정_회원없음_예외() {
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null);
         given(memberRepository.findById(999L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> userService.updateMyProfile(999L, request))

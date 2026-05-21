@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
+import { getAvatar } from "../../utils/avatar";
 
 /* ============================================================
    멘토 마이페이지  (pages/mentor/MyPage.jsx)
@@ -47,7 +48,7 @@ const Header = ({ userName, accessToken }) => {
   };
   return (
     <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-      <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+      <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
         <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
@@ -124,47 +125,120 @@ const ReviewCard = ({ initials, name, role, company, stars, text, bgColor }) => 
 
 /* ── 프로필 수정 모달 ── */
 function EditProfileModal({ onClose }) {
-  const [name, setName]     = useState("");
-  const [pw, setPw]         = useState("");
-  const [saving, setSaving] = useState(false);
-  const [done, setDone]     = useState(false);
+  const [tab, setTab]           = useState("name");
+  const [name, setName]         = useState("");
+  const [pwNew, setPwNew]       = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [saving, setSaving]     = useState(false);
+  const [done, setDone]         = useState(false);
+  const [error, setError]       = useState("");
+
+  const pwMismatch  = pwConfirm.length > 0 && pwNew !== pwConfirm;
+  const pwMatch     = pwConfirm.length > 0 && pwNew === pwConfirm;
+  const pwTooShort  = pwNew.length > 0 && pwNew.length < 8;
 
   const handleSave = async () => {
+    setError("");
     const data = {};
-    if (name.trim())  data.name     = name.trim();
-    if (pw.trim())    data.password = pw.trim();
-    if (!Object.keys(data).length) { onClose(); return; }
+    if (tab === "name") {
+      if (!name.trim()) { onClose(); return; }
+      data.name = name.trim();
+    } else {
+      if (!pwNew) { onClose(); return; }
+      if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; }
+      if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
+      data.password = pwNew;
+    }
     setSaving(true);
-    try { await updateMyProfile(data); } catch {}
-    setDone(true);
-    setTimeout(onClose, 800);
+    try {
+      await updateMyProfile(data);
+      setDone(true);
+      setTimeout(onClose, 900);
+    } catch (e) {
+      if (e?.status === 401) setError("로그인이 만료되었습니다. 다시 로그인해주세요.");
+      else if (e?.status === 400) setError("입력값을 확인해주세요.");
+      else if (!navigator.onLine || e?.message === "Failed to fetch") setError("서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.");
+      else setError("저장에 실패했습니다. 다시 시도해주세요.");
+      setSaving(false);
+    }
   };
 
+  const inputStyle = (focused) => ({
+    width:"100%", padding:"11px 14px", borderRadius:10,
+    border:`1.5px solid ${focused ? C.navy : C.border}`,
+    fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg,
+  });
+
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:380, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
+    <div
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}
+    >
+      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:400, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
         <h3 style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:20 }}>프로필 수정</h3>
+
         {done ? (
-          <p style={{ textAlign:"center", color:C.teal, fontWeight:600, padding:"20px 0" }}>저장되었습니다!</p>
+          <div style={{ textAlign:"center", padding:"24px 0" }}>
+            <div style={{ fontSize:40, marginBottom:10 }}>✓</div>
+            <p style={{ color:C.teal, fontWeight:600, fontSize:15 }}>저장되었습니다!</p>
+          </div>
         ) : (
           <>
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>이름 (변경할 경우 입력)</label>
-              <input value={name} onChange={e=>setName(e.target.value)} placeholder="새 이름"
-                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
-                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
-              />
+            {/* 탭 */}
+            <div style={{ display:"flex", gap:0, marginBottom:24, borderRadius:10, overflow:"hidden", border:`1.5px solid ${C.border}` }}>
+              {[{key:"name",label:"이름 변경"},{key:"pw",label:"비밀번호 변경"}].map(t=>(
+                <button key={t.key} onClick={()=>{ setTab(t.key); setError(""); }} style={{
+                  flex:1, padding:"10px 0", border:"none", cursor:"pointer", fontFamily:"inherit",
+                  fontSize:13, fontWeight:tab===t.key?700:400,
+                  background:tab===t.key?C.navy:C.white,
+                  color:tab===t.key?C.white:C.textMuted,
+                  transition:"all 0.18s",
+                }}>{t.label}</button>
+              ))}
             </div>
-            <div style={{ marginBottom:24 }}>
-              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 비밀번호 (변경할 경우 입력)</label>
-              <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="새 비밀번호"
-                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
-                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
-              />
-            </div>
+
+            {tab === "name" ? (
+              <div style={{ marginBottom:24 }}>
+                <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 이름</label>
+                <input value={name} onChange={e=>setName(e.target.value)} placeholder="변경할 이름을 입력하세요"
+                  style={inputStyle(false)}
+                  onFocus={e=>e.target.style.borderColor=C.navy}
+                  onBlur={e=>e.target.style.borderColor=C.border}
+                />
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 비밀번호</label>
+                  <input type="password" value={pwNew} onChange={e=>setPwNew(e.target.value)} placeholder="8자 이상 입력"
+                    style={inputStyle(false)}
+                    onFocus={e=>e.target.style.borderColor=C.navy}
+                    onBlur={e=>e.target.style.borderColor=C.border}
+                  />
+                  {pwTooShort && <p style={{ fontSize:11, color:C.red, marginTop:4 }}>비밀번호는 8자 이상이어야 합니다.</p>}
+                </div>
+                <div style={{ marginBottom:24 }}>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>비밀번호 확인</label>
+                  <input type="password" value={pwConfirm} onChange={e=>setPwConfirm(e.target.value)} placeholder="비밀번호를 다시 입력"
+                    style={{ ...inputStyle(false), borderColor: pwMismatch ? C.red : pwMatch ? C.teal : C.border }}
+                    onFocus={e=>e.target.style.borderColor= pwMismatch ? C.red : pwMatch ? C.teal : C.navy}
+                    onBlur={e=>e.target.style.borderColor= pwMismatch ? C.red : pwMatch ? C.teal : C.border}
+                  />
+                  {pwMismatch && <p style={{ fontSize:11, color:C.red, marginTop:4 }}>비밀번호가 일치하지 않습니다.</p>}
+                  {pwMatch    && <p style={{ fontSize:11, color:C.teal, marginTop:4 }}>비밀번호가 일치합니다.</p>}
+                </div>
+              </>
+            )}
+
+            {error && <p style={{ fontSize:12, color:C.red, marginBottom:12, textAlign:"center" }}>{error}</p>}
+
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:10, border:`1px solid ${C.border}`, background:C.white, color:C.textSub, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>취소</button>
-              <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:saving?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
+              <button
+                onClick={handleSave}
+                disabled={saving || (tab==="pw" && (pwMismatch || pwTooShort))}
+                style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:(saving||(tab==="pw"&&(pwMismatch||pwTooShort)))?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:(saving||(tab==="pw"&&(pwMismatch||pwTooShort)))?"not-allowed":"pointer", fontFamily:"inherit" }}
+              >
                 {saving ? "저장 중..." : "저장"}
               </button>
             </div>
@@ -179,7 +253,7 @@ function EditProfileModal({ onClose }) {
 export default function MentorMyPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const userName = user?.email?.split("@")[0] || "사용자";
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const [activeTab, setActiveTab] = useState("pending");
 
   const [profile, setProfile]   = useState(null);
@@ -289,12 +363,14 @@ export default function MentorMyPage() {
             <div style={{ background:C.white, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}`, marginBottom:16 }}>
               {/* 아바타 */}
               <div style={{ textAlign:"center", marginBottom:16 }}>
+                {(() => { const av = getAvatar(user?.email); return (
                 <div style={{
                   width:68, height:68, borderRadius:"50%",
-                  background:"#1B4F7A", margin:"0 auto 10px",
+                  background:av.color, margin:"0 auto 10px",
                   display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:22, fontWeight:700, color:C.white,
-                }}>이J</div>
+                  fontSize:32,
+                }}>{av.animal}</div>
+                ); })()}
                 <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>{displayName}</p>
                 <p style={{ fontSize:12, color:C.textSub }}>카카오 · 백엔드 개발 5년</p>
               </div>

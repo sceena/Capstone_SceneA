@@ -85,12 +85,11 @@ const Header = ({ userName, accessToken }) => {
       position:"sticky", top:0, zIndex:100,
     }}>
       <nav style={{
-        maxWidth:1200, margin:"0 auto",
         display:"flex", alignItems:"center",
         justifyContent:"space-between", height:64,
       }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
-          안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
+          안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>멘토님
         </span>
         <Link to="/" style={{ textDecoration:"none" }}>
           <LogoIcon size={28} color={C.white}/>
@@ -303,7 +302,7 @@ export default function MentorDashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  const userName = user?.email?.split("@")[0] || "사용자";
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [allSessions, setAllSessions] = useState([]);
   useEffect(() => {

@@ -37,12 +37,14 @@ export async function getSession(id) {
  * GET /api/sessions/me : 로그인한 사용자가 참여한 세션 목록을 조회한다.
  * @returns {Promise<Array>}
  */
-export async function getMySessions() {
-  const res = await fetch("/api/sessions/me", {
+export async function getMySessions(status) {
+  const params = status ? `?status=${status}` : "";
+  const res = await fetch(`/api/sessions/me${params}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error("세션 목록 조회 실패");
-  return res.json();
+  const data = await res.json();
+  return Array.isArray(data) ? data : (data.content ?? []);
 }
 
 /**

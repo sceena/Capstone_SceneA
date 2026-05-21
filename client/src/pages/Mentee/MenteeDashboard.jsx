@@ -73,7 +73,7 @@ const Header = ({ userName, accessToken }) => {
   };
   return (
     <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-      <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+      <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
           안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
         </span>
@@ -273,7 +273,7 @@ const DUMMY_SESSIONS = [
 export default function MenteeDashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const userName = user?.email?.split("@")[0] || "사용자";
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [sessions, setSessions] = useState(DUMMY_SESSIONS);
   useEffect(() => {
@@ -320,6 +320,33 @@ export default function MenteeDashboard() {
 
       <Header userName={userName} accessToken={user?.accessToken}/>
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
+
+        {/* ── 자소서 업로드 안내 배너 (면접 확정 시) ── */}
+        {scheduledSessions.length > 0 && (
+          <div style={{
+            background:"#FFF8F0", border:"1.5px solid #F59E0B",
+            borderRadius:14, padding:"16px 24px",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            gap:16, marginBottom:20, flexWrap:"wrap",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:22 }}>📋</span>
+              <div>
+                <p style={{ fontSize:14, fontWeight:700, color:"#92400E", marginBottom:2 }}>
+                  면접이 확정됐어요! 자소서를 미리 등록해두세요
+                </p>
+                <p style={{ fontSize:12, color:"#B45309" }}>
+                  멘토가 면접 전 자소서를 검토하고 맞춤 질문을 준비합니다
+                </p>
+              </div>
+            </div>
+            <Link to="/mentee/mypage" style={{
+              padding:"9px 20px", background:"#F59E0B", color:"#fff",
+              borderRadius:8, fontSize:13, fontWeight:700,
+              textDecoration:"none", flexShrink:0, whiteSpace:"nowrap",
+            }}>자소서 등록하기 →</Link>
+          </div>
+        )}
 
         {/* ── 상단 배너 카드 (멘토 찾기 CTA) ── */}
         <div style={{
@@ -456,7 +483,7 @@ export default function MenteeDashboard() {
             </div>
 
             {/* 멘토 신청 바로가기 */}
-            <Link to="/mentee/documents" style={{
+            <Link to="/mentee/resume" style={{
               display:"block", marginTop:20,
               padding:"12px", borderRadius:10,
               background:C.bg, textAlign:"center",

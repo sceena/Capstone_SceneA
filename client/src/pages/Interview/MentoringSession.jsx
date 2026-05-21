@@ -466,13 +466,24 @@ export default function MentoringSessionPage() {
   const isMentor = user?.role === "mentor";
 
   return (
+    <>
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+      html,body{height:100%;overflow:hidden;margin:0}
+      #root{height:100%;overflow:hidden;min-height:0;width:100%;max-width:100%;margin:0;display:block;text-align:left}
+      body{font-family:'Noto Sans KR',sans-serif;background:#FAF8F4;color:#1A1818}
+      @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+      ::-webkit-scrollbar{width:4px}
+      ::-webkit-scrollbar-track{background:transparent}
+      ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
+    `}</style>
     <div
       style={{
         height: "100vh",
         display: "flex",
         flexDirection: "column",
-        background: "#F5F4F0",
-        fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
+        fontFamily: "'Noto Sans KR', sans-serif",
         overflow: "hidden",
       }}
     >
@@ -481,8 +492,8 @@ export default function MentoringSessionPage() {
       ══════════════════════════════════════════════════════════ */}
       <header
         style={{
-          background: "#F5F4F0",
-          borderBottom: "1px solid #E0DDD8",
+          background: "#fff",
+          borderBottom: "1px solid #E8E0D0",
           padding: "0 28px",
           height: 72,
           display: "flex",
@@ -496,7 +507,7 @@ export default function MentoringSessionPage() {
           style={{
             width: 44,
             height: 44,
-            background: "#2563EB",
+            background: "#0D2240",
             borderRadius: 11,
             display: "flex",
             alignItems: "center",
@@ -595,9 +606,6 @@ export default function MentoringSessionPage() {
           </span>
         </div>
 
-        <style>{`
-          @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
-        `}</style>
       </header>
 
       {/* ══════════════════════════════════════════════════════════
@@ -627,17 +635,17 @@ export default function MentoringSessionPage() {
           {/* 화면 공유 안내 */}
           <div
             style={{
-              background: "#1A1A1A",
+              background: "#0D2240",
               padding: "14px 14px",
-              borderTop: "1px solid #333",
+              borderTop: "1px solid rgba(255,255,255,0.1)",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
                 <polyline points="8 21 12 17 16 21" />
               </svg>
-              <span style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700 }}>
+              <span style={{ color: "#1D9E75", fontSize: 11, fontWeight: 700 }}>
                 스크린 공유 중
               </span>
             </div>
@@ -653,8 +661,8 @@ export default function MentoringSessionPage() {
       ══════════════════════════════════════════════════════════ */}
       <div
         style={{
-          background: "#1A1A1A",
-          borderTop: "1px solid #2A2A2A",
+          background: "#0D2240",
+          borderTop: "1px solid rgba(255,255,255,0.1)",
           padding: "0 28px",
           height: 60,
           display: "flex",
@@ -712,7 +720,7 @@ export default function MentoringSessionPage() {
               active={isSharing}
               onClick={() => setIsSharing((v) => !v)}
               label={isSharing ? "공유 중지" : "화면 공유"}
-              activeColor="#2563EB"
+              activeColor="#1D9E75"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -723,7 +731,7 @@ export default function MentoringSessionPage() {
         </div>
 
         {/* 중앙: 세션 정보 */}
-        <p style={{ color: "#666", fontSize: 12 }}>
+        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>
           {session.title} · {session.mentee.name} 멘티
         </p>
 
@@ -838,6 +846,7 @@ export default function MentoringSessionPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 

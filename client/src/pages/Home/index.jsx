@@ -27,13 +27,14 @@ const GlobalStyle = () => (
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; overflow-x: hidden; }
 
     body {
       font-family: 'Noto Sans KR', sans-serif;
       background: ${C.bg};
       color: ${C.text};
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
 
     /* ── 스크롤 애니메이션 ── */
@@ -320,6 +321,219 @@ const ScreenPreview = ({ accent, num }) => (
   </div>
 );
 
+/* ── STEP 01 로봇 일러스트 ── */
+const RobotIllustration = () => (
+  <div style={{
+    background: C.navy,
+    borderRadius: 20,
+    overflow: "hidden",
+    aspectRatio: "16/10",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 24px 60px rgba(13,34,68,0.18)",
+    position: "relative",
+  }}>
+    <style>{`
+      @keyframes robotFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+      @keyframes eyeBlink { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.1)} }
+      @keyframes armL { 0%,100%{transform:rotate(-15deg)} 50%{transform:rotate(15deg)} }
+      @keyframes armR { 0%,100%{transform:rotate(15deg)} 50%{transform:rotate(-15deg)} }
+      @keyframes progBar { 0%{width:20%} 100%{width:85%} }
+    `}</style>
+
+    {/* 배경 도트 */}
+    <svg style={{ position:"absolute", inset:0, opacity:0.05 }} width="100%" height="100%">
+      {Array.from({length:8}).map((_,r) => Array.from({length:14}).map((_,c) => (
+        <circle key={`${r}-${c}`} cx={c*40+20} cy={r*30+20} r="1.5" fill="white"/>
+      )))}
+    </svg>
+
+    {/* 로봇 */}
+    <div style={{ position:"relative", zIndex:1, animation:"robotFloat 3s ease-in-out infinite" }}>
+      <svg width="120" height="160" viewBox="0 0 120 160" fill="none">
+        {/* 안테나 */}
+        <line x1="60" y1="10" x2="60" y2="25" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round"/>
+        <circle cx="60" cy="8" r="4" fill="#1D9E75"/>
+        {/* 머리 */}
+        <rect x="28" y="25" width="64" height="48" rx="12" fill="#1B4F7A" stroke="rgba(255,255,255,0.12)" strokeWidth="1"/>
+        {/* 눈 */}
+        <g style={{ animation:"eyeBlink 4s ease-in-out infinite" }}>
+          <rect x="38" y="38" width="14" height="14" rx="3" fill="#1D9E75"/>
+          <rect x="68" y="38" width="14" height="14" rx="3" fill="#1D9E75"/>
+          <circle cx="45" cy="45" r="3" fill="white" opacity="0.9"/>
+          <circle cx="75" cy="45" r="3" fill="white" opacity="0.9"/>
+        </g>
+        {/* 입 */}
+        <rect x="44" y="58" width="32" height="6" rx="3" fill="rgba(255,255,255,0.15)"/>
+        <rect x="46" y="59" width="18" height="4" rx="2" fill="#1D9E75"/>
+        {/* 몸통 */}
+        <rect x="22" y="76" width="76" height="52" rx="10" fill="#1B4F7A" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
+        {/* 가슴 패널 */}
+        <rect x="34" y="84" width="52" height="32" rx="6" fill="rgba(0,0,0,0.2)"/>
+        <rect x="38" y="88" width="20" height="4" rx="2" fill="rgba(255,255,255,0.25)"/>
+        <rect x="38" y="95" width="30" height="4" rx="2" fill="rgba(29,158,117,0.6)"/>
+        <rect x="38" y="102" width="14" height="4" rx="2" fill="rgba(255,255,255,0.12)"/>
+        <circle cx="72" cy="104" r="5" fill="#1D9E75" opacity="0.8"/>
+        {/* 왼팔 */}
+        <g style={{ transformOrigin:"22px 88px", animation:"armL 2s ease-in-out infinite" }}>
+          <rect x="6" y="78" width="16" height="38" rx="8" fill="#1B4F7A" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
+          <rect x="8" y="113" width="12" height="8" rx="4" fill="#3A7FAF"/>
+        </g>
+        {/* 오른팔 */}
+        <g style={{ transformOrigin:"98px 88px", animation:"armR 2s ease-in-out infinite" }}>
+          <rect x="98" y="78" width="16" height="38" rx="8" fill="#1B4F7A" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
+          <rect x="100" y="113" width="12" height="8" rx="4" fill="#3A7FAF"/>
+        </g>
+        {/* 다리 */}
+        <rect x="34" y="128" width="20" height="26" rx="8" fill="#1B4F7A"/>
+        <rect x="66" y="128" width="20" height="26" rx="8" fill="#1B4F7A"/>
+        <rect x="30" y="148" width="28" height="8" rx="4" fill="#3A7FAF"/>
+        <rect x="62" y="148" width="28" height="8" rx="4" fill="#3A7FAF"/>
+      </svg>
+    </div>
+
+    {/* 분석 중인 문서 */}
+    <div style={{
+      position:"absolute", right:"10%", top:"18%",
+      background:"rgba(255,255,255,0.05)",
+      border:"1px solid rgba(255,255,255,0.1)",
+      borderRadius:10, padding:"12px", width:88,
+    }}>
+      <div style={{ height:5, background:"rgba(255,255,255,0.3)", borderRadius:3, marginBottom:6, width:"80%" }}/>
+      <div style={{ height:4, background:"rgba(255,255,255,0.12)", borderRadius:3, marginBottom:5 }}/>
+      <div style={{ height:4, background:"rgba(255,255,255,0.12)", borderRadius:3, marginBottom:5, width:"70%" }}/>
+      <div style={{ height:4, background:"rgba(29,158,117,0.55)", borderRadius:3, marginBottom:5, animation:"progBar 2.5s ease-in-out infinite alternate" }}/>
+      <div style={{ height:3, background:"rgba(255,255,255,0.08)", borderRadius:3, marginBottom:5 }}/>
+      <div style={{ height:3, background:"rgba(255,255,255,0.08)", borderRadius:3, width:"60%" }}/>
+    </div>
+
+    {/* 왼쪽 상태 버블 */}
+    <div style={{
+      position:"absolute", left:"5%", bottom:"18%",
+      background:"rgba(29,158,117,0.12)",
+      border:"1px solid rgba(29,158,117,0.28)",
+      borderRadius:10, padding:"10px 12px",
+    }}>
+      <div style={{ width:28, height:28, borderRadius:"50%", background:"rgba(29,158,117,0.25)", margin:"0 auto 6px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ width:12, height:12, borderRadius:"50%", background:"#1D9E75" }}/>
+      </div>
+      <div style={{ height:4, background:"rgba(255,255,255,0.25)", borderRadius:2, width:38, marginBottom:4 }}/>
+      <div style={{ height:3, background:"rgba(255,255,255,0.12)", borderRadius:2, width:28 }}/>
+    </div>
+  </div>
+);
+
+/* ── STEP 02 화상면접 일러스트 ── */
+const VideoCallIllustration = () => (
+  <div style={{
+    background: "#0A1929",
+    borderRadius: 20,
+    overflow: "hidden",
+    aspectRatio: "16/10",
+    display: "flex",
+    flexDirection: "column",
+    boxShadow: "0 24px 60px rgba(13,34,68,0.18)",
+    position: "relative",
+  }}>
+    <style>{`
+      @keyframes speakRing { 0%,100%{transform:scale(1);opacity:0.5} 50%{transform:scale(1.15);opacity:1} }
+      @keyframes wb1 { 0%,100%{height:6px} 50%{height:18px} }
+      @keyframes wb2 { 0%,100%{height:10px} 50%{height:24px} }
+      @keyframes wb3 { 0%,100%{height:4px} 50%{height:14px} }
+      @keyframes recDot { 0%,100%{opacity:1} 50%{opacity:0} }
+    `}</style>
+
+    {/* 상단 바 */}
+    <div style={{ background:"#0D2240", padding:"7px 14px", display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
+      <div style={{ width:8, height:8, borderRadius:"50%", background:"#1D9E75" }}/>
+      <div style={{ width:42, height:5, background:"rgba(255,255,255,0.15)", borderRadius:3 }}/>
+      <div style={{ width:24, height:5, background:"rgba(255,255,255,0.08)", borderRadius:3 }}/>
+      <div style={{ flex:1 }}/>
+      {["#1B4F7A","#3A7FAF","#1D9E75"].map((c,i) => (
+        <div key={i} style={{ width:20, height:20, borderRadius:"50%", background:c, marginLeft:i>0?-8:0, border:"1.5px solid #0A1929" }}/>
+      ))}
+      <div style={{ width:7, height:7, borderRadius:"50%", background:"#F87171", animation:"recDot 1.4s ease-in-out infinite", marginLeft:6 }}/>
+      <div style={{ width:36, height:16, background:"rgba(255,255,255,0.08)", borderRadius:6 }}/>
+    </div>
+
+    {/* 메인 영상 영역 */}
+    <div style={{ flex:1, display:"flex", gap:5, padding:"5px", minHeight:0 }}>
+      {/* 메인 타일 (멘토) */}
+      <div style={{ flex:3, position:"relative", background:"#0D2240", borderRadius:12, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        {/* 발언 링 */}
+        <div style={{ position:"absolute", width:62, height:62, borderRadius:"50%", border:"2px solid #1D9E75", animation:"speakRing 2s ease-in-out infinite" }}/>
+        {/* 아바타 */}
+        <div style={{ width:48, height:48, borderRadius:"50%", background:"#1B4F7A", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
+          <div style={{ width:18, height:18, borderRadius:"50%", background:"rgba(255,255,255,0.4)" }}/>
+        </div>
+        {/* 몸 형태 */}
+        <div style={{ position:"absolute", bottom:0, left:"50%", transform:"translateX(-50%)", width:58, height:28, background:"#1B4F7A", borderRadius:"28px 28px 0 0", opacity:0.55 }}/>
+        {/* 파형 */}
+        <div style={{ position:"absolute", bottom:10, left:12, display:"flex", alignItems:"flex-end", gap:2 }}>
+          {[1,2,1,3,2,1,2].map((h,i) => (
+            <div key={i} style={{ width:3, borderRadius:2, background:"#1D9E75", animation:`wb${(i%3)+1} ${0.7+i*0.12}s ease-in-out infinite`, height:6*h }}/>
+          ))}
+        </div>
+        {/* 이름 뱃지 형태 */}
+        <div style={{ position:"absolute", bottom:8, right:10, background:"rgba(0,0,0,0.4)", borderRadius:6, width:48, height:10 }}/>
+      </div>
+
+      {/* 우측 서브 타일 2개 */}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", gap:5 }}>
+        {["#1B4F7A","#3A7FAF"].map((c,i) => (
+          <div key={i} style={{ flex:1, background:c, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", position:"relative", overflow:"hidden" }}>
+            <div style={{ width:26, height:26, borderRadius:"50%", background:"rgba(255,255,255,0.22)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <div style={{ width:10, height:10, borderRadius:"50%", background:"rgba(255,255,255,0.4)" }}/>
+            </div>
+            {i===1 && (
+              <svg style={{ position:"absolute", bottom:5, right:5 }} width="12" height="12" viewBox="0 0 12 12">
+                <line x1="2" y1="2" x2="10" y2="10" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" strokeLinecap="round"/>
+                <line x1="10" y1="2" x2="2" y2="10" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* 하단 컨트롤 바 */}
+    <div style={{ background:"#0D2240", padding:"7px 14px", display:"flex", alignItems:"center", justifyContent:"center", gap:8, flexShrink:0 }}>
+      {/* 마이크 */}
+      <div style={{ width:30, height:30, borderRadius:"50%", background:"rgba(255,255,255,0.1)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
+          <rect x="3" y="1" width="6" height="8" rx="3" fill="rgba(255,255,255,0.6)"/>
+          <path d="M1 7c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke="rgba(255,255,255,0.6)" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+          <line x1="6" y1="12" x2="6" y2="14" stroke="rgba(255,255,255,0.6)" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      </div>
+      {/* 카메라 */}
+      <div style={{ width:30, height:30, borderRadius:"50%", background:"rgba(255,255,255,0.1)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+          <rect x="1" y="1" width="8" height="8" rx="2" fill="rgba(255,255,255,0.6)"/>
+          <path d="M9 3.5L13 1.5v7L9 6.5V3.5Z" fill="rgba(255,255,255,0.6)"/>
+        </svg>
+      </div>
+      {/* 공유 */}
+      <div style={{ width:30, height:30, borderRadius:"50%", background:"rgba(255,255,255,0.1)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <svg width="13" height="12" viewBox="0 0 13 12" fill="none">
+          <rect x="1" y="4" width="11" height="7" rx="1.5" stroke="rgba(255,255,255,0.6)" strokeWidth="1.2"/>
+          <path d="M4.5 4V3a2 2 0 014 0v1" stroke="rgba(255,255,255,0.6)" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      </div>
+      {/* 답변 버튼 형태 */}
+      <div style={{ width:52, height:22, background:"#1D9E75", borderRadius:999 }}/>
+      {/* 종료 */}
+      <div style={{ width:30, height:30, borderRadius:"50%", background:"#F87171", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <svg width="13" height="8" viewBox="0 0 13 8" fill="none">
+          <path d="M1 4C2 1 11 1 12 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+          <path d="M1 4l1.5 2.5M12 4l-1.5 2.5" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+);
+
 const FeaturesSection = () => (
   <section style={{ background: C.bg, padding: "100px 5%" }}>
       {steps.map((step, i) => (
@@ -367,7 +581,11 @@ const FeaturesSection = () => (
 
           {/* 비주얼 */}
           <div style={{ flex: 1.2 }}>
-            <ScreenPreview accent={step.accent} num={i} />
+            {i === 0
+              ? <RobotIllustration />
+              : i === 1
+                ? <VideoCallIllustration />
+                : <ScreenPreview accent={step.accent} num={i} />}
           </div>
         </div>
       ))}

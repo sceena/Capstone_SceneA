@@ -37,3 +37,4 @@ export async function respondReservation(reservationId, accepted) {
   if (!res.ok) throw new Error("예약 응답 실패");
   return res.json();
 }
+

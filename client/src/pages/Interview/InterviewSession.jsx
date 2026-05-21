@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio } from "../../api/sessions";
+import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, getQuestions } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
 
 /* ============================================================
@@ -43,9 +43,18 @@ export default function InterviewSession({ role = "mentee" }) {
 
   /* ── 멘티 전용: 답변 상태 (화자 분리) + 오디오 녹음 ── */
   const [answerStatus, setAnswerStatus] = useState("idle"); // idle | answering | done
-  const [currentQuestionId, setCurrentQuestionId] = useState(null);
+  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const answerStartRef = useRef(null);
+
+  /* ── 질문 목록 ── */
+  const [questions, setQuestions] = useState([]);
+  useEffect(() => {
+    getQuestions(id).then(data => {
+      if (Array.isArray(data)) setQuestions(data);
+    }).catch(() => {});
+  }, [id]);
 
   /* ── 더미 참가자 ── */
   const isMentor = role === "mentor";
@@ -56,19 +65,6 @@ export default function InterviewSession({ role = "mentee" }) {
     { name:"최유나", muted:true,  color:"#8B4513", speaking:false },
   ];
 
-  /* ── AI 추천질문 (멘토용) ── */
-  const aiQuestions = [
-    "분산 처리 시스템에서 데이터 일관성을 어떻게 보장하셨나요?",
-    "Spring Boot에서 트랜잭션 처리 시 주의했던 경험이 있나요?",
-    "대규모 트래픽 상황에서의 DB 최적화 방법을 설명해주세요.",
-  ];
-
-  const questionList = [
-    { q:"세션 진행 방식과 소요 시간을 간략히 설명해주세요.", bold:"세션 진행 방식" },
-    { q:"모든 것이 계획대로 되지 않을 수 있지만 괜찮습니다.", bold:"괜찮습니다" },
-    { q:"지원자가 스스로의 경험과 생각을 자유롭게 말할 수 있도록 유도해주세요.", bold:"자유롭게" },
-    { q:"원격 면접 시 화면 공유, 카메라·마이크 정상 여부를 확인하세요.", bold:"화면 공유, 카메라·마이크" },
-  ];
 
   const toggleCheck = (i) => {
     setCheckedQs(prev => prev.includes(i) ? prev.filter(x=>x!==i) : [...prev, i]);
@@ -92,6 +88,7 @@ export default function InterviewSession({ role = "mentee" }) {
     } catch {}
 
     if (nextStatus === "answering") {
+      answerStartRef.current = new Date().toISOString();
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioChunksRef.current = [];
@@ -103,14 +100,22 @@ export default function InterviewSession({ role = "mentee" }) {
         recorder.start();
       } catch {}
     } else if (nextStatus === "done" && mediaRecorderRef.current?.state !== "inactive") {
+      const answerEnd = new Date().toISOString();
+      const user = getAuthUser();
+      const questionId = questions[currentQuestionIdx]?.id;
       mediaRecorderRef.current.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        if (currentQuestionId) {
-          uploadAnswerAudio(id, currentQuestionId, blob).catch(() => {});
+        if (questionId) {
+          uploadAnswerAudio(id, questionId, blob, {
+            answerStart: answerStartRef.current,
+            answerEnd,
+            menteeId: user?.id,
+          }).catch(() => {});
         }
         mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
       };
       mediaRecorderRef.current.stop();
+      setCurrentQuestionIdx(prev => prev + 1);
     }
   };
 
@@ -133,16 +138,16 @@ export default function InterviewSession({ role = "mentee" }) {
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
-        .ctrl-btn:hover{background:rgba(59,130,246,0.85)!important}
+        .ctrl-btn:hover{background:rgba(13,34,64,0.85)!important}
         .ctrl-btn-off:hover{background:rgba(239,68,68,0.85)!important}
       `}</style>
 
-      <div style={{ display:"flex", flexDirection:"column", height:"100vh", background:"#f5f5f5" }}>
+      <div style={{ display:"flex", flexDirection:"column", height:"100vh", background:"#FAF8F4" }}>
 
         {/* ════ 상단 헤더 바 ════ */}
         <div style={{
           background:"#fff", padding:"0 20px",
-          borderBottom:"1px solid #e5e7eb",
+          borderBottom:"1px solid #E8E0D0",
           display:"flex", alignItems:"center", justifyContent:"space-between",
           height:64, flexShrink:0,
         }}>
@@ -150,7 +155,7 @@ export default function InterviewSession({ role = "mentee" }) {
           <div style={{ display:"flex", alignItems:"center", gap:14 }}>
             <div style={{
               width:36, height:36, borderRadius:8,
-              background:"#2563EB",
+              background:"#0D2240",
               display:"flex", alignItems:"center", justifyContent:"center",
             }}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -159,8 +164,8 @@ export default function InterviewSession({ role = "mentee" }) {
               </svg>
             </div>
             <div>
-              <p style={{ fontSize:14, fontWeight:700, color:"#111" }}>OOO 멘토 면접 진행</p>
-              <p style={{ fontSize:11, color:"#9ca3af" }}>June 12th, 2022 | 11:00 AM</p>
+              <p style={{ fontSize:14, fontWeight:700, color:"#1A1818" }}>면접 진행 중</p>
+              <p style={{ fontSize:11, color:"#9E9B95" }}>실시간 면접 세션</p>
             </div>
           </div>
 
@@ -187,8 +192,8 @@ export default function InterviewSession({ role = "mentee" }) {
           {/* 우측: 모더레이터 */}
           <div style={{
             display:"flex", alignItems:"center", gap:10,
-            background:"#f9fafb", borderRadius:10,
-            padding:"8px 14px", border:"1px solid #e5e7eb",
+            background:"#FAF8F4", borderRadius:10,
+            padding:"8px 14px", border:"1px solid #E8E0D0",
           }}>
             <div style={{
               width:32, height:32, borderRadius:"50%",
@@ -285,16 +290,16 @@ export default function InterviewSession({ role = "mentee" }) {
 
             {/* 하단 썸네일 바 */}
             <div style={{
-              background:"#fff", padding:"10px 16px",
-              borderTop:"1px solid #e5e7eb",
+              background:"#FAF8F4", padding:"10px 16px",
+              borderTop:"1px solid #E8E0D0",
               display:"flex", gap:8, overflowX:"auto",
             }}>
               {participants.map((p,i)=>(
                 <div key={i} style={{
                   position:"relative", flexShrink:0,
                   width:160, height:90, borderRadius:8,
-                  background: p.speaking ? "#EFF6FF" : "#f3f4f6",
-                  border:`2px solid ${p.speaking?"#2563EB":"transparent"}`,
+                  background: p.speaking ? "#E8F5EE" : "#f3f4f6",
+                  border:`2px solid ${p.speaking?"#1D9E75":"transparent"}`,
                   overflow:"hidden",
                   display:"flex", alignItems:"center", justifyContent:"center",
                   cursor:"pointer",
@@ -319,7 +324,7 @@ export default function InterviewSession({ role = "mentee" }) {
                   <div style={{
                     position:"absolute", bottom:6, right:6,
                     width:20, height:20, borderRadius:"50%",
-                    background: p.muted ? "#EF4444" : "#2563EB",
+                    background: p.muted ? "#EF4444" : "#1D9E75",
                     display:"flex", alignItems:"center", justifyContent:"center",
                   }}>
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -335,8 +340,8 @@ export default function InterviewSession({ role = "mentee" }) {
 
             {/* ── 하단 컨트롤 바 ── */}
             <div style={{
-              background:"#fff", padding:"12px 20px",
-              borderTop:"1px solid #e5e7eb",
+              background:"#0D2240", padding:"12px 20px",
+              borderTop:"1px solid rgba(255,255,255,0.1)",
               display:"flex", alignItems:"center", justifyContent:"center",
               gap:10, flexShrink:0,
             }}>
@@ -352,7 +357,7 @@ export default function InterviewSession({ role = "mentee" }) {
                   width:48, height:48, borderRadius:"50%",
                   background: btn.pink && !btn.active ? "#FEE2E2"
                     : !btn.active ? "#EF4444"
-                    : "#3B82F6",
+                    : "rgba(255,255,255,0.15)",
                   border:"none", cursor:"pointer",
                   display:"flex", alignItems:"center", justifyContent:"center",
                   transition:"background 0.18s",
@@ -370,14 +375,14 @@ export default function InterviewSession({ role = "mentee" }) {
                     onKeyDown={e=>e.key==="Enter"&&sendChat()}
                     style={{
                       flex:1, padding:"10px 14px",
-                      background:"#f3f4f6", border:"1px solid #e5e7eb",
-                      borderRadius:24, fontSize:13, color:"#111",
+                      background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.2)",
+                      borderRadius:24, fontSize:13, color:"#fff",
                       outline:"none", fontFamily:"inherit",
                     }}
                   />
                   <button onClick={sendChat} style={{
                     width:40, height:40, borderRadius:"50%",
-                    background:"#2563EB", border:"none", cursor:"pointer",
+                    background:"#1D9E75", border:"none", cursor:"pointer",
                     display:"flex", alignItems:"center", justifyContent:"center",
                   }}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -425,13 +430,13 @@ export default function InterviewSession({ role = "mentee" }) {
           {isMentor && (
             <div style={{
               width:300, flexShrink:0,
-              background:"#fff", borderLeft:"1px solid #e5e7eb",
+              background:"#fff", borderLeft:"1px solid #E8E0D0",
               display:"flex", flexDirection:"column",
               overflow:"hidden",
             }}>
               {/* 패널 헤더 */}
-              <div style={{ padding:"13px 16px", borderBottom:"1px solid #e5e7eb" }}>
-                <p style={{ fontSize:13, fontWeight:700, color:"#111" }}>면접 질문 패널</p>
+              <div style={{ padding:"13px 16px", borderBottom:"1px solid #E8E0D0", background:"#0D2240" }}>
+                <p style={{ fontSize:13, fontWeight:700, color:"#fff" }}>면접 질문 패널</p>
               </div>
 
               {/* 항상 열려있는 콘텐츠 */}
@@ -439,20 +444,20 @@ export default function InterviewSession({ role = "mentee" }) {
 
                 {/* AI 추천질문 */}
                 <div>
-                  <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"#2563EB", textTransform:"uppercase", marginBottom:10 }}>AI 추천질문</p>
+                  <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"#1D9E75", textTransform:"uppercase", marginBottom:10 }}>AI 추천질문</p>
                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {aiQuestions.map((q,i)=>(
+                    {questions.map((q,i)=>(
                       <div key={i} style={{
-                        background:"#f8faff", borderRadius:10, padding:"12px 14px",
-                        border:"1px solid #dbeafe", cursor:"pointer",
-                        borderLeft:"3px solid #2563EB",
+                        background:"#FAF8F4", borderRadius:10, padding:"12px 14px",
+                        border:"1px solid #E8E0D0", cursor:"pointer",
+                        borderLeft:"3px solid #1D9E75",
                         transition:"background 0.15s",
                       }}
-                        onMouseEnter={e=>e.currentTarget.style.background="#eff6ff"}
-                        onMouseLeave={e=>e.currentTarget.style.background="#f8faff"}
+                        onMouseEnter={e=>e.currentTarget.style.background="#E8F5EE"}
+                        onMouseLeave={e=>e.currentTarget.style.background="#FAF8F4"}
                       >
-                        <span style={{ fontSize:10, fontWeight:700, color:"#2563EB", display:"block", marginBottom:4 }}>Q{i+1}</span>
-                        <p style={{ fontSize:12, color:"#374151", lineHeight:1.65 }}>{q}</p>
+                        <span style={{ fontSize:10, fontWeight:700, color:"#1D9E75", display:"block", marginBottom:4 }}>Q{i+1}</span>
+                        <p style={{ fontSize:12, color:"#374151", lineHeight:1.65 }}>{q.content}</p>
                       </div>
                     ))}
                   </div>
@@ -461,7 +466,7 @@ export default function InterviewSession({ role = "mentee" }) {
                 {/* 질문 리스트 */}
                 <div>
                   <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"#6b7280", textTransform:"uppercase", marginBottom:10 }}>질문 리스트</p>
-                  {questionList.map((item,i)=>{
+                  {questions.map((q,i)=>{
                     const checked = checkedQs.includes(i);
                     return (
                       <label key={i} style={{
@@ -472,21 +477,17 @@ export default function InterviewSession({ role = "mentee" }) {
                       }}>
                         <input type="checkbox" checked={checked}
                           onChange={()=>toggleCheck(i)}
-                          style={{ marginTop:2, accentColor:"#2563EB", width:14, height:14, flexShrink:0 }}/>
+                          style={{ marginTop:2, accentColor:"#0D2240", width:14, height:14, flexShrink:0 }}/>
                         <p style={{
                           fontSize:12, color:checked?"#9ca3af":"#374151",
                           lineHeight:1.7, textDecoration:checked?"line-through":"none",
                         }}>
-                          {item.q.split(item.bold).map((part,j,arr)=>(
-                            j < arr.length-1
-                              ? <span key={j}>{part}<strong style={{ fontWeight:700 }}>{item.bold}</strong></span>
-                              : <span key={j}>{part}</span>
-                          ))}
+                          {q.content}
                         </p>
                       </label>
                     );
                   })}
-                  {checkedQs.length === questionList.length && (
+                  {questions.length > 0 && checkedQs.length === questions.length && (
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:12, padding:"10px", background:"#f0fdf4", borderRadius:8 }}>
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="#1D9E75"/><path d="M4.5 8l2.5 2.5 4-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       <span style={{ fontSize:12, color:"#1D9E75", fontWeight:600 }}>And you're good to go!</span>
@@ -498,24 +499,24 @@ export default function InterviewSession({ role = "mentee" }) {
               {/* 하단 채팅 입력 */}
               <div style={{
                 padding:"12px 14px",
-                borderTop:"1px solid #e5e7eb",
+                borderTop:"1px solid #E8E0D0",
                 display:"flex", gap:8,
               }}>
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink:0, alignSelf:"center" }}>
-                  <circle cx="9" cy="9" r="7.5" stroke="#9ca3af" strokeWidth="1.3"/>
-                  <path d="M9 6v3.5l2 1.5" stroke="#9ca3af" strokeWidth="1.3" strokeLinecap="round"/>
+                  <circle cx="9" cy="9" r="7.5" stroke="#9E9B95" strokeWidth="1.3"/>
+                  <path d="M9 6v3.5l2 1.5" stroke="#9E9B95" strokeWidth="1.3" strokeLinecap="round"/>
                 </svg>
-                <input placeholder="Type Something..." value={chatMsg}
+                <input placeholder="메시지 입력..." value={chatMsg}
                   onChange={e=>setChatMsg(e.target.value)}
                   onKeyDown={e=>e.key==="Enter"&&sendChat()}
                   style={{
                     flex:1, border:"none", background:"transparent",
-                    fontSize:13, color:"#374151", outline:"none", fontFamily:"inherit",
+                    fontSize:13, color:"#1A1818", outline:"none", fontFamily:"inherit",
                   }}
                 />
                 <button onClick={sendChat} style={{
                   width:32, height:32, borderRadius:"50%",
-                  background:"#2563EB", border:"none", cursor:"pointer",
+                  background:"#0D2240", border:"none", cursor:"pointer",
                   display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
                 }}>
                   <svg width="13" height="13" viewBox="0 0 13 13" fill="none">

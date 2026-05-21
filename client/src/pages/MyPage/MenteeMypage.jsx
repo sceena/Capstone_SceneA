@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
+import { getAvatar } from "../../utils/avatar";
 
 /* ============================================================
    멘티 마이페이지  (pages/mentee/MyPage.jsx)
@@ -45,7 +46,7 @@ const Header = ({ userName, accessToken }) => {
   };
   return (
     <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-      <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+      <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
         <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
@@ -212,44 +213,120 @@ const DUMMY_HISTORY = [
 
 /* ── 프로필 수정 모달 ── */
 function EditProfileModal({ onClose }) {
-  const [name, setName]     = useState("");
-  const [pw, setPw]         = useState("");
-  const [saving, setSaving] = useState(false);
-  const [done, setDone]     = useState(false);
+  const [tab, setTab]         = useState("name");   // "name" | "password"
+  const [name, setName]       = useState("");
+  const [pwNew, setPwNew]     = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [done, setDone]       = useState(false);
+  const [error, setError]     = useState("");
+
+  const inputStyle = (borderColor) => ({
+    width:"100%", padding:"11px 14px", borderRadius:10,
+    border:`1.5px solid ${borderColor||C.border}`,
+    fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg,
+    boxSizing:"border-box",
+  });
 
   const handleSave = async () => {
+    setError("");
     const data = {};
-    if (name.trim())  data.name     = name.trim();
-    if (pw.trim())    data.password = pw.trim();
-    if (!Object.keys(data).length) { onClose(); return; }
+    if (tab === "name") {
+      if (!name.trim()) { setError("이름을 입력해주세요."); return; }
+      data.name = name.trim();
+    } else {
+      if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; }
+      if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
+      data.password = pwNew;
+    }
     setSaving(true);
-    try { await updateMyProfile(data); } catch {}
-    setDone(true);
-    setTimeout(onClose, 800);
+    try {
+      await updateMyProfile(data);
+      setDone(true);
+      setTimeout(onClose, 900);
+    } catch (e) {
+      if (e?.status === 401) setError("로그인이 만료되었습니다. 다시 로그인해주세요.");
+      else if (e?.status === 400) setError("입력값을 확인해주세요.");
+      else if (!navigator.onLine || e?.message === "Failed to fetch") setError("서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.");
+      else setError("저장에 실패했습니다. 다시 시도해주세요.");
+      setSaving(false);
+    }
   };
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:380, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:400, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
         <h3 style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:20 }}>프로필 수정</h3>
+
         {done ? (
-          <p style={{ textAlign:"center", color:C.teal, fontWeight:600, padding:"20px 0" }}>저장되었습니다!</p>
+          <div style={{ textAlign:"center", padding:"24px 0" }}>
+            <div style={{ fontSize:36, marginBottom:10 }}>✓</div>
+            <p style={{ color:C.teal, fontWeight:600, fontSize:15 }}>저장되었습니다!</p>
+          </div>
         ) : (
           <>
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>이름 (변경할 경우 입력)</label>
-              <input value={name} onChange={e=>setName(e.target.value)} placeholder="새 이름"
-                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
-                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
-              />
+            {/* 탭 */}
+            <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, marginBottom:22 }}>
+              {[{k:"name",l:"이름 변경"},{k:"password",l:"비밀번호 변경"}].map(t=>(
+                <button key={t.k} onClick={()=>{ setTab(t.k); setError(""); }} style={{
+                  flex:1, padding:"10px 0", background:"transparent", border:"none",
+                  borderBottom:`2.5px solid ${tab===t.k?C.navy:"transparent"}`,
+                  fontSize:13, fontWeight:tab===t.k?700:400,
+                  color:tab===t.k?C.navy:C.textMuted,
+                  cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                  marginBottom:-1,
+                }}>{t.l}</button>
+              ))}
             </div>
-            <div style={{ marginBottom:24 }}>
-              <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 비밀번호 (변경할 경우 입력)</label>
-              <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="새 비밀번호"
-                style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg }}
-                onFocus={e=>e.target.style.borderColor=C.navy} onBlur={e=>e.target.style.borderColor=C.border}
-              />
-            </div>
+
+            {/* 이름 변경 */}
+            {tab === "name" && (
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:7 }}>새 이름</label>
+                <input value={name} onChange={e=>setName(e.target.value)} placeholder="변경할 이름을 입력하세요"
+                  style={inputStyle()}
+                  onFocus={e=>e.target.style.borderColor=C.navy}
+                  onBlur={e=>e.target.style.borderColor=C.border}
+                />
+              </div>
+            )}
+
+            {/* 비밀번호 변경 */}
+            {tab === "password" && (
+              <>
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:7 }}>새 비밀번호</label>
+                  <input type="password" value={pwNew} onChange={e=>setPwNew(e.target.value)} placeholder="8자 이상 입력"
+                    style={inputStyle()}
+                    onFocus={e=>e.target.style.borderColor=C.navy}
+                    onBlur={e=>e.target.style.borderColor=C.border}
+                  />
+                  {pwNew.length > 0 && pwNew.length < 8 && (
+                    <p style={{ fontSize:11, color:C.red, marginTop:5 }}>비밀번호는 8자 이상이어야 합니다.</p>
+                  )}
+                </div>
+                <div style={{ marginBottom:20 }}>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:7 }}>새 비밀번호 확인</label>
+                  <input type="password" value={pwConfirm} onChange={e=>setPwConfirm(e.target.value)} placeholder="비밀번호를 다시 입력"
+                    style={inputStyle(pwConfirm && pwConfirm !== pwNew ? C.red : undefined)}
+                    onFocus={e=>e.target.style.borderColor= pwConfirm && pwConfirm!==pwNew ? C.red : C.navy}
+                    onBlur={e=>e.target.style.borderColor= pwConfirm && pwConfirm!==pwNew ? C.red : C.border}
+                  />
+                  {pwConfirm && pwNew !== pwConfirm && (
+                    <p style={{ fontSize:11, color:C.red, marginTop:5 }}>비밀번호가 일치하지 않습니다.</p>
+                  )}
+                  {pwConfirm && pwNew === pwConfirm && pwNew.length >= 8 && (
+                    <p style={{ fontSize:11, color:C.teal, marginTop:5 }}>비밀번호가 일치합니다.</p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {error && (
+              <p style={{ fontSize:12, color:C.red, marginBottom:14, textAlign:"center" }}>{error}</p>
+            )}
+
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:10, border:`1px solid ${C.border}`, background:C.white, color:C.textSub, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>취소</button>
               <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:saving?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
@@ -267,7 +344,7 @@ function EditProfileModal({ onClose }) {
 export default function MenteeMyPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const userName = user?.email?.split("@")[0] || "사용자";
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const [activeTab, setActiveTab] = useState("all");
   const [profile, setProfile]     = useState(null);
   const [apiSessions, setApiSessions] = useState([]);
@@ -381,12 +458,14 @@ export default function MenteeMyPage() {
             <div style={{ background:C.white, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}` }}>
               {/* 아바타 */}
               <div style={{ textAlign:"center", marginBottom:16 }}>
+                {(() => { const av = getAvatar(user?.email); return (
                 <div style={{
                   width:68, height:68, borderRadius:"50%",
-                  background:C.teal, margin:"0 auto 10px",
+                  background:av.color, margin:"0 auto 10px",
                   display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:22, fontWeight:700, color:C.white,
-                }}>김M</div>
+                  fontSize:32,
+                }}>{av.animal}</div>
+                ); })()}
                 <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>{displayName}</p>
                 <p style={{ fontSize:12, color:C.textSub }}>백엔드 개발자 지망 · 신입</p>
               </div>
@@ -472,6 +551,32 @@ export default function MenteeMyPage() {
                   <HistoryItem key={i} {...h}/>
                 ))}
               </div>
+            </div>
+
+            {/* 자소서 관리 바로가기 */}
+            <div style={{ background:C.white, borderRadius:16, padding:"24px", border:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div>
+                <h3 style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:4 }}>자소서 관리</h3>
+                <p style={{ fontSize:12, color:C.textMuted }}>면접 전 미리 작성해두면 멘토가 맞춤 질문을 준비합니다</p>
+              </div>
+              <Link to="/mentee/resume" style={{ textDecoration:"none" }}>
+                <button style={{
+                  padding:"10px 20px", borderRadius:8,
+                  background:C.navy, color:C.white,
+                  border:"none", fontSize:13, fontWeight:700,
+                  cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", gap:6,
+                  transition:"background 0.15s",
+                }}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.navyMid}
+                  onMouseLeave={e=>e.currentTarget.style.background=C.navy}
+                >
+                  자소서 작성하러 가기
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </Link>
             </div>
 
             {/* 멘토 코멘트 모음 */}

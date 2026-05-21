@@ -7,7 +7,6 @@ import MenteeDashboard from './pages/Mentee/MenteeDashboard'
 import MentorInfoRegister from './pages/Mentor/MentorRegister'
 import MentorSearch from './pages/Mentee/MentorSearch'
 import MentorApply from './pages/Mentee/MentorApply'
-import DocumentUpload from './pages/Mentee/DocumentUpload'
 import InterviewSession from './pages/Interview/InterviewSession'
 import InterviewRobby from './pages/Interview/InterviewLobby'
 import MentoringSessionPage from './pages/Interview/MentoringSession'
@@ -18,6 +17,7 @@ import FinalReportPage from './pages/Report/FinalReport'
 import MyPage from './pages/MyPage'
 import MentorMyPage from './pages/MyPage/MentorMypage'
 import MenteeMyPage from './pages/MyPage/MenteeMypage'
+import ResumeManage from './pages/MyPage/ResumeManage'
 import { getAuthUser } from './store/authStore'
 
 /* 로그인 필요 + 역할 체크 */
@@ -49,10 +49,10 @@ export default function App() {
 
       {/* 멘티 전용 */}
       <Route path="/dashboard/mentee"        element={<ProtectedRoute role="mentee" element={<MenteeDashboard />} />} />
-      <Route path="/mentee/documents"        element={<ProtectedRoute role="mentee" element={<DocumentUpload />} />} />
       <Route path="/mentor/search"           element={<ProtectedRoute role="mentee" element={<MentorSearch />} />} />
       <Route path="/mentor/apply/:id"        element={<ProtectedRoute role="mentee" element={<MentorApply />} />} />
       <Route path="/mentee/mypage"           element={<ProtectedRoute role="mentee" element={<MenteeMyPage />} />} />
+      <Route path="/mentee/resume"           element={<ProtectedRoute role="mentee" element={<ResumeManage />} />} />
       <Route path="/interview/ready/:id"     element={<ProtectedRoute role="mentee" element={<InterviewRobby role="mentee" />} />} />
       <Route path="/interview/mentee/:id"    element={<ProtectedRoute role="mentee" element={<InterviewSession role="mentee" />} />} />
       <Route path="/mentoring/mentee/:sessionId" element={<ProtectedRoute role="mentee" element={<MentoringSessionPage />} />} />

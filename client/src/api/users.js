@@ -2,9 +2,10 @@ import { getAuthUser } from "../store/authStore";
 
 function authHeaders() {
   const user = getAuthUser();
+  if (!user?.accessToken) throw Object.assign(new Error("로그인 토큰 없음"), { status: 401 });
   return {
     "Content-Type": "application/json",
-    ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
+    Authorization: `Bearer ${user.accessToken}`,
   };
 }
 
@@ -29,7 +30,11 @@ export async function updateMyProfile(data) {
     headers: authHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("프로필 수정 실패");
+  if (!res.ok) {
+    const status = res.status;
+    console.error("[updateMyProfile] 실패:", status, await res.text().catch(()=>""));
+    throw Object.assign(new Error("프로필 수정 실패"), { status });
+  }
   return res.json();
 }
 
@@ -40,5 +45,6 @@ export async function updateMyProfile(data) {
 export async function getUserSessions() {
   const res = await fetch("/api/users/me/sessions", { headers: authHeaders() });
   if (!res.ok) throw new Error("면접 내역 조회 실패");
-  return res.json();
+  const data = await res.json();
+  return Array.isArray(data) ? data : (data.content ?? []);
 }

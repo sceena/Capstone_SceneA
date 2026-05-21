@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { getFitGapAnalysis } from "../../api/sessions";
 
 // ─── 상수 ────────────────────────────────────────────────────────
 const NAVY = "#0D2240";
@@ -110,6 +111,12 @@ export default function FinalReportPage() {
 
   const [notified, setNotified] = useState(false);
   const [showMentorComment, setShowMentorComment] = useState(false);
+  const [fitGap, setFitGap] = useState(null);
+
+  useEffect(() => {
+    if (!reportData?.sessionId) return;
+    getFitGapAnalysis(reportData.sessionId).then(setFitGap).catch(() => {});
+  }, [reportData?.sessionId]);
 
   // 리포트 데이터가 없으면 마이페이지로
   useEffect(() => {
@@ -148,13 +155,7 @@ export default function FinalReportPage() {
     R: { bg: "#FCE7F3", text: "#9D174D" },
   };
 
-  const FIT_GAP = [
-    ["Java / Spring Boot", 92],
-    ["대규모 트래픽 경험", 78],
-    ["CI/CD · DevOps", 51],
-    ["MSA · 분산 시스템", 44],
-    ["데이터 파이프라인", 22],
-  ];
+  const FIT_GAP = fitGap?.skills?.map(s => [s.label, s.pct]) ?? [];
 
   return (
     <div

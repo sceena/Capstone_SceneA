@@ -1,0 +1,52 @@
+{
+  "session_id": 1,
+  "candidate_context": {
+    "candidate_id": 10,
+    "name": "홍길동",
+    "level": "junior",
+    "target_role": "backend",
+    "resume_summaries": [
+      "Spring Boot 쇼핑몰 API 프로젝트에서 Redis 캐시를 적용하고 MySQL 인덱스를 튜닝한 경험이 있음"
+    ]
+  },
+  "company_context": {
+    "target_company": "SceneA Labs",
+    "target_role": "backend",
+    "job_posting_summary": "Spring Boot 기반 API 개발, Redis 캐시, MySQL 성능 개선, 장애 대응 경험을 우대",
+    "job_posting_url": "https://example.com/jobs/backend"
+  },
+  "interview_answers": [
+    {
+      "question_id": 101,
+      "question": "Redis 캐시를 사용하는 이유를 설명해주세요.",
+      "answer_id": 1001,
+      "answer": "DB 부하를 줄이기 위해 Redis 캐시를 적용했습니다. 상품 조회 API에서 반복 조회가 많아 TTL을 설정했고, 적용 후 응답 시간이 30% 개선되었습니다.",
+      "audio_url": "answers/session-1/q101.wav",
+      "answer_start": "2026-05-15T10:00:12",
+      "answer_end": "2026-05-15T10:00:48",
+      "metrics": {
+        "duration_sec": 36,
+        "speaking_speed": "적정",
+        "silence": "침묵 없음",
+        "sentence_clarity": "보통",
+        "star_structure": "AI 판단 필요"
+      }
+    },
+    {
+      "question_id": 102,
+      "question": "트랜잭션 전파 옵션을 설명해주세요.",
+      "answer_id": 1002,
+      "answer": "REQUIRED와 REQUIRES_NEW가 있습니다. REQUIRED는 기존 트랜잭션에 참여하고 REQUIRES_NEW는 새로 만듭니다.",
+      "audio_url": "answers/session-1/q102.wav",
+      "answer_start": "2026-05-15T10:01:10",
+      "answer_end": "2026-05-15T10:01:35",
+      "metrics": {
+        "duration_sec": 25,
+        "speaking_speed": "느림",
+        "silence": "침묵 1회",
+        "sentence_clarity": "짧음",
+        "star_structure": "AI 판단 필요"
+      }
+    }
+  ]
+}

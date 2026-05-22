@@ -38,16 +38,31 @@ public class AnalysisReport extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String worstMoment;
 
+    @Column(columnDefinition = "TEXT")
+    private String rawAiResponseJson;
+
     @Builder
     public AnalysisReport(InterviewSession interviewSession, String aiSummary,
                           Float totalScore, Float alignmentScore,
-                          String bestMoment, String worstMoment) {
+                          String bestMoment, String worstMoment, String rawAiResponseJson) {
         this.interviewSession = interviewSession;
         this.aiSummary = aiSummary;
         this.totalScore = totalScore;
         this.alignmentScore = alignmentScore;
         this.bestMoment = bestMoment;
         this.worstMoment = worstMoment;
+        this.rawAiResponseJson = rawAiResponseJson;
+    }
+
+    public void updateAiReport(String aiSummary, Float totalScore, Float alignmentScore,
+                               String bestMoment, String worstMoment, String rawAiResponseJson) {
+        this.aiSummary = aiSummary;
+        this.totalScore = totalScore;
+        this.alignmentScore = alignmentScore;
+        this.bestMoment = bestMoment;
+        this.worstMoment = worstMoment;
+        this.rawAiResponseJson = rawAiResponseJson;
+        this.reportStatus = ReportStatus.FIRST;
     }
 
     public void completeFinal(String mentorFeedback) {

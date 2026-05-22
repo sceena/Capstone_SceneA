@@ -27,6 +27,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.springframework.http.HttpMethod;
+import org.springframework.mock.web.MockMultipartFile;
+
 @SpringBootTest
 @AutoConfigureMockMvc
 class UserControllerTest {
@@ -49,6 +52,7 @@ class UserControllerTest {
         UserProfileResponse response = new UserProfileResponse(
                 1L, "홍길동", "hong@test.com", "mentee",
                 List.of(new UserProfileResponse.TagInfo(1L, "Spring", "job_skill")),
+                null,
                 LocalDateTime.now()
         );
         given(userService.getMyProfile(any())).willReturn(response);
@@ -72,16 +76,18 @@ class UserControllerTest {
     }
 
     @Test
-    void 내_프로필_수정_성공_200() throws Exception {
+    void 내_프로필_수정_이름만_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null);
-        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "새이름", LocalDateTime.now());
-        given(userService.updateMyProfile(any(), any())).willReturn(response);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null);
+        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "새이름", null, LocalDateTime.now());
+        given(userService.updateMyProfile(any(), any(), any())).willReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+        MockMultipartFile dataPart = new MockMultipartFile("data", "", MediaType.APPLICATION_JSON_VALUE,
+                objectMapper.writeValueAsBytes(request));
+
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me")
+                        .file(dataPart)
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.name").value("새이름"))
@@ -89,24 +95,38 @@ class UserControllerTest {
     }
 
     @Test
+    void 내_프로필_수정_이미지만_성공_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "홍길동", "http://s3/photo.jpg", LocalDateTime.now());
+        given(userService.updateMyProfile(any(), any(), any())).willReturn(response);
+
+        MockMultipartFile imagePart = new MockMultipartFile("image", "photo.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me")
+                        .file(imagePart)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profile_image_url").value("http://s3/photo.jpg"));
+    }
+
+    @Test
     void 내_프로필_수정_수정할_필드_없음_400() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null);
-        given(userService.updateMyProfile(any(), any()))
+        given(userService.updateMyProfile(any(), any(), any()))
                 .willThrow(new CustomException(ErrorCode.INVALID_REQUEST));
 
-        mockMvc.perform(patch("/api/users/me")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+        MockMultipartFile dataPart = new MockMultipartFile("data", "", MediaType.APPLICATION_JSON_VALUE,
+                objectMapper.writeValueAsBytes(new UserProfileUpdateRequest(null, null, null)));
+
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me")
+                        .file(dataPart)
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void 내_프로필_수정_인증없이_401() throws Exception {
-        mockMvc.perform(patch("/api/users/me")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me"))
                 .andExpect(status().isUnauthorized());
     }
 

@@ -412,11 +412,16 @@ export default function MentoringSessionPage() {
 
   /* ── 드로잉(형광펜) ── */
   const [drawMode, setDrawMode] = useState(false);
-  const [drawTool, setDrawTool] = useState("highlight"); // highlight | pen | eraser
+  const [drawTool, setDrawTool] = useState("highlight");
   const [drawColor, setDrawColor] = useState("#FFD700");
   const canvasRef = useRef(null);
-  const isDrawingRef = useRef(false);
+  const scrollContainerRef = useRef(null);
+  const pendingRef = useRef(false);      // mousedown 후 아직 방향 미결정
+  const scrollModeRef = useRef(false);   // 드래그 → 스크롤 모드
+  const mouseStartRef = useRef({ x: 0, y: 0 });
+  const scrollStartTopRef = useRef(0);
   const lastPosRef = useRef({ x: 0, y: 0 });
+  const DRAG_THRESHOLD = 6;
 
   const getPos = (e, canvas) => {
     const rect = canvas.getBoundingClientRect();
@@ -428,38 +433,63 @@ export default function MentoringSessionPage() {
   const startDraw = (e) => {
     if (!drawMode) return;
     e.preventDefault();
-    isDrawingRef.current = true;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    mouseStartRef.current = { x: cx, y: cy };
     lastPosRef.current = getPos(e, canvasRef.current);
+    pendingRef.current = true;
+    scrollModeRef.current = false;
+    scrollStartTopRef.current = scrollContainerRef.current?.scrollTop ?? 0;
   };
 
   const draw = (e) => {
-    if (!drawMode || !isDrawingRef.current) return;
+    if (!drawMode || !pendingRef.current && !scrollModeRef.current) return;
     e.preventDefault();
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    const pos = getPos(e, canvas);
-    ctx.beginPath();
-    ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    if (drawTool === "highlight") {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = drawColor + "55";
-      ctx.lineWidth = 22;
-    } else if (drawTool === "pen") {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = drawColor;
-      ctx.lineWidth = 3;
-    } else {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.lineWidth = 32;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+
+    if (pendingRef.current) {
+      const dist = Math.hypot(cx - mouseStartRef.current.x, cy - mouseStartRef.current.y);
+      if (dist > DRAG_THRESHOLD) {
+        pendingRef.current = false;
+        scrollModeRef.current = true;
+      }
+      return;
     }
-    ctx.stroke();
-    lastPosRef.current = pos;
+
+    if (scrollModeRef.current) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollStartTopRef.current - (cy - mouseStartRef.current.y);
+      }
+    }
   };
 
-  const stopDraw = () => { isDrawingRef.current = false; };
+  const stopDraw = () => {
+    if (pendingRef.current) {
+      // 클릭 → 해당 위치에 하이라이트 마크 찍기
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const { x, y } = lastPosRef.current;
+      ctx.beginPath();
+      if (drawTool === "highlight") {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = drawColor + "55";
+        ctx.ellipse(x, y, 24, 11, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (drawTool === "pen") {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = drawColor;
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.arc(x, y, 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    pendingRef.current = false;
+    scrollModeRef.current = false;
+  };
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -826,7 +856,7 @@ export default function MentoringSessionPage() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* 좌측: 공유 리포트 + 드로잉 레이어 */}
         <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-          <div style={{ width: "100%", height: "100%", overflowY: "auto" }}>
+          <div ref={scrollContainerRef} style={{ width: "100%", height: "100%", overflowY: "auto" }}>
             <SharedReport report={session.report} />
           </div>
 
@@ -836,7 +866,9 @@ export default function MentoringSessionPage() {
             style={{
               position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
               pointerEvents: drawMode ? "auto" : "none",
-              cursor: drawMode ? (drawTool === "eraser" ? "cell" : "crosshair") : "default",
+              cursor: drawMode
+                ? (scrollModeRef.current ? "grabbing" : drawTool === "eraser" ? "cell" : "crosshair")
+                : "default",
               touchAction: "none",
             }}
             onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
@@ -846,7 +878,7 @@ export default function MentoringSessionPage() {
           {/* 드로잉 툴바 */}
           {drawMode && (
             <div style={{
-              position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)",
+              position: "absolute", top: 14, left: 14,
               background: "#fff", borderRadius: 14, padding: "8px 14px",
               display: "flex", alignItems: "center", gap: 10,
               boxShadow: "0 4px 20px rgba(0,0,0,0.18)", zIndex: 10,
@@ -898,55 +930,125 @@ export default function MentoringSessionPage() {
           )}
         </div>
 
-        {/* 우측: 비디오 + 공유 안내 */}
+        {/* 우측: 비디오 + 세션 정보 패널 */}
         <div
           style={{
-            width: 220,
+            width: 280,
             background: "#111",
             display: "flex",
             flexDirection: "column",
             flexShrink: 0,
             borderLeft: "1px solid #222",
+            overflowY: "auto",
           }}
         >
-          {/* 멘토 비디오 */}
-          <VideoTile
-            stream={isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
-            label={`${session.mentor.name} (멘토)`}
-            mirror={isMentor} muted={isMentor}
-            isSpeaking={(audioLevels[isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
-            camOff={isMentor && !isCamOn}
-          />
-          <div style={{ height: 1, background: "#222", flexShrink: 0 }} />
-          {/* 멘티 비디오 */}
-          <VideoTile
-            stream={!isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
-            label={`${session.mentee.name} (멘티)`}
-            mirror={!isMentor} muted={!isMentor}
-            isSpeaking={(audioLevels[!isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
-            camOff={!isMentor && !isCamOn}
-          />
+          {/* 비디오 영역 (각 50%) */}
+          <div style={{ height: 240, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+            {/* 멘토 비디오 */}
+            <VideoTile
+              stream={isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
+              label={`${session.mentor.name} (멘토)`}
+              mirror={isMentor} muted={isMentor}
+              isSpeaking={(audioLevels[isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
+              camOff={isMentor && !isCamOn}
+            />
+            <div style={{ height: 1, background: "#222", flexShrink: 0 }} />
+            {/* 멘티 비디오 */}
+            <VideoTile
+              stream={!isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
+              label={`${session.mentee.name} (멘티)`}
+              mirror={!isMentor} muted={!isMentor}
+              isSpeaking={(audioLevels[!isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
+              camOff={!isMentor && !isCamOn}
+            />
+          </div>
 
-          {/* 화면 공유 안내 */}
-          <div
-            style={{
-              background: "#0D2240",
-              padding: "14px 14px",
-              borderTop: "1px solid rgba(255,255,255,0.1)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2">
+          {/* 멘티 프로필 카드 */}
+          <div style={{ background: "#0D2240", padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <Avatar name={session.mentee.name} size={36} bg="#1E6A5A" fontSize={12} />
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{session.mentee.name}</p>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>멘티 · {session.report.date}</p>
+              </div>
+            </div>
+            {/* 종합 점수 */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>AI 종합 점수</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: GREEN }}>{session.report.totalScore}<span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/100</span></span>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height: 4 }}>
+              <div style={{ width: `${session.report.totalScore}%`, height: 4, borderRadius: 99, background: GREEN }} />
+            </div>
+            {/* 취약 역량 태그 */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
+              {session.report.fitGap.filter(f => f.pct < 50).map(f => (
+                <span key={f.label} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "rgba(226,75,74,0.18)", color: "#E24B4A", fontWeight: 600 }}>
+                  {f.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* 세션 아젠다 */}
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>세션 아젠다</p>
+            {[
+              { label: "AI 리포트 종합 리뷰", done: true },
+              { label: "BEST/WORST 구간 피드백", done: true },
+              { label: "스크립트 개선 포인트 논의", done: false },
+              { label: "취약 역량 집중 코칭", done: false },
+              { label: "다음 면접 전략 수립", done: false },
+            ].map((item, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{
+                  width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                  background: item.done ? GREEN : "transparent",
+                  border: `1.5px solid ${item.done ? GREEN : "rgba(255,255,255,0.2)"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {item.done && (
+                    <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                      <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                <span style={{ fontSize: 12, color: item.done ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.85)", textDecoration: item.done ? "line-through" : "none" }}>
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* 멘토 메모 */}
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flex: 1, display: "flex", flexDirection: "column" }}>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>멘토 메모</p>
+            <textarea
+              placeholder="세션 중 메모를 남겨두세요..."
+              style={{
+                flex: 1, minHeight: 80,
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8, padding: "10px 12px",
+                color: "rgba(255,255,255,0.8)", fontSize: 12,
+                fontFamily: "inherit", lineHeight: 1.6,
+                resize: "none", outline: "none",
+              }}
+              onFocus={e => { e.target.style.borderColor = "rgba(29,158,117,0.5)"; }}
+              onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
+            />
+          </div>
+
+          {/* 화면 공유 상태 */}
+          <div style={{ background: "#0A1929", padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
                 <polyline points="8 21 12 17 16 21" />
               </svg>
-              <span style={{ color: "#1D9E75", fontSize: 11, fontWeight: 700 }}>
-                스크린 공유 중
-              </span>
+              <span style={{ color: GREEN, fontSize: 11, fontWeight: 700 }}>리포트 공유 중</span>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: GREEN, animation: "blink 1.5s ease-in-out infinite", marginLeft: "auto" }} />
             </div>
-            <p style={{ color: "#888", fontSize: 11, lineHeight: 1.6 }}>
-              멘토가 리포트를 스크롤하면 멘티 화면도 동기화됩니다. 특정 구간 클릭 시 피드백을 나누세요.
-            </p>
           </div>
         </div>
       </div>

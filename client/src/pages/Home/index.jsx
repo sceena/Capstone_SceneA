@@ -11,9 +11,9 @@ const C = {
   navy:     "#0D2240",   // Main 딥 네이비
   accent:   "#1B4F7A",   // Accent 미드 블루
   mid:      "#3A7FAF",   // Mid 스틸 블루
-  cream:    "#E8E0D0",   // Cream 크림 베이지
+  cream:    "#e8e0d0",   // Cream 크림 베이지
   light:    "#F2EDE4",   // Light 라이트 크림
-  bg:       "#FAF8F4",   // BG 백그라운드
+  bg:       "#faf8f4d4",   // BG 백그라운드
   white:    "#FFFFFF",
   text:     "#1A1818",
   textSub:  "#6B6863",
@@ -840,7 +840,7 @@ const MentorsSection = () => {
           현직자 멘토
         </h2>
         <p style={{ marginTop: 16, fontSize: 15, color: "rgba(255,255,255,0.5)", lineHeight: 1.7 }}>
-          Here's what people are saying
+          SceneA와 함께한 멘티들의 이야기
         </p>
       </div>
 
@@ -969,23 +969,23 @@ const ReviewsAndCTA = () => (
           실제 멘티들의 후기
         </h2>
         <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 36 }}>
-          A little line about what's being said and who's saying it.
+          현직자 멘토와 함께한 실제 멘티들의 솔직한 후기입니다.
         </p>
 
         {/* 후기 카드 리스트 — 세로 스택 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {[
             {
-              initials: "박J", bg: "#533BA0", name: "Sally Spiracle", role: "Nest Founder", stars: 5,
-              text: "When we began building this colony, I was skeptical about how we could make sure the right bugs would find us to join in. Namedly's integrated solution exceeded all my expectations.",
+              initials: "박S", bg: "#533BA0", name: "박서연", role: "카카오 프론트엔드 개발자 최종 합격", stars: 5,
+              text: "AI 리포트로 제 WPM이 기준보다 30% 빠르다는 걸 처음 알았어요. 멘토님이 그 부분만 집중 코칭해주셔서 실제 면접에서 훨씬 안정적으로 말할 수 있었습니다. 강력 추천합니다.",
             },
             {
-              initials: "최C", bg: "#8B4513", name: "Carl Caterpillar", role: "Head of Growth", stars: 5,
-              text: "I've been transformed completely. I wouldn't use any other service.",
+              initials: "이J", bg: "#8B4513", name: "이준석", role: "네이버 백엔드 1차 통과", stars: 5,
+              text: "기술 면접에서 매번 두루뭉술하게 답했는데, STAR 구조 피드백 받고 나서 완전히 달라졌어요. 멘토님이 현장에서 어떤 걸 원하는지 구체적으로 알려주셔서 너무 좋았습니다.",
             },
             {
-              initials: "소S", bg: "#145A32", name: "Sophia Segment", role: "CIO", stars: 4,
-              text: "As Chief Insect Officer, it's my job to make sure all bugs feel represented, and Namedly exceeded all my expectations.",
+              initials: "김M", bg: "#145A32", name: "김민준", role: "토스 iOS 개발자 지원", stars: 4,
+              text: "SceneA 없었으면 면접 준비 방향 자체를 잘못 잡았을 것 같아요. AI가 제 답변의 논리 구조 문제를 짚어주고 멘토님이 개선 방향을 잡아줘서 단기간에 많이 성장했습니다.",
             },
           ].map((r, i) => (
             <div key={i} style={{
@@ -1047,7 +1047,7 @@ const ReviewsAndCTA = () => (
           이제 '전략'으로 승부하세요
         </h2>
         <p style={{ fontSize: 14, color: C.textSub, lineHeight: 1.7, marginBottom: 32 }}>
-          Go ahead and say just a little more about what you do.
+          혼자 반복하는 연습에서 벗어나, 데이터 기반의 맞춤형 피드백으로 면접을 준비하세요.
         </p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 40 }}>
           <a href="/auth/register" style={{

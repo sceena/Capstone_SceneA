@@ -7,42 +7,55 @@ import { getAuthUser } from "../../store/authStore";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 
-/* ── 원격 참여자 비디오 타일 ── */
-function PeerVideo({ stream, peerId }) {
+/* ── 통합 비디오 타일 ── */
+function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (ref.current && stream) {
-      ref.current.srcObject = stream;
-      ref.current.play().catch(() => {});
-    }
-  }, [stream]);
+    const video = ref.current;
+    if (!video || !stream) return;
+    video.srcObject = stream;
+    video.muted = muted;
+    video.play().catch(() => {});
+  }, [stream, muted]);
   return (
     <div style={{
-      position: "relative", flexShrink: 0,
-      width: 160, height: 90, borderRadius: 8,
-      background: "#1a1a2e", border: "2px solid transparent",
-      overflow: "hidden", cursor: "pointer",
+      position: "relative", width: "100%", height: "100%",
+      background: "#0f172a", borderRadius: 12, overflow: "hidden",
+      border: `2px solid ${isSpeaking ? "#1D9E75" : "rgba(255,255,255,0.1)"}`,
+      transition: "border-color 0.3s",
     }}>
-      <video ref={ref} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      <div style={{ position: "absolute", bottom: 6, left: 6, background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "2px 7px" }}>
-        <span style={{ fontSize: 11, color: "#fff", fontWeight: 500 }}>참여자 {peerId}</span>
-      </div>
+      <video ref={ref} autoPlay playsInline style={{
+        width: "100%", height: "100%", objectFit: "cover",
+        transform: mirror ? "scaleX(-1)" : "none",
+        display: camOff ? "none" : "block",
+      }} />
+      {camOff && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: "50%", background: "#1B4F7A",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 20, color: "#fff", fontWeight: 700,
+          }}>
+            {(label || "?")[0]}
+          </div>
+        </div>
+      )}
+      {label && (
+        <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.6)", borderRadius: 6, padding: "3px 10px" }}>
+          <span style={{ fontSize: 11, color: "#fff", fontWeight: 500 }}>{label}</span>
+        </div>
+      )}
+      {isSpeaking && (
+        <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "flex-end", gap: 2 }}>
+          {[4, 8, 6, 10, 5].map((h, i) => (
+            <div key={i} style={{
+              width: 3, background: "#1D9E75", borderRadius: 2, height: h,
+              animation: `speakPulse 0.5s ease-in-out ${i * 0.08}s infinite`,
+            }} />
+          ))}
+        </div>
+      )}
     </div>
-  );
-}
-
-/* ── 메인 참여자 비디오 (크게) ── */
-function MainVideo({ stream }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (ref.current && stream) {
-      ref.current.srcObject = stream;
-      ref.current.play().catch(() => {});
-    }
-  }, [stream]);
-  if (!stream) return null;
-  return (
-    <video ref={ref} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
   );
 }
 
@@ -97,15 +110,6 @@ export default function InterviewSession({ role = "mentee" }) {
   }, [id]);
 
   /* ── WebRTC refs ── */
-  const localVideoRef = useRef(null);
-  const localVideoCallbackRef = useCallback((node) => {
-    localVideoRef.current = node;
-    if (node && localStreamRef.current) {
-      node.srcObject = localStreamRef.current;
-      node.muted = true;
-      node.play().catch(() => {});
-    }
-  }, []);
   const localStreamRef = useRef(null);
   const socketRef = useRef(null);
   const deviceRef = useRef(null);
@@ -115,10 +119,18 @@ export default function InterviewSession({ role = "mentee" }) {
   const audioProducerRef = useRef(null);
   const consumersRef = useRef(new Map());
 
+  /* ── 오디오 레벨 (활성 발화자) refs ── */
+  const audioCtxRef = useRef(null);
+  const localAnalyserRef = useRef(null);
+  const peerAnalysersRef = useRef({});
+
   /* ── 원격 참여자 상태 ── */
   const peersRef = useRef({});
   const [peerIds, setPeerIds] = useState([]);
   const [mediaError, setMediaError] = useState(null);
+  const [localMediaStream, setLocalMediaStream] = useState(null);
+  const [audioLevels, setAudioLevels] = useState({});
+  const [activeSpeakerId, setActiveSpeakerId] = useState(null);
 
   const isMentor = role === "mentor";
 
@@ -149,6 +161,16 @@ export default function InterviewSession({ role = "mentee" }) {
           }
           peersRef.current[peerId].addTrack(consumer.track);
           setPeerIds(prev => prev.includes(peerId) ? [...prev] : [...prev, peerId]);
+
+          if (consumer.track.kind === 'audio') {
+            try {
+              if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+              const analyser = audioCtxRef.current.createAnalyser();
+              analyser.fftSize = 256;
+              audioCtxRef.current.createMediaStreamSource(peersRef.current[peerId]).connect(analyser);
+              peerAnalysersRef.current[peerId] = analyser;
+            } catch {}
+          }
 
           socket.emit("resumeConsumer", { consumerId: consumer.id }, () => {});
         } catch (e) {
@@ -188,11 +210,14 @@ export default function InterviewSession({ role = "mentee" }) {
       if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
 
       localStreamRef.current = localStream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-        localVideoRef.current.muted = true;
-        localVideoRef.current.play().catch(() => {});
-      }
+      setLocalMediaStream(localStream);
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        const analyser = audioCtxRef.current.createAnalyser();
+        analyser.fftSize = 256;
+        audioCtxRef.current.createMediaStreamSource(localStream).connect(analyser);
+        localAnalyserRef.current = analyser;
+      } catch {}
 
       /* 2. 소켓 연결 */
       socket = io(MEDIA_SERVER, { withCredentials: true });
@@ -282,6 +307,7 @@ export default function InterviewSession({ role = "mentee" }) {
       /* 11. 참여자 퇴장 */
       socket.on("peerLeft", ({ peerId }) => {
         delete peersRef.current[peerId];
+        delete peerAnalysersRef.current[peerId];
         setPeerIds(prev => prev.filter(p => p !== peerId));
       });
     };
@@ -297,9 +323,33 @@ export default function InterviewSession({ role = "mentee" }) {
       consumersRef.current.forEach(c => c.close());
       consumersRef.current.clear();
       localStreamRef.current?.getTracks().forEach(t => t.stop());
+      localAnalyserRef.current = null;
+      Object.keys(peerAnalysersRef.current).forEach(k => delete peerAnalysersRef.current[k]);
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
       socket?.disconnect();
     };
   }, [id, consumeProducer]);
+
+  /* ── 오디오 레벨 폴링 (활성 발화자 감지) ── */
+  useEffect(() => {
+    const THRESHOLD = 0.025;
+    const getLevel = (analyser) => {
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      return data.reduce((a, b) => a + b, 0) / data.length / 255;
+    };
+    const interval = setInterval(() => {
+      const levels = {};
+      if (localAnalyserRef.current) levels['__local'] = getLevel(localAnalyserRef.current);
+      Object.entries(peerAnalysersRef.current).forEach(([pid, an]) => { levels[pid] = getLevel(an); });
+      setAudioLevels(levels);
+      let maxLevel = THRESHOLD, speaker = null;
+      Object.entries(levels).forEach(([id, lv]) => { if (lv > maxLevel) { maxLevel = lv; speaker = id; } });
+      setActiveSpeakerId(speaker);
+    }, 300);
+    return () => clearInterval(interval);
+  }, []);
 
   /* ── 마이크 토글 ── */
   const handleMicToggle = () => {
@@ -378,8 +428,8 @@ export default function InterviewSession({ role = "mentee" }) {
     setCheckedQs(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]);
   };
 
-  /* ── 메인 뷰: 첫 번째 원격 참여자 or 자신 ── */
-  const mainPeerId = peerIds[0] ?? null;
+  const SPEAK_THRESHOLD = 0.025;
+  const mainViewId = peerIds.length >= 2 ? (activeSpeakerId || peerIds[0]) : null;
 
   return (
     <>
@@ -391,6 +441,7 @@ export default function InterviewSession({ role = "mentee" }) {
         body{font-family:'Noto Sans KR',sans-serif;background:#f5f5f5;color:#111}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @keyframes speakPulse{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
@@ -460,91 +511,61 @@ export default function InterviewSession({ role = "mentee" }) {
           {/* ── 메인 비디오 영역 ── */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-            {/* 메인 스피커 뷰 */}
-            <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#111827" }}>
-              {mainPeerId ? (
-                <MainVideo stream={peersRef.current[mainPeerId]} />
-              ) : (
-                /* 연결 전 자신의 카메라 대형 표시 */
-                <div style={{ width: "100%", height: "100%", position: "relative" }}>
-                  <video
-                    ref={localVideoCallbackRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }}
-                  />
-                  {!camOn && (
-                    <div style={{
-                      position: "absolute", inset: 0,
-                      background: "#111827",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#1B4F7A", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff" }}>나</div>
-                        <p style={{ color: "#9ca3af", fontSize: 13 }}>카메라 꺼짐</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 녹화 타이머 */}
+            {/* ── 비디오 그리드 ── */}
+            <div style={{ flex: 1, overflow: "hidden", background: "#111827", position: "relative" }}>
+              {/* 타이머 */}
               <div style={{
-                position: "absolute", top: 16, left: 16,
+                position: "absolute", top: 16, left: 16, zIndex: 10,
                 background: "rgba(0,0,0,0.55)", borderRadius: 20,
                 padding: "5px 12px", display: "flex", alignItems: "center", gap: 7,
               }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#EF4444", animation: recording ? "pulse 1.2s ease-in-out infinite" : "none" }} />
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>{formatTime(elapsed)}</span>
               </div>
-            </div>
 
-            {/* 하단 썸네일 바 */}
-            <div style={{
-              background: "#FAF8F4", padding: "10px 16px",
-              borderTop: "1px solid #E8E0D0",
-              display: "flex", gap: 8, overflowX: "auto",
-            }}>
-              {/* 자신 (로컬) */}
-              <div style={{
-                position: "relative", flexShrink: 0,
-                width: 160, height: 90, borderRadius: 8,
-                background: "#1a1a2e", border: "2px solid #1D9E75",
-                overflow: "hidden",
-              }}>
-                <video
-                  ref={mainPeerId ? localVideoCallbackRef : null}
-                  autoPlay playsInline muted
-                  style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }}
-                />
-                {!camOn && (
-                  <div style={{ position: "absolute", inset: 0, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1B4F7A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#fff" }}>나</div>
+              {peerIds.length === 0 ? (
+                /* ── 혼자: 자신 화면 중앙 ── */
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", height: "100%", padding: 20 }}>
+                  <div style={{ width: "min(640px, 100%)", height: "min(480px, 100%)" }}>
+                    <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
+                      isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
                   </div>
-                )}
-                <div style={{ position: "absolute", bottom: 6, left: 6, background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "2px 7px" }}>
-                  <span style={{ fontSize: 11, color: "#fff", fontWeight: 500 }}>나 (본인)</span>
                 </div>
-                <div style={{
-                  position: "absolute", bottom: 6, right: 6,
-                  width: 20, height: 20, borderRadius: "50%",
-                  background: micOn ? "#1D9E75" : "#EF4444",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                    {!micOn
-                      ? <><rect x="3" y=".5" width="4" height="5" rx="2" fill="white"/><line x1="1" y1="1" x2="9" y2="9" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></>
-                      : <><rect x="3" y=".5" width="4" height="5" rx="2" fill="white"/><path d="M1 4.5c0 2.2 1.8 4 4 4s4-1.8 4-4" stroke="white" strokeWidth="1.2" strokeLinecap="round"/></>
-                    }
-                  </svg>
+              ) : peerIds.length === 1 ? (
+                /* ── 1:1: 나란히 ── */
+                <div style={{ display: "flex", gap: 12, width: "100%", height: "100%", padding: 16 }}>
+                  <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
+                    isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
+                  <VideoTile stream={peersRef.current[peerIds[0]]} label="상대방"
+                    isSpeaking={(audioLevels[peerIds[0]] || 0) > SPEAK_THRESHOLD} />
                 </div>
-              </div>
-
-              {/* 원격 참여자들 */}
-              {peerIds.map(peerId => (
-                <PeerVideo key={peerId} stream={peersRef.current[peerId]} peerId={peerId} />
-              ))}
+              ) : (
+                /* ── 1:N: 활성 발화자 크게 + 하단 스트립 ── */
+                <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "16px 16px 8px" }}>
+                  <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
+                    {mainViewId === '__local' ? (
+                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted isSpeaking camOff={!camOn} />
+                    ) : (
+                      <VideoTile stream={peersRef.current[mainViewId || peerIds[0]]} label="상대방"
+                        isSpeaking={(audioLevels[mainViewId || peerIds[0]] || 0) > SPEAK_THRESHOLD} />
+                    )}
+                  </div>
+                  <div style={{ height: 100, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
+                    {mainViewId !== '__local' && (
+                      <div style={{ width: 160, flexShrink: 0, height: "100%" }}>
+                        <VideoTile stream={localMediaStream} label="나" mirror muted
+                          isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
+                      </div>
+                    )}
+                    {peerIds.filter(p => p !== mainViewId).map(peerId => (
+                      <div key={peerId} style={{ width: 160, flexShrink: 0, height: "100%" }}>
+                        <VideoTile stream={peersRef.current[peerId]} label="참여자"
+                          isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── 하단 컨트롤 바 ── */}

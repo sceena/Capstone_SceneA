@@ -54,6 +54,24 @@ const GlobalStyle = () => (
       50%       { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
     }
 
+    /* ── Hero 파티클 ── */
+    @keyframes floatUp {
+      0%   { transform: translateY(0px) scale(1);   opacity: 0;   }
+      8%   { opacity: 1; }
+      88%  { opacity: 0.65; }
+      100% { transform: translateY(-105vh) scale(1.15); opacity: 0; }
+    }
+
+    /* ── Hero 링 회전 ── */
+    @keyframes ringRotate {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes ringRotateRev {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(-360deg); }
+    }
+
     /* ── 반응형 브레이크포인트 ── */
     @media (max-width: 768px) {
       .step-row { flex-direction: column !important; }
@@ -162,6 +180,31 @@ const Header = () => {
   );
 };
 
+/* ── 히어로 파티클 · 링 데이터 (정적) ── */
+const HERO_PARTICLES = [
+  { size:4,  left:7,  dur:13, delay:0    },
+  { size:6,  left:16, dur:17, delay:-3.5 },
+  { size:3,  left:25, dur:11, delay:-7   },
+  { size:8,  left:33, dur:19, delay:-1.2 },
+  { size:4,  left:41, dur:14, delay:-9   },
+  { size:5,  left:50, dur:13, delay:-4.8 },
+  { size:3,  left:58, dur:18, delay:-11  },
+  { size:7,  left:67, dur:15, delay:-2.3 },
+  { size:4,  left:76, dur:12, delay:-6.5 },
+  { size:6,  left:85, dur:20, delay:-14  },
+  { size:3,  left:12, dur:10, delay:-5.5 },
+  { size:5,  left:39, dur:16, delay:-8.2 },
+  { size:6,  left:63, dur:14, delay:-10  },
+  { size:4,  left:82, dur:15, delay:-13  },
+  { size:8,  left:93, dur:18, delay:-3   },
+];
+
+const HERO_RINGS = [
+  { size:520, opacity:0.055, dur:32, delay:0,   tilt:22,  rev:false },
+  { size:340, opacity:0.075, dur:21, delay:-8,  tilt:-18, rev:true  },
+  { size:720, opacity:0.03,  dur:46, delay:-20, tilt:38,  rev:false },
+];
+
 /* ── 히어로 섹션 ── */
 const Hero = () => (
   <section style={{
@@ -196,6 +239,50 @@ const Hero = () => (
         animation: `blobDrift 12s ease-in-out ${b.delay} infinite alternate`,
         pointerEvents: "none",
       }} />
+    ))}
+
+    {/* 회전 링 */}
+    {HERO_RINGS.map((ring, i) => (
+      <div key={`ring-${i}`} style={{
+        position: "absolute",
+        top: "50%", left: "50%",
+        width: ring.size, height: ring.size,
+        marginTop: -ring.size / 2,
+        marginLeft: -ring.size / 2,
+        transform: `rotateX(${ring.tilt}deg)`,
+        pointerEvents: "none",
+      }}>
+        <div style={{
+          width: "100%", height: "100%",
+          borderRadius: "50%",
+          border: `1px solid rgba(255,255,255,${ring.opacity})`,
+          animation: `${ring.rev ? "ringRotateRev" : "ringRotate"} ${ring.dur}s linear ${ring.delay}s infinite`,
+        }}>
+          {/* 링 위의 작은 점 */}
+          <div style={{
+            position: "absolute", top: -3, left: "50%",
+            width: 6, height: 6, marginLeft: -3,
+            borderRadius: "50%",
+            background: `rgba(255,255,255,${ring.opacity * 3.5})`,
+          }}/>
+        </div>
+      </div>
+    ))}
+
+    {/* 플로팅 파티클 */}
+    {HERO_PARTICLES.map((p, i) => (
+      <div key={`p-${i}`} style={{
+        position: "absolute",
+        bottom: "-5%",
+        left: `${p.left}%`,
+        width: p.size,
+        height: p.size,
+        borderRadius: "50%",
+        background: "rgba(255,255,255,0.55)",
+        boxShadow: p.size >= 6 ? "0 0 8px rgba(255,255,255,0.3)" : "none",
+        animation: `floatUp ${p.dur}s ease-in-out ${p.delay}s infinite`,
+        pointerEvents: "none",
+      }}/>
     ))}
 
     {/* 콘텐츠 */}
@@ -237,19 +324,6 @@ const Hero = () => (
           onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
         >
           면접 참여하러 가기
-        </Link>
-        <Link to="/mentor/search" style={{
-          background: "transparent", color: C.white,
-          fontSize: 15, fontWeight: 400,
-          padding: "14px 36px", borderRadius: 999,
-          border: `1.5px solid rgba(255,255,255,0.4)`,
-          textDecoration: "none",
-          transition: "border-color 0.2s",
-        }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.9)"}
-          onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"}
-        >
-          멘토 둘러보기
         </Link>
       </div>
     </div>
@@ -874,7 +948,7 @@ const MentorsSection = () => {
       </div>
 
       <div className="fade-up" style={{ textAlign: "center", marginTop: 48, padding: "0 5%" }}>
-        <Link to="/mentor/search" style={{
+        <Link to="/auth/login" style={{
           display: "inline-block",
           background: C.mid, color: C.white,
           fontSize: 15, fontWeight: 600,
@@ -1028,91 +1102,88 @@ const ReviewsAndCTA = () => (
         </div>
       </div>
 
-      {/* ── 오른쪽: 막막한 당신에게 CTA ── */}
+      {/* ── 오른쪽: Why SceneA ── */}
       <div className="fade-up" style={{ display: "flex", flexDirection: "column" }}>
         <p style={{
           fontSize: 12, fontWeight: 600, letterSpacing: "0.18em",
           color: C.mid, textTransform: "uppercase",
           marginBottom: 14,
         }}>
-          Start now
+          Why SceneA
         </p>
         <h2 style={{
           fontSize: 28, fontWeight: 700, color: C.navy,
           lineHeight: 1.35, letterSpacing: "-0.02em",
           marginBottom: 12,
         }}>
-          막막한 당신에게
+          취준생이라면 꼭 알아야 할
           <br />
-          이제 '전략'으로 승부하세요
+          <span style={{ color: C.accent }}>SceneA를 써야 하는 이유</span>
         </h2>
-        <p style={{ fontSize: 14, color: C.textSub, lineHeight: 1.7, marginBottom: 32 }}>
-          혼자 반복하는 연습에서 벗어나, 데이터 기반의 맞춤형 피드백으로 면접을 준비하세요.
+        <p style={{ fontSize: 14, color: C.textSub, lineHeight: 1.7, marginBottom: 28 }}>
+          혼자 반복하는 연습엔 한계가 있습니다. 데이터와 현직자 경험을 동시에 활용하세요.
         </p>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 40 }}>
+
+        <div style={{ marginBottom: 32 }}>
           <a href="/auth/register" style={{
+            display: "inline-block",
             background: C.navy, color: C.white,
             fontFamily: "inherit", fontSize: 14, fontWeight: 700,
-            padding: "12px 28px", borderRadius: 999,
+            padding: "13px 32px", borderRadius: 999,
             textDecoration: "none",
             transition: "transform 0.2s, background 0.2s",
           }}
             onMouseEnter={e => { e.currentTarget.style.background = C.accent; e.currentTarget.style.transform = "translateY(-2px)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = C.navy; e.currentTarget.style.transform = "translateY(0)"; }}
           >
-            면접 참여하러 가기
-          </a>
-          <a href="/mentor/search" style={{
-            background: "transparent", color: C.navy,
-            fontFamily: "inherit", fontSize: 14, fontWeight: 400,
-            padding: "12px 28px", borderRadius: 999,
-            border: `1.5px solid rgba(13,34,68,0.3)`,
-            textDecoration: "none",
-            transition: "border-color 0.2s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = C.navy}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(13,34,68,0.3)"}
-          >
-            멘토 탐색하기
+            지금 시작하기 →
           </a>
         </div>
 
-        {/* 컬러 카드 2개 — 2열 그리드, overflow 차단 */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 14,
-          /* 이 그리드가 부모를 넘치지 않도록 */
-          minWidth: 0,
-        }}>
+        {/* 가치 카드 4개 — 2×2 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, minWidth: 0 }}>
           {[
             {
-              bg: "#D6E8F5",
-              text: "혼자 하는 면접 연습, 계속 같은 실수를 반복하고 있는 건 아닌가요?",
+              bg: "#C6DCEF", accent: "#0D2240",
+              num: "01", title: "AI 실시간 분석",
+              desc: "말하기 속도·침묵·논리 구조를 데이터로 정확히 잡아냅니다",
             },
             {
-              bg: "#E8E0D0",
-              text: "데이터 위에 현직자의 경험을 입혀드립니다.",
+              bg: "#B8E2CE", accent: "#0A4A35",
+              num: "02", title: "현직자 1:1 코칭",
+              desc: "네이버·카카오 출신 멘토의 실무 경험이 직접 피드백이 됩니다",
+            },
+            {
+              bg: "#D2C6EC", accent: "#3B2070",
+              num: "03", title: "목표 기업 맞춤 전략",
+              desc: "공고 분석부터 예상 질문 설계까지 나만의 준비 로드맵",
+            },
+            {
+              bg: "#F6DFA4", accent: "#7A4E00",
+              num: "04", title: "성장을 눈으로 확인",
+              desc: "세션마다 쌓이는 리포트로 내 면접 실력 변화를 추적하세요",
             },
           ].map((card, i) => (
             <div key={i} style={{
               background: card.bg,
               borderRadius: 16,
-              padding: "24px 20px",
-              /* 고정 높이 대신 자연 높이 사용 */
-              minHeight: 140,
-              display: "flex",
-              alignItems: "flex-end",
-              /* 박스가 절대 그리드 셀 바깥으로 안 나가도록 */
-              minWidth: 0,
-              overflow: "hidden",
+              padding: "20px 18px",
+              minWidth: 0, overflow: "hidden",
+              position: "relative",
             }}>
+              <span style={{
+                position: "absolute", top: 14, right: 16,
+                fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
+                color: card.accent, opacity: 0.45,
+              }}>{card.num}</span>
               <p style={{
-                fontSize: 13, color: C.navy, fontWeight: 500,
+                fontSize: 14, fontWeight: 700, color: C.navy,
+                marginBottom: 7, lineHeight: 1.3, wordBreak: "keep-all",
+              }}>{card.title}</p>
+              <p style={{
+                fontSize: 12, color: C.textSub,
                 lineHeight: 1.65, wordBreak: "keep-all",
-              }}>
-                {card.text}
-              </p>
+              }}>{card.desc}</p>
             </div>
           ))}
         </div>

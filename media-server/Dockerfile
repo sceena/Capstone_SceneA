@@ -1,7 +1,9 @@
-FROM node:20-alpine
+FROM node:20-slim
 
-# mediasoup 네이티브 빌드에 필요한 패키지
-RUN apk add --no-cache python3 py3-pip make g++ linux-headers
+# mediasoup 빌드 도구 (prebuilt 바이너리 실패 시 fallback용)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

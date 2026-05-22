@@ -45,10 +45,7 @@ public enum ErrorCode {
     REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 리포트입니다."),
 
     // 파일
-    INVALID_FILE(HttpStatus.BAD_REQUEST, "이미지 파일만 업로드할 수 있습니다."),
-
-    // 화상통화
-    SESSION_NOT_JOINABLE(HttpStatus.BAD_REQUEST, "종료된 세션에는 입장할 수 없습니다.");
+    INVALID_FILE(HttpStatus.BAD_REQUEST, "이미지 파일만 업로드할 수 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

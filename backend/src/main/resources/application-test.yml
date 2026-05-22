@@ -24,3 +24,8 @@ cloud:
       secret-key: test-secret-key
     region:
       static: us-east-1
+
+livekit:
+  url: ws://localhost:7880
+  api-key: testkey
+  api-secret: test-secret-must-be-at-least-32-chars!!

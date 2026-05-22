@@ -245,7 +245,7 @@ function MetricRows({ metrics, tone }) {
         {rows.map(([label, value]) => (
           <div key={label} style={{ background: bgColor, borderRadius: 8, padding: "8px 10px" }}>
             <p style={{ color: labelColor, fontSize: 10, fontWeight: 700, margin: "0 0 4px" }}>{label}</p>
-            <p style={{ color: valueColor, fontSize: 12, fontWeight: 600, margin: 0 }}>{value}</p>
+      <p style={{ color: valueColor, fontSize: 13, fontWeight: 700, margin: 0 }}>{value}</p>
           </div>
         ))}
       </div>
@@ -258,7 +258,7 @@ function SectionTitle({ eyebrow, title, description }) {
     <div style={{ marginBottom: 14 }}>
       <p style={{ fontSize: 11, fontWeight: 800, color: GREEN, letterSpacing: 1, margin: "0 0 6px" }}>{eyebrow}</p>
       <h2 style={{ fontSize: 18, fontWeight: 800, color: NAVY, margin: "0 0 6px" }}>{title}</h2>
-      {description && <p style={{ fontSize: 13, color: "#666", lineHeight: 1.6, margin: 0 }}>{description}</p>}
+      {description && <p style={{ fontSize: 14, color: "#666", lineHeight: 1.65, margin: 0 }}>{description}</p>}
     </div>
   );
 }
@@ -274,8 +274,8 @@ function CoreQuestionCard({ type, question, report, questionNo }) {
     <div style={{ background: CARD, border: "1px solid #E8E5DF", borderTop: `4px solid ${accent}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
         <div>
-          <p style={{ fontSize: 12, fontWeight: 800, color: accent, letterSpacing: 0.5, margin: "0 0 4px" }}>{title}</p>
-          <p style={{ fontSize: 12, color: "#777", margin: 0 }}>{subtitle}</p>
+          <p style={{ fontSize: 13, fontWeight: 800, color: accent, letterSpacing: 0.5, margin: "0 0 4px" }}>{title}</p>
+          <p style={{ fontSize: 13, color: "#777", margin: 0 }}>{subtitle}</p>
         </div>
         <span style={{ flex: "0 0 auto", fontSize: 12, fontWeight: 800, color: accent, background: softBg, borderRadius: 99, padding: "5px 10px" }}>{questionNo}</span>
       </div>
@@ -287,12 +287,12 @@ function CoreQuestionCard({ type, question, report, questionNo }) {
 
       <div style={{ background: "#F8F7F4", borderRadius: 10, padding: 14, marginBottom: 14 }}>
         <p style={{ fontSize: 11, fontWeight: 800, color: "#777", margin: "0 0 6px" }}>답변</p>
-        <p style={{ color: "#333", fontSize: 13, lineHeight: 1.75, margin: 0 }}>{report?.answer || "답변 정보가 없습니다."}</p>
+        <p style={{ color: "#333", fontSize: 14, lineHeight: 1.75, margin: 0 }}>{report?.answer || "답변 정보가 없습니다."}</p>
       </div>
 
       <div style={{ borderLeft: `3px solid ${accent}`, paddingLeft: 12 }}>
         <p style={{ fontSize: 11, fontWeight: 800, color: accent, margin: "0 0 6px" }}>AI 분석</p>
-        <p style={{ color: "#444", fontSize: 13, lineHeight: 1.65, margin: 0 }}>{question?.reason || "분석 사유가 없습니다."}</p>
+        <p style={{ color: "#444", fontSize: 14, lineHeight: 1.7, margin: 0 }}>{question?.reason || "분석 사유가 없습니다."}</p>
       </div>
 
       <MetricRows metrics={question?.metrics_summary} tone={type} />
@@ -317,7 +317,7 @@ function FitGapList({ title, items = [], tone }) {
   return (
     <div style={{ background: bg, border: `1px solid ${isMatched ? "#BBF7D0" : "#FED7D7"}`, borderRadius: 12, padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <p style={{ fontSize: 13, fontWeight: 800, color: accent, margin: 0 }}>{title}</p>
+        <p style={{ fontSize: 14, fontWeight: 800, color: accent, margin: 0 }}>{title}</p>
         <span style={{ fontSize: 11, fontWeight: 800, color: accent, background: CARD, borderRadius: 99, padding: "4px 8px" }}>{items.length}개</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -325,11 +325,11 @@ function FitGapList({ title, items = [], tone }) {
           const parsed = parseFitGapItem(item);
           return (
             <div key={index} style={{ background: CARD, borderRadius: 10, padding: 13, border: "1px solid rgba(0,0,0,0.04)", borderLeft: `3px solid ${accent}` }}>
-              <p style={{ fontSize: 13, fontWeight: 800, color: "#222", lineHeight: 1.45, margin: parsed.detail ? "0 0 8px" : 0 }}>{parsed.requirement}</p>
+              <p style={{ fontSize: 14, fontWeight: 800, color: "#222", lineHeight: 1.5, margin: parsed.detail ? "0 0 8px" : 0 }}>{parsed.requirement}</p>
               {parsed.detail && (
                 <>
                   <p style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: 0.5, margin: "0 0 4px" }}>{label}</p>
-                  <p style={{ fontSize: 12, color: "#555", lineHeight: 1.6, margin: 0 }}>{parsed.detail}</p>
+                  <p style={{ fontSize: 14, color: "#555", lineHeight: 1.65, margin: 0 }}>{parsed.detail}</p>
                 </>
               )}
             </div>
@@ -343,12 +343,12 @@ function FitGapList({ title, items = [], tone }) {
 function RecommendationList({ items = [] }) {
   return (
     <div style={{ marginTop: 16, background: "#F8F7F4", border: "1px solid #E8E5DF", borderRadius: 12, padding: 16 }}>
-      <p style={{ fontSize: 13, fontWeight: 800, color: NAVY, margin: "0 0 12px" }}>추천 보완 방향</p>
+      <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 12px" }}>추천 보완 방향</p>
       <div style={{ display: "grid", gap: 8 }}>
         {items.map((item, index) => (
           <div key={index} style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: 10, alignItems: "start" }}>
             <span style={{ width: 24, height: 24, borderRadius: "50%", background: NAVY, color: "white", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
-            <p style={{ fontSize: 13, color: "#444", lineHeight: 1.65, margin: 0 }}>{item}</p>
+            <p style={{ fontSize: 14, color: "#444", lineHeight: 1.7, margin: 0 }}>{item}</p>
           </div>
         ))}
       </div>
@@ -443,7 +443,7 @@ function MenteeReport({ sessionId, report }) {
             <div key={i} style={{ background: CARD, border: `1px solid ${qa.bad ? "#FED7D7" : "#E8E5DF"}`, borderLeft: `4px solid ${qa.bad ? "#E24B4A" : GREEN}`, borderRadius: 14, padding: 22 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 14 }}>
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 800, color: NAVY, lineHeight: 1.55, margin: "0 0 6px" }}>{qa.q}</p>
+                <p style={{ fontSize: 15, fontWeight: 800, color: NAVY, lineHeight: 1.55, margin: "0 0 6px" }}>{qa.q}</p>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {qa.note && <span style={{ fontSize: 11, color: "#666", background: "#FAF8F4", padding: "3px 8px", borderRadius: 99 }}>{qa.note}</span>}
                     {qa.bad && <span style={{ fontSize: 11, color: "#9B1C1C", background: "#FFF5F5", padding: "3px 8px", borderRadius: 99, fontWeight: 700 }}>개선 우선</span>}
@@ -451,7 +451,7 @@ function MenteeReport({ sessionId, report }) {
                 </div>
                 <div style={{ flex: "0 0 auto", textAlign: "right" }}>
                   <Stars score={qa.score} />
-                  <p style={{ fontSize: 12, color: "#666", fontWeight: 700, margin: "4px 0 0" }}>AI {qa.rawScore}</p>
+                  <p style={{ fontSize: 13, color: "#666", fontWeight: 800, margin: "4px 0 0" }}>AI {qa.rawScore}</p>
                 </div>
               </div>
 
@@ -463,7 +463,7 @@ function MenteeReport({ sessionId, report }) {
               {qa.reasoning && (
                 <div style={{ borderLeft: "3px solid #CAD3DF", paddingLeft: 12, marginBottom: 14 }}>
                   <p style={{ fontSize: 11, fontWeight: 800, color: "#667085", margin: "0 0 6px" }}>평가 근거</p>
-                  <p style={{ fontSize: 13, color: "#444", lineHeight: 1.65, margin: 0 }}>{qa.reasoning}</p>
+                  <p style={{ fontSize: 14, color: "#444", lineHeight: 1.7, margin: 0 }}>{qa.reasoning}</p>
                 </div>
               )}
 
@@ -475,12 +475,12 @@ function MenteeReport({ sessionId, report }) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
                 <div style={{ background: "#F0FDF4", borderRadius: 10, padding: 14 }}>
-                  <p style={{ fontSize: 12, fontWeight: 800, color: GREEN, margin: "0 0 8px" }}>장점</p>
-                  {qa.strengths.map((item, idx) => <p key={idx} style={{ fontSize: 12, color: "#3F5F4B", margin: "0 0 5px", lineHeight: 1.55 }}>• {item}</p>)}
+                  <p style={{ fontSize: 13, fontWeight: 800, color: GREEN, margin: "0 0 8px" }}>장점</p>
+                  {qa.strengths.map((item, idx) => <p key={idx} style={{ fontSize: 14, color: "#3F5F4B", margin: "0 0 5px", lineHeight: 1.6 }}>• {item}</p>)}
                 </div>
                 <div style={{ background: "#FFF5F5", borderRadius: 10, padding: 14 }}>
-                  <p style={{ fontSize: 12, fontWeight: 800, color: "#E24B4A", margin: "0 0 8px" }}>개선점</p>
-                  {qa.improvements.map((item, idx) => <p key={idx} style={{ fontSize: 12, color: "#6F4545", margin: "0 0 5px", lineHeight: 1.55 }}>• {item}</p>)}
+                  <p style={{ fontSize: 13, fontWeight: 800, color: "#E24B4A", margin: "0 0 8px" }}>개선점</p>
+                  {qa.improvements.map((item, idx) => <p key={idx} style={{ fontSize: 14, color: "#6F4545", margin: "0 0 5px", lineHeight: 1.6 }}>• {item}</p>)}
                 </div>
               </div>
             </div>

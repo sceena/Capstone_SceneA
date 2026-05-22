@@ -6,10 +6,12 @@ on:
       - main
     paths:
       - 'backend/**'
+      - 'media-server/**'
       - '.github/**'
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/carpoolink-backend
+  MEDIA_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/carpoolink-media-server
 
 jobs:
   test:
@@ -110,7 +112,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push backend image
         uses: docker/build-push-action@v6
         with:
           context: ./backend
@@ -118,6 +120,15 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ needs.tag-and-release.outputs.new_tag }}
             ${{ env.IMAGE_NAME }}:latest
+
+      - name: Build and push media-server image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./media-server
+          push: true
+          tags: |
+            ${{ env.MEDIA_IMAGE_NAME }}:${{ needs.tag-and-release.outputs.new_tag }}
+            ${{ env.MEDIA_IMAGE_NAME }}:latest
 
   deploy:
     needs: build-and-push
@@ -133,6 +144,7 @@ jobs:
             set -e
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+            # ── backend ──────────────────────────────────────
             docker pull ${{ env.IMAGE_NAME }}:latest
 
             docker stop carpoolink-backend || true
@@ -151,5 +163,22 @@ jobs:
               -e "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" \
               -e "AWS_REGION=${{ secrets.AWS_REGION }}" \
               ${{ env.IMAGE_NAME }}:latest
+
+            # ── media-server ──────────────────────────────────
+            docker pull ${{ env.MEDIA_IMAGE_NAME }}:latest
+
+            docker stop carpoolink-media-server || true
+            docker rm carpoolink-media-server || true
+
+            docker run -d \
+              --name carpoolink-media-server \
+              --network host \
+              --restart unless-stopped \
+              -e "PORT=4000" \
+              -e "SPRING_BOOT_URL=http://localhost:8080" \
+              -e "ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}" \
+              -e "RTC_MIN_PORT=10000" \
+              -e "RTC_MAX_PORT=10100" \
+              ${{ env.MEDIA_IMAGE_NAME }}:latest
 
             docker image prune -f

@@ -1,3 +1,5 @@
+import logging
+
 from app.schemas.evaluation import AnswerEvaluation
 from app.schemas.report import FitGap, QuestionHighlight, ReportRequest, ReportResponse, TopSummary
 from app.services.fit_gap_composer import FitGapComposer, FitGapComposerUnavailable
@@ -6,6 +8,8 @@ from app.services.top_summary_composer import TopSummaryComposer, TopSummaryComp
 
 class ReportComposer:
     """Step 2: compose a session-level report from answer evaluations."""
+
+    logger = logging.getLogger(__name__)
 
     STRUCTURE_ELEMENTS_BY_TYPE = {
         "experience": ["situation", "task", "action", "result"],
@@ -74,18 +78,20 @@ class ReportComposer:
                 best_question=self._to_question_highlight(
                     best[1],
                     structure_analysis.get(f"Session{best[0]}"),
+                    highlight_type="best",
                 ),
                 worst_question=self._to_question_highlight(
                     worst[1],
                     structure_analysis.get(f"Session{worst[0]}"),
+                    highlight_type="worst",
                 ),
             )
 
         best = max(evaluations, key=self._best_rank_score)
         worst = min(evaluations, key=self._worst_rank_score)
         return TopSummary(
-            best_question=self._to_question_highlight(best),
-            worst_question=self._to_question_highlight(worst),
+            best_question=self._to_question_highlight(best, highlight_type="best"),
+            worst_question=self._to_question_highlight(worst, highlight_type="worst"),
         )
 
     def _try_top_structure_analysis(self, evaluations: list[AnswerEvaluation]) -> dict[str, dict]:
@@ -99,7 +105,8 @@ class ReportComposer:
 
         try:
             response = self.top_summary_composer.generate(summary)
-        except (TopSummaryComposerUnavailable, ValueError):
+        except (TopSummaryComposerUnavailable, ValueError) as exc:
+            self.logger.warning("TopSummary Gemini unavailable; using fallback top summary. reason=%s", exc)
             return {}
 
         return {
@@ -129,23 +136,87 @@ class ReportComposer:
         self,
         evaluation: AnswerEvaluation,
         structure_analysis: dict | None = None,
+        highlight_type: str = "best",
     ) -> QuestionHighlight:
         return QuestionHighlight(
             question_id=evaluation.report.question_id,
             question=evaluation.report.question,
-            reason=self._top_summary_reason(evaluation, structure_analysis),
+            reason=self._top_summary_reason(evaluation, structure_analysis, highlight_type),
             metrics_summary=evaluation.metrics_summary,
         )
 
-    def _top_summary_reason(self, evaluation: AnswerEvaluation, structure_analysis: dict | None) -> str:
+    def _top_summary_reason(
+        self,
+        evaluation: AnswerEvaluation,
+        structure_analysis: dict | None,
+        highlight_type: str,
+    ) -> str:
+        if highlight_type == "worst":
+            return self._worst_summary_reason(evaluation, structure_analysis)
+
         if not structure_analysis:
             return evaluation.highlight_reason
 
-        structure_reason = (structure_analysis.get("reason") or "").strip()
+        structure_reason = (
+            structure_analysis.get("strength_reason")
+            or structure_analysis.get("reason")
+            or ""
+        ).strip()
         if not structure_reason:
             return evaluation.highlight_reason
 
         return structure_reason
+
+    def _worst_summary_reason(self, evaluation: AnswerEvaluation, structure_analysis: dict | None) -> str:
+        if structure_analysis:
+            weakness_reason = (structure_analysis.get("weakness_reason") or "").strip()
+            if weakness_reason:
+                return weakness_reason
+
+        missing_elements = self._missing_structure_labels(structure_analysis)
+        if missing_elements:
+            return f"{', '.join(missing_elements)} 요소가 답변에서 충분히 드러나지 않아 보완이 필요합니다."
+
+        metrics = evaluation.metrics_summary
+        if metrics.speaking_speed in {"빠름", "느림"}:
+            return f"말하기 속도가 {metrics.speaking_speed} 편이라 핵심 내용을 안정적으로 전달하는 데 보완이 필요합니다."
+        if metrics.silence in {"많음", "긴 침묵", "불안정"}:
+            return f"{metrics.silence}이 확인되어 답변 흐름이 끊기지 않도록 보완이 필요합니다."
+        if metrics.sentence_clarity in {"장황함", "짧음"}:
+            return f"문장 명료도가 {metrics.sentence_clarity} 상태라 근거와 결론을 더 분명히 말할 필요가 있습니다."
+
+        improvements = evaluation.report.improvements
+        if improvements:
+            return improvements[0]
+
+        return "답변의 구체적인 근거와 결과가 부족해 보완이 필요합니다."
+
+    def _missing_structure_labels(self, structure_analysis: dict | None) -> list[str]:
+        if not structure_analysis:
+            return []
+
+        question_type = structure_analysis.get("question_type")
+        expected = self.STRUCTURE_ELEMENTS_BY_TYPE.get(question_type, [])
+        elements = structure_analysis.get("elements") or {}
+        labels = {
+            "situation": "상황",
+            "task": "과제",
+            "action": "행동",
+            "result": "결과",
+            "claim": "주장",
+            "reason": "근거",
+            "example": "예시",
+            "situation_understanding": "상황 이해",
+            "action_plan": "대응 계획",
+            "rationale": "판단 근거",
+            "concept": "개념",
+            "explanation": "설명",
+        }
+        return [
+            labels.get(element, element)
+            for element in expected
+            if not elements.get(element)
+        ]
 
     def _best_rank_score(self, evaluation: AnswerEvaluation) -> float:
         metrics_score = self._metrics_rank_score(evaluation)
@@ -196,7 +267,8 @@ class ReportComposer:
 
         try:
             return self.fit_gap_composer.generate_fit_gap(job_description, interview_session, applicant_document)
-        except (FitGapComposerUnavailable, ValueError):
+        except (FitGapComposerUnavailable, ValueError) as exc:
+            self.logger.warning("Fit-Gap Gemini unavailable; using fallback fit-gap. reason=%s", exc)
             return self._build_keyword_fit_gap(request, evaluations)
 
     def _format_interview_session(self, evaluations: list[AnswerEvaluation]) -> str:

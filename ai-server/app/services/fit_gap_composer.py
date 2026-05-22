@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from typing import Any
 
 from app.schemas.fit_gap import FitGapAnalysisResponse
@@ -35,7 +36,8 @@ class FitGapComposer:
             raise FitGapComposerUnavailable("google-genai is not installed") from exc
 
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
+        response = self._generate_content_with_retry(
+            client=client,
             model=self.model,
             contents=self._build_contents(types, job_description, interview_session, resume_summary),
             config=self._build_config(types),
@@ -47,6 +49,34 @@ class FitGapComposer:
 
         payload = self._parse_json_text(text)
         return FitGapAnalysisResponse.model_validate(payload)
+
+    def _generate_content_with_retry(
+        self,
+        client: Any,
+        model: str,
+        contents: list[Any],
+        config: Any,
+    ) -> Any:
+        delays = [0.8, 1.6]
+        last_exc: Exception | None = None
+
+        for attempt in range(len(delays) + 1):
+            try:
+                return client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config,
+                )
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= len(delays):
+                    break
+                time.sleep(delays[attempt])
+
+        raise FitGapComposerUnavailable(
+            f"Gemini Fit-Gap generation failed after {len(delays) + 1} attempts: "
+            f"{type(last_exc).__name__}: {last_exc}"
+        ) from last_exc
 
     def generate_fit_gap(
         self,

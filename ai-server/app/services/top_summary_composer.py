@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from typing import Any
 
 from app.schemas.top_summary import TopSummaryAnalysisResponse
@@ -29,7 +30,8 @@ class TopSummaryComposer:
             raise TopSummaryComposerUnavailable("google-genai is not installed") from exc
 
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
+        response = self._generate_content_with_retry(
+            client=client,
             model=self.model,
             contents=self._build_contents(types, summary),
             config=self._build_config(types),
@@ -41,6 +43,34 @@ class TopSummaryComposer:
 
         payload = self._parse_json_text(text)
         return TopSummaryAnalysisResponse.model_validate(payload)
+
+    def _generate_content_with_retry(
+        self,
+        client: Any,
+        model: str,
+        contents: list[Any],
+        config: Any,
+    ) -> Any:
+        delays = [0.8, 1.6]
+        last_exc: Exception | None = None
+
+        for attempt in range(len(delays) + 1):
+            try:
+                return client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config,
+                )
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= len(delays):
+                    break
+                time.sleep(delays[attempt])
+
+        raise TopSummaryComposerUnavailable(
+            f"Gemini top summary generation failed after {len(delays) + 1} attempts: "
+            f"{type(last_exc).__name__}: {last_exc}"
+        ) from last_exc
 
     def _build_contents(self, types: Any, summary: dict[str, Any]) -> list[Any]:
         sessions = {
@@ -100,6 +130,9 @@ Writing style:
 - Avoid generic reasons that could apply to any answer.
 - Keep each reason to one sentence.
 - Do not mention CPM, silence, sentence conciseness, score, best/worst, or question relevance.
+- reason and strength_reason should explain what is structurally good in the answer.
+- weakness_reason should explain only what is missing or weak in the answer. Do not include praise in weakness_reason.
+- If the answer is mostly strong, weakness_reason should still name the most realistic remaining limitation.
 
 Return only this JSON shape:
 {
@@ -112,7 +145,9 @@ Return only this JSON shape:
         "reason": true,
         "example": false
       },
-      "reason": "팀 협업을 선호한다는 주장은 제시했지만, 이를 뒷받침하는 실제 협업 사례는 드러나지 않습니다."
+      "reason": "팀 협업을 선호한다는 주장과 이유는 제시되어 답변의 기본 방향이 분명합니다.",
+      "strength_reason": "팀 협업을 선호한다는 주장과 이유는 제시되어 답변의 기본 방향이 분명합니다.",
+      "weakness_reason": "팀 협업을 뒷받침하는 실제 협업 사례가 드러나지 않아 답변의 설득력을 보완할 필요가 있습니다."
     }
   ]
 }"""

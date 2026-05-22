@@ -39,6 +39,21 @@ public class ReportController {
         return ResponseEntity.ok(reportService.getReport(memberId, id));
     }
 
+    @Operation(summary = "AI 리포트 생성", description = "세션의 질문/답변/자소서/채용공고 정보를 AI 서버에 보내 리포트를 생성하고 저장한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "AI 리포트 생성 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음 또는 만료"),
+            @ApiResponse(responseCode = "403", description = "해당 세션 접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "세션 또는 답변 없음"),
+            @ApiResponse(responseCode = "502", description = "AI 서버 호출 실패")
+    })
+    @PostMapping("/{id}/report/generate")
+    public ResponseEntity<ReportResponse> generateReport(
+            @AuthenticationPrincipal Long memberId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(reportService.generateReport(memberId, id));
+    }
+
     @Operation(summary = "Fit-Gap 역량 분석 조회", description = "채용공고 역량 vs 자소서 역량 비교 결과를 조회한다. AI가 추출한 skill 목록 기반으로 일치/불일치 역량을 반환한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),

@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: ./backend
+    network_mode: host
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY}
+      AWS_SECRET_KEY: ${AWS_SECRET_KEY}
+      AWS_REGION: ${AWS_REGION}
+    restart: unless-stopped
+
+  media-server:
+    build: ./media-server
+    network_mode: host
+    environment:
+      PORT: 4000
+      SPRING_BOOT_URL: http://localhost:8080
+      ANNOUNCED_IP: ${ANNOUNCED_IP}
+      RTC_MIN_PORT: 10000
+      RTC_MAX_PORT: 10100
+    depends_on:
+      - backend
+    restart: unless-stopped

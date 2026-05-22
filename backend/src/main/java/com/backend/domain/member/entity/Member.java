@@ -31,6 +31,9 @@ public class Member extends BaseEntity {
     @Column(nullable = false)
     private Role role;
 
+    @Column
+    private String profileImageUrl;
+
     private LocalDateTime deletedAt;
 
     @Builder
@@ -53,5 +56,9 @@ public class Member extends BaseEntity {
     public void update(String name, String encodedPassword) {
         if (name != null) this.name = name;
         if (encodedPassword != null) this.password = encodedPassword;
+    }
+
+    public void updateProfileImage(String url) {
+        this.profileImageUrl = url;
     }
 }

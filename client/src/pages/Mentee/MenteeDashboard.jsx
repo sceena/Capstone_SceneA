@@ -340,7 +340,7 @@ export default function MenteeDashboard() {
                 </p>
               </div>
             </div>
-            <Link to="/mentee/mypage" style={{
+            <Link to="/mentee/resume" style={{
               padding:"9px 20px", background:"#F59E0B", color:"#fff",
               borderRadius:8, fontSize:13, fontWeight:700,
               textDecoration:"none", flexShrink:0, whiteSpace:"nowrap",

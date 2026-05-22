@@ -212,14 +212,41 @@ const DUMMY_HISTORY = [
 ];
 
 /* ── 프로필 수정 모달 ── */
-function EditProfileModal({ onClose }) {
-  const [tab, setTab]         = useState("name");   // "name" | "password"
+function EditProfileModal({ onClose, userEmail, onImageChange }) {
+  const [tab, setTab]         = useState("name");   // "name" | "password" | "image"
   const [name, setName]       = useState("");
   const [pwNew, setPwNew]     = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
   const [saving, setSaving]   = useState(false);
   const [done, setDone]       = useState(false);
   const [error, setError]     = useState("");
+  const [imgPreview, setImgPreview] = useState(null);
+  const [imgFile, setImgFile] = useState(null);
+
+  const handleImageFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImgFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setImgPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveImage = async () => {
+    if (!imgFile) { setError("이미지를 선택해주세요."); return; }
+    setSaving(true);
+    try {
+      const res = await updateMyProfile({}, imgFile);
+      const url = res?.profile_image_url || imgPreview;
+      localStorage.setItem(`profile_img_${userEmail}`, url);
+      onImageChange?.(url);
+      setDone(true);
+      setTimeout(onClose, 900);
+    } catch (e) {
+      setError("이미지 저장에 실패했습니다.");
+      setSaving(false);
+    }
+  };
 
   const inputStyle = (borderColor) => ({
     width:"100%", padding:"11px 14px", borderRadius:10,
@@ -268,7 +295,7 @@ function EditProfileModal({ onClose }) {
           <>
             {/* 탭 */}
             <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, marginBottom:22 }}>
-              {[{k:"name",l:"이름 변경"},{k:"password",l:"비밀번호 변경"}].map(t=>(
+              {[{k:"name",l:"이름 변경"},{k:"password",l:"비밀번호 변경"},{k:"image",l:"이미지 변경"}].map(t=>(
                 <button key={t.k} onClick={()=>{ setTab(t.k); setError(""); }} style={{
                   flex:1, padding:"10px 0", background:"transparent", border:"none",
                   borderBottom:`2.5px solid ${tab===t.k?C.navy:"transparent"}`,
@@ -323,13 +350,33 @@ function EditProfileModal({ onClose }) {
               </>
             )}
 
+            {/* 이미지 변경 탭 */}
+            {tab === "image" && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ textAlign:"center", marginBottom:16 }}>
+                  {imgPreview ? (
+                    <img src={imgPreview} alt="preview" style={{ width:80, height:80, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.border}`, margin:"0 auto 10px", display:"block" }}/>
+                  ) : (
+                    <div style={{ width:80, height:80, borderRadius:"50%", background:C.bg, border:`2px dashed ${C.border}`, margin:"0 auto 10px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><path d="M12 5v14M5 12h14"/></svg>
+                    </div>
+                  )}
+                  <label style={{ display:"inline-block", padding:"8px 18px", borderRadius:8, border:`1.5px solid ${C.border}`, fontSize:13, fontWeight:600, color:C.navy, cursor:"pointer", background:C.white }}>
+                    이미지 선택
+                    <input type="file" accept="image/*" onChange={handleImageFile} style={{ display:"none" }}/>
+                  </label>
+                </div>
+                <p style={{ fontSize:11, color:C.textMuted, textAlign:"center" }}>JPG, PNG, GIF · 최대 5MB</p>
+              </div>
+            )}
+
             {error && (
               <p style={{ fontSize:12, color:C.red, marginBottom:14, textAlign:"center" }}>{error}</p>
             )}
 
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:10, border:`1px solid ${C.border}`, background:C.white, color:C.textSub, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>취소</button>
-              <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:saving?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
+              <button onClick={tab === "image" ? handleSaveImage : handleSave} disabled={saving} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:saving?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:saving?"not-allowed":"pointer", fontFamily:"inherit" }}>
                 {saving ? "저장 중..." : "저장"}
               </button>
             </div>
@@ -349,9 +396,16 @@ export default function MenteeMyPage() {
   const [profile, setProfile]     = useState(null);
   const [apiSessions, setApiSessions] = useState([]);
   const [showEdit, setShowEdit]   = useState(false);
+  const [profileImage, setProfileImage] = useState(() => localStorage.getItem(`profile_img_${user?.email}`) || null);
 
   useEffect(() => {
-    getMyProfile().then(setProfile).catch(() => {});
+    getMyProfile().then(p => {
+      setProfile(p);
+      if (p?.profileImageUrl) {
+        setProfileImage(p.profileImageUrl);
+        localStorage.setItem(`profile_img_${user?.email}`, p.profileImageUrl);
+      }
+    }).catch(() => {});
     getUserSessions().then(data => { if (data?.length) setApiSessions(data); }).catch(() => {});
   }, []);
 
@@ -422,33 +476,9 @@ export default function MenteeMyPage() {
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 
         {/* 페이지 타이틀 */}
-        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:28 }}>
-          <div>
-            <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:"-0.02em", marginBottom:4 }}>마이페이지</h1>
-            <p style={{ fontSize:13, color:C.textMuted }}>나의 면접 성장 기록을 확인하세요</p>
-          </div>
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={() => setShowEdit(true)} style={{
-              padding:"10px 18px",
-              background:C.white, color:C.text,
-              border:`1.5px solid ${C.border}`, borderRadius:8,
-              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-              transition:"border-color 0.15s",
-            }}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-            >프로필 수정</button>
-            <button onClick={handleWithdraw} style={{
-              padding:"10px 18px",
-              background:C.white, color:C.red,
-              border:`1.5px solid ${C.border}`, borderRadius:8,
-              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-              transition:"border-color 0.15s",
-            }}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=C.red}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-            >회원탈퇴</button>
-          </div>
+        <div style={{ marginBottom:28 }}>
+          <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:"-0.02em", marginBottom:4 }}>마이페이지</h1>
+          <p style={{ fontSize:13, color:C.textMuted }}>나의 면접 성장 기록을 확인하세요</p>
         </div>
 
         <div className="mypage-layout" style={{ display:"flex", gap:24, alignItems:"flex-start" }}>
@@ -458,13 +488,10 @@ export default function MenteeMyPage() {
             <div style={{ background:C.white, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}` }}>
               {/* 아바타 */}
               <div style={{ textAlign:"center", marginBottom:16 }}>
-                {(() => { const av = getAvatar(user?.email); return (
-                <div style={{
-                  width:68, height:68, borderRadius:"50%",
-                  background:av.color, margin:"0 auto 10px",
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:32,
-                }}>{av.animal}</div>
+                {profileImage ? (
+                  <img src={profileImage} alt="profile" style={{ width:68, height:68, borderRadius:"50%", objectFit:"cover", margin:"0 auto 10px", display:"block", border:`2px solid ${C.border}` }}/>
+                ) : (() => { const av = getAvatar(user?.email); return (
+                  <div style={{ width:68, height:68, borderRadius:"50%", background:av.color, margin:"0 auto 10px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32 }}>{av.animal}</div>
                 ); })()}
                 <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>{displayName}</p>
                 <p style={{ fontSize:12, color:C.textSub }}>백엔드 개발자 지망 · 신입</p>
@@ -497,6 +524,32 @@ export default function MenteeMyPage() {
 
           {/* ── 메인 콘텐츠 ── */}
           <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:20 }}>
+
+            {/* 자소서 관리 바로가기 */}
+            <div style={{ background:C.white, borderRadius:16, padding:"24px", border:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div>
+                <h3 style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:4 }}>자소서 관리</h3>
+                <p style={{ fontSize:12, color:C.textMuted }}>면접 전 미리 작성해두면 멘토가 맞춤 질문을 준비합니다</p>
+              </div>
+              <Link to="/mentee/resume" style={{ textDecoration:"none" }}>
+                <button style={{
+                  padding:"10px 20px", borderRadius:8,
+                  background:C.navy, color:C.white,
+                  border:"none", fontSize:13, fontWeight:700,
+                  cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", gap:6,
+                  transition:"background 0.15s",
+                }}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.navyMid}
+                  onMouseLeave={e=>e.currentTarget.style.background=C.navy}
+                >
+                  자소서 입력하러 가기
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </Link>
+            </div>
 
             {/* 스탯 4개 */}
             <div className="stat-grid" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
@@ -553,32 +606,6 @@ export default function MenteeMyPage() {
               </div>
             </div>
 
-            {/* 자소서 관리 바로가기 */}
-            <div style={{ background:C.white, borderRadius:16, padding:"24px", border:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div>
-                <h3 style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:4 }}>자소서 관리</h3>
-                <p style={{ fontSize:12, color:C.textMuted }}>면접 전 미리 작성해두면 멘토가 맞춤 질문을 준비합니다</p>
-              </div>
-              <Link to="/mentee/resume" style={{ textDecoration:"none" }}>
-                <button style={{
-                  padding:"10px 20px", borderRadius:8,
-                  background:C.navy, color:C.white,
-                  border:"none", fontSize:13, fontWeight:700,
-                  cursor:"pointer", fontFamily:"inherit",
-                  display:"flex", alignItems:"center", gap:6,
-                  transition:"background 0.15s",
-                }}
-                  onMouseEnter={e=>e.currentTarget.style.background=C.navyMid}
-                  onMouseLeave={e=>e.currentTarget.style.background=C.navy}
-                >
-                  자소서 작성하러 가기
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              </Link>
-            </div>
-
             {/* 멘토 코멘트 모음 */}
             <div style={{ background:C.white, borderRadius:16, padding:"24px", border:`1px solid ${C.border}` }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
@@ -611,9 +638,32 @@ export default function MenteeMyPage() {
 
           </div>
         </div>
+
+        {/* 프로필 수정 / 회원탈퇴 */}
+        <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:32, paddingTop:24, borderTop:`1px solid ${C.border}` }}>
+          <button onClick={() => setShowEdit(true)} style={{
+            padding:"10px 18px", background:C.white, color:C.text,
+            border:`1.5px solid ${C.border}`, borderRadius:8,
+            fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+            transition:"border-color 0.15s",
+          }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+          >프로필 수정</button>
+          <button onClick={handleWithdraw} style={{
+            padding:"10px 18px", background:C.white, color:C.red,
+            border:`1.5px solid ${C.border}`, borderRadius:8,
+            fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+            transition:"border-color 0.15s",
+          }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=C.red}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+          >회원탈퇴</button>
+        </div>
+
       </main>
 
-      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} />}
+      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} userEmail={user?.email} onImageChange={(img) => setProfileImage(img)} />}
     </>
   );
 }

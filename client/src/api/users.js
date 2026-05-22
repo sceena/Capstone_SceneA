@@ -9,6 +9,12 @@ function authHeaders() {
   };
 }
 
+function authToken() {
+  const user = getAuthUser();
+  if (!user?.accessToken) throw Object.assign(new Error("로그인 토큰 없음"), { status: 401 });
+  return user.accessToken;
+}
+
 /**
  * GET /api/users/me
  * 로그인한 사용자의 프로필 정보를 조회한다.
@@ -20,15 +26,23 @@ export async function getMyProfile() {
 }
 
 /**
- * PATCH /api/users/me
- * 로그인한 사용자의 이름, 비밀번호를 수정한다.
- * @param {{ name?: string, password?: string }} data
+ * PATCH /api/users/me  (multipart/form-data)
+ * data 파트(JSON): { name?, password?, tags? }
+ * image 파트(File): 프로필 이미지 파일 (선택)
  */
-export async function updateMyProfile(data) {
+export async function updateMyProfile(data, imageFile) {
+  const token = authToken();
+  const formData = new FormData();
+  if (data && Object.keys(data).length > 0) {
+    formData.append("data", new Blob([JSON.stringify(data)], { type: "application/json" }));
+  }
+  if (imageFile) {
+    formData.append("image", imageFile);
+  }
   const res = await fetch("/api/users/me", {
     method: "PATCH",
-    headers: authHeaders(),
-    body: JSON.stringify(data),
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   });
   if (!res.ok) {
     const status = res.status;

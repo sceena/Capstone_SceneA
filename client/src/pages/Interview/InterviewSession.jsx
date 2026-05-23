@@ -119,6 +119,10 @@ export default function InterviewSession({ role = "mentee" }) {
   const audioProducerRef = useRef(null);
   const consumersRef = useRef(new Map());
 
+  /* recvTransport 준비 전 도착한 newProducer 이벤트 큐 */
+  const pendingProducersRef = useRef([]);
+  const recvTransportReadyRef = useRef(false);
+
   /* ── 오디오 레벨 (활성 발화자) refs ── */
   const audioCtxRef = useRef(null);
   const localAnalyserRef = useRef(null);
@@ -131,6 +135,7 @@ export default function InterviewSession({ role = "mentee" }) {
   const [localMediaStream, setLocalMediaStream] = useState(null);
   const [audioLevels, setAudioLevels] = useState({});
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+  const [connectionState, setConnectionState] = useState("connecting"); // connecting | connected | reconnecting | failed
 
   const isMentor = role === "mentor";
 
@@ -184,57 +189,46 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── WebRTC 초기화 ── */
   useEffect(() => {
     const user = getAuthUser();
-    const token = user?.accessToken;
+    // SKIP_AUTH 모드(로컬 테스트)에서는 토큰 없이도 연결 허용
+    const token = user?.accessToken || (import.meta.env.VITE_SKIP_AUTH === 'true' ? 'dev' : null);
     if (!token) return;
 
     let isCancelled = false;
     let socket;
 
-    const init = async () => {
-      /* 1. 로컬 카메라/마이크 */
-      let localStream;
-      const preferredCameraId = localStorage.getItem('preferredCameraId');
-      const videoConstraint = preferredCameraId ? { deviceId: { exact: preferredCameraId } } : true;
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true });
-      } catch {
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          setMediaError("카메라를 사용할 수 없습니다. 마이크만 연결됩니다.");
-        } catch {
-          setMediaError("카메라/마이크에 접근할 수 없습니다.");
-          localStream = new MediaStream();
-        }
-      }
+    /* mediasoup 객체만 초기화 (카메라 스트림은 유지) */
+    const resetMediasoup = () => {
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current = [];
+      videoProducerRef.current?.close();
+      videoProducerRef.current = null;
+      audioProducerRef.current?.close();
+      audioProducerRef.current = null;
+      sendTransportRef.current?.close();
+      sendTransportRef.current = null;
+      recvTransportRef.current?.close();
+      recvTransportRef.current = null;
+      consumersRef.current.forEach(c => c.close());
+      consumersRef.current.clear();
+      deviceRef.current = null;
+      Object.keys(peersRef.current).forEach(k => delete peersRef.current[k]);
+      Object.keys(peerAnalysersRef.current).forEach(k => delete peerAnalysersRef.current[k]);
+      setPeerIds([]);
+    };
 
-      if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
+    /* 방 입장 + mediasoup 전체 시그널링 (최초 & 재접속 공통) */
+    const joinAndInit = async (localStream) => {
+      if (isCancelled) return;
+      resetMediasoup();
+      setConnectionState("connecting");
 
-      localStreamRef.current = localStream;
-      setLocalMediaStream(localStream);
-      try {
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-        const analyser = audioCtxRef.current.createAnalyser();
-        analyser.fftSize = 256;
-        audioCtxRef.current.createMediaStreamSource(localStream).connect(analyser);
-        localAnalyserRef.current = analyser;
-      } catch {}
-
-      /* 2. 소켓 연결 */
-      socket = io(MEDIA_SERVER, { withCredentials: true });
-      socketRef.current = socket;
-      socket.on("connect_error", (e) => {
-        console.error("미디어 서버 연결 실패:", e.message);
-        setMediaError("미디어 서버에 연결할 수 없습니다.");
-      });
-
-      /* 3. 방 입장 */
       socket.emit("join", { sessionId: id, token }, async (res) => {
         if (isCancelled) return;
-        if (res.error) { console.error("join 실패:", res.error); return; }
+        if (res.error) { console.error("join 실패:", res.error); setConnectionState("failed"); return; }
 
         const { rtpCapabilities, existingProducers } = res;
 
-        /* 4. Device 초기화 */
+        /* Device 초기화 */
         const device = new Device();
         try {
           await device.load({ routerRtpCapabilities: rtpCapabilities });
@@ -242,7 +236,7 @@ export default function InterviewSession({ role = "mentee" }) {
         if (isCancelled) return;
         deviceRef.current = device;
 
-        /* 5. Send Transport */
+        /* Send Transport */
         socket.emit("createTransport", { direction: "send" }, async (sendRes) => {
           if (isCancelled) return;
           if (sendRes.error) { console.error("send transport 실패:", sendRes.error); return; }
@@ -262,14 +256,12 @@ export default function InterviewSession({ role = "mentee" }) {
             });
           });
 
-          /* 6. 비디오 produce */
           const videoTrack = localStream.getVideoTracks()[0];
           if (videoTrack) {
             try { videoProducerRef.current = await sendTransport.produce({ track: videoTrack }); }
             catch (e) { console.error("video produce 실패:", e); }
           }
 
-          /* 7. 오디오 produce */
           const audioTrack = localStream.getAudioTracks()[0];
           if (audioTrack) {
             try { audioProducerRef.current = await sendTransport.produce({ track: audioTrack }); }
@@ -277,7 +269,7 @@ export default function InterviewSession({ role = "mentee" }) {
           }
         });
 
-        /* 8. Recv Transport */
+        /* Recv Transport */
         socket.emit("createTransport", { direction: "recv" }, async (recvRes) => {
           if (isCancelled) return;
           if (recvRes.error) { console.error("recv transport 실패:", recvRes.error); return; }
@@ -291,20 +283,94 @@ export default function InterviewSession({ role = "mentee" }) {
             });
           });
 
-          /* 9. 기존 참여자 구독 */
           for (const { producerId, peerId, kind } of existingProducers) {
             if (isCancelled) return;
             await consumeProducer(producerId, peerId, kind);
           }
+
+          /* recvTransport 준비 완료 → 큐에 쌓인 newProducer 처리 */
+          recvTransportReadyRef.current = true;
+          for (const pending of pendingProducersRef.current) {
+            if (isCancelled) break;
+            await consumeProducer(pending.producerId, pending.peerId, pending.kind);
+          }
+          pendingProducersRef.current = [];
+
+          if (!isCancelled) setConnectionState("connected");
         });
       });
+    };
 
-      /* 10. 새 참여자 입장 */
-      socket.on("newProducer", ({ producerId, peerId, kind }) => {
-        if (!isCancelled) consumeProducer(producerId, peerId, kind);
+    const init = async () => {
+      /* 1. 로컬 카메라/마이크 (재접속 시 재사용) */
+      let localStream = localStreamRef.current;
+      if (!localStream) {
+        const preferredCameraId = localStorage.getItem('preferredCameraId');
+        const videoConstraint = preferredCameraId ? { deviceId: { exact: preferredCameraId } } : true;
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true });
+        } catch {
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setMediaError("카메라를 사용할 수 없습니다. 마이크만 연결됩니다.");
+          } catch {
+            setMediaError("카메라/마이크에 접근할 수 없습니다.");
+            localStream = new MediaStream();
+          }
+        }
+        if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
+        localStreamRef.current = localStream;
+        setLocalMediaStream(localStream);
+        try {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          const analyser = audioCtxRef.current.createAnalyser();
+          analyser.fftSize = 256;
+          audioCtxRef.current.createMediaStreamSource(localStream).connect(analyser);
+          localAnalyserRef.current = analyser;
+        } catch {}
+      }
+
+      /* 2. 소켓 연결 (reconnection 활성화) */
+      socket = io(MEDIA_SERVER, {
+        withCredentials: true,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1500,
+      });
+      socketRef.current = socket;
+
+      /* 소켓 connect: 최초 접속 & 재접속 모두 처리 */
+      socket.on("connect", () => {
+        joinAndInit(localStream);
       });
 
-      /* 11. 참여자 퇴장 */
+      socket.on("disconnect", (reason) => {
+        if (isCancelled) return;
+        // 사용자가 직접 종료한 경우가 아니면 재접속 중 표시
+        if (reason !== "io client disconnect") {
+          setConnectionState("reconnecting");
+        }
+      });
+
+      socket.on("reconnect_failed", () => {
+        if (!isCancelled) setConnectionState("failed");
+      });
+
+      socket.on("connect_error", (e) => {
+        console.error("미디어 서버 연결 실패:", e.message);
+      });
+
+      /* 새 참여자 입장 - recvTransport 미준비 시 큐에 보관 */
+      socket.on("newProducer", ({ producerId, peerId, kind }) => {
+        if (isCancelled) return;
+        if (!recvTransportReadyRef.current) {
+          pendingProducersRef.current.push({ producerId, peerId, kind });
+        } else {
+          consumeProducer(producerId, peerId, kind);
+        }
+      });
+
+      /* 참여자 퇴장 */
       socket.on("peerLeft", ({ peerId }) => {
         delete peersRef.current[peerId];
         delete peerAnalysersRef.current[peerId];
@@ -316,6 +382,8 @@ export default function InterviewSession({ role = "mentee" }) {
 
     return () => {
       isCancelled = true;
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current = [];
       videoProducerRef.current?.close();
       audioProducerRef.current?.close();
       sendTransportRef.current?.close();
@@ -323,6 +391,7 @@ export default function InterviewSession({ role = "mentee" }) {
       consumersRef.current.forEach(c => c.close());
       consumersRef.current.clear();
       localStreamRef.current?.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
       localAnalyserRef.current = null;
       Object.keys(peerAnalysersRef.current).forEach(k => delete peerAnalysersRef.current[k]);
       audioCtxRef.current?.close().catch(() => {});
@@ -450,6 +519,48 @@ export default function InterviewSession({ role = "mentee" }) {
       `}</style>
 
       <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#FAF8F4" }}>
+
+        {/* ════ 재접속 / 연결 실패 배너 ════ */}
+        {(connectionState === "reconnecting" || connectionState === "failed") && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(0,0,0,0.65)", zIndex: 9999,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <div style={{
+              background: "#fff", borderRadius: 16, padding: "36px 48px",
+              textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
+            }}>
+              {connectionState === "reconnecting" ? (
+                <>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: "50%",
+                    border: "4px solid #E8E0D0", borderTopColor: "#1D9E75",
+                    animation: "spin 0.9s linear infinite", margin: "0 auto 20px",
+                  }} />
+                  <p style={{ fontSize: 16, fontWeight: 700, color: "#1A1818", marginBottom: 6 }}>재연결 중...</p>
+                  <p style={{ fontSize: 13, color: "#9E9B95" }}>잠시만 기다려 주세요.</p>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 36, marginBottom: 16 }}>⚠️</div>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: "#EF4444", marginBottom: 6 }}>연결에 실패했습니다</p>
+                  <p style={{ fontSize: 13, color: "#9E9B95", marginBottom: 20 }}>네트워크를 확인하고 다시 시도해 주세요.</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    style={{
+                      padding: "10px 28px", background: "#0D2240", color: "#fff",
+                      border: "none", borderRadius: 24, fontSize: 14, fontWeight: 700,
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    새로고침
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ════ 상단 헤더 바 ════ */}
         <div style={{

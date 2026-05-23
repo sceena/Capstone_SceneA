@@ -5,7 +5,13 @@ const config = {
   server: {
     port: process.env.PORT || 4000,
     springBootUrl: process.env.SPRING_BOOT_URL || 'http://localhost:8080',
-    corsOrigins: ['http://localhost:3000', 'http://localhost:5173'],
+    corsOrigins: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      // 같은 네트워크 기기에서 접근 시 아래에 PC 로컬 IP 추가
+      // 예: 'http://192.168.0.5:5173'
+      ...(process.env.LOCAL_IP ? [`http://${process.env.LOCAL_IP}:5173`] : []),
+    ],
   },
   mediasoup: {
     numWorkers: os.cpus().length,

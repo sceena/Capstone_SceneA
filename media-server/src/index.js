@@ -82,7 +82,9 @@ io.on('connection', (socket) => {
       const isValid = await validateAccess(sessionId, token);
       if (!isValid) return callback({ error: '접근 권한이 없습니다.' });
 
-      const peerId = getMemberIdFromToken(token);
+      // SKIP_AUTH 모드: 토큰 파싱 실패 시 socket.id를 peerId로 사용 (로컬 테스트용)
+      const peerId = getMemberIdFromToken(token) ||
+        (process.env.SKIP_AUTH === 'true' ? `dev-${socket.id.slice(0, 8)}` : null);
       if (!peerId) return callback({ error: '유효하지 않은 토큰입니다.' });
 
       const room = await getOrCreateRoom(String(sessionId));

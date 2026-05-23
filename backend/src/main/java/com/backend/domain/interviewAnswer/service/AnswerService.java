@@ -1,5 +1,7 @@
 package com.backend.domain.interviewAnswer.service;
 
+import com.backend.domain.ai.client.AiSttClient;
+import com.backend.domain.ai.dto.response.AiSttResponse;
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
@@ -17,6 +19,7 @@ import com.backend.domain.member.repository.MemberRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -36,6 +39,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class AnswerService {
 
     private final InterviewAnswerRepository answerRepository;
@@ -44,6 +48,7 @@ public class AnswerService {
     private final SessionParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
+    private final AiSttClient aiSttClient;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
@@ -69,6 +74,7 @@ public class AnswerService {
         if (existing.isPresent()) {
             deleteFromS3(existing.get().getAudioUrl());
             existing.get().updateAudio(key, answerStart, answerEnd);
+            existing.get().updateSttText(null);
             answer = existing.get();
         } else {
             answer = answerRepository.save(InterviewAnswer.builder()
@@ -79,6 +85,8 @@ public class AnswerService {
                     .answerEnd(answerEnd)
                     .build());
         }
+
+        updateSttTextIfAvailable(answer, audio);
 
         return AnswerUploadResponse.from(answer, sessionId);
     }
@@ -156,6 +164,17 @@ public class AnswerService {
                     .key(key)
                     .build());
         } catch (S3Exception ignored) {
+        }
+    }
+
+    private void updateSttTextIfAvailable(InterviewAnswer answer, MultipartFile audio) {
+        try {
+            AiSttResponse response = aiSttClient.transcribe(audio);
+            if (response != null && response.text() != null && !response.text().isBlank()) {
+                answer.updateSttText(response.text());
+            }
+        } catch (RuntimeException e) {
+            log.warn("STT transcription failed for answerId={}; keeping uploaded audio without sttText", answer.getId(), e);
         }
     }
 

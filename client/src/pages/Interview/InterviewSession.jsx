@@ -498,7 +498,8 @@ export default function InterviewSession({ role = "mentee" }) {
   };
 
   const SPEAK_THRESHOLD = 0.025;
-  const mainViewId = peerIds.length >= 2 ? (activeSpeakerId || peerIds[0]) : null;
+  // 참가자가 1명이라도 있으면 발화자 메인 뷰 활성화
+  const mainViewId = peerIds.length > 0 ? (activeSpeakerId || peerIds[0]) : null;
 
   return (
     <>
@@ -642,36 +643,47 @@ export default function InterviewSession({ role = "mentee" }) {
                       isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
                   </div>
                 </div>
-              ) : peerIds.length === 1 ? (
-                /* ── 1:1: 나란히 ── */
-                <div style={{ display: "flex", gap: 12, width: "100%", height: "100%", padding: 16 }}>
-                  <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
-                    isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
-                  <VideoTile stream={peersRef.current[peerIds[0]]} label="상대방"
-                    isSpeaking={(audioLevels[peerIds[0]] || 0) > SPEAK_THRESHOLD} />
-                </div>
               ) : (
-                /* ── 1:N: 활성 발화자 크게 + 하단 스트립 ── */
+                /* ── 발화자 메인 + 전원 하단 스트립 (1:1 / 1:N 공통) ── */
                 <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "16px 16px 8px" }}>
+
+                  {/* 메인: 현재 발화자 (아무도 안 말하면 첫 번째 참가자) */}
                   <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
                     {mainViewId === '__local' ? (
-                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted isSpeaking camOff={!camOn} />
+                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
+                        isSpeaking camOff={!camOn} />
                     ) : (
-                      <VideoTile stream={peersRef.current[mainViewId || peerIds[0]]} label="상대방"
-                        isSpeaking={(audioLevels[mainViewId || peerIds[0]] || 0) > SPEAK_THRESHOLD} />
+                      <VideoTile stream={peersRef.current[mainViewId]} label="상대방"
+                        isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
                     )}
                   </div>
-                  <div style={{ height: 100, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
-                    {mainViewId !== '__local' && (
-                      <div style={{ width: 160, flexShrink: 0, height: "100%" }}>
-                        <VideoTile stream={localMediaStream} label="나" mirror muted
-                          isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
-                      </div>
-                    )}
-                    {peerIds.filter(p => p !== mainViewId).map(peerId => (
-                      <div key={peerId} style={{ width: 160, flexShrink: 0, height: "100%" }}>
+
+                  {/* 하단 스트립: 나 + 모든 참가자 전원 표시 */}
+                  <div style={{ height: 120, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0, paddingBottom: 4 }}>
+                    {/* 내 화면은 항상 첫 번째 */}
+                    <div style={{ width: 160, flexShrink: 0, height: "100%", position: "relative" }}>
+                      <VideoTile stream={localMediaStream} label="나" mirror muted
+                        isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
+                      {mainViewId === '__local' && (
+                        <div style={{
+                          position: "absolute", top: 6, left: 6, zIndex: 2,
+                          background: "#1D9E75", borderRadius: 4,
+                          padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff",
+                        }}>발화 중</div>
+                      )}
+                    </div>
+                    {/* 원격 참가자 전원 */}
+                    {peerIds.map(peerId => (
+                      <div key={peerId} style={{ width: 160, flexShrink: 0, height: "100%", position: "relative" }}>
                         <VideoTile stream={peersRef.current[peerId]} label="참여자"
                           isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
+                        {mainViewId === peerId && (
+                          <div style={{
+                            position: "absolute", top: 6, left: 6, zIndex: 2,
+                            background: "#1D9E75", borderRadius: 4,
+                            padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff",
+                          }}>발화 중</div>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -24,6 +24,22 @@ Backend default:
 ai.server.base-url=http://localhost:8000
 ```
 
+## STT
+
+Answer audio STT uses Whisper through `POST /api/stt`.
+Use a small model for local development and set a larger model in production
+when the server has enough GPU and memory.
+
+```bash
+export WHISPER_MODEL_SIZE=tiny
+```
+
+For production-quality Korean transcription, configure:
+
+```bash
+export WHISPER_MODEL_SIZE=large
+```
+
 ## Endpoint
 
 ```http

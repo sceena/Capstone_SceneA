@@ -7,7 +7,10 @@ const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
 const CARD = "#FFFFFF";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
-const USE_MOCK_REPORT = import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_REPORT === "true";
+const USE_MOCK_REPORT =
+  import.meta.env.VITE_USE_MOCK_REPORT === "false"
+    ? false
+    : import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_REPORT === "true";
 
 function getAuthHeaders() {
   const raw = localStorage.getItem("scena_auth");

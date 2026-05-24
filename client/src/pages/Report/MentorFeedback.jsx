@@ -239,6 +239,7 @@ function QuestionCard({ qna, feedbacks, onChange }) {
               outline: "none",
               minHeight: 72,
               transition: "border-color 0.15s",
+              boxSizing: "border-box",
             }}
             onFocus={(e) => (e.target.style.borderColor = GREEN)}
             onBlur={(e) => (e.target.style.borderColor = "#D1D5DB")}
@@ -341,6 +342,7 @@ export default function MentorFeedbackPage() {
           totalFeedback,
           mentorScore,
           sessionId,
+          role: "mentor",
         },
       });
     }, 800);
@@ -621,6 +623,7 @@ export default function MentorFeedbackPage() {
               outline: "none",
               minHeight: 160,
               transition: "border-color 0.15s",
+              boxSizing: "border-box",
             }}
             onFocus={(e) => (e.target.style.borderColor = GREEN)}
             onBlur={(e) => (e.target.style.borderColor = "#D1D5DB")}

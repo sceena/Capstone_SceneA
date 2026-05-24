@@ -276,11 +276,23 @@ export default function MenteeDashboard() {
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [sessions, setSessions] = useState(DUMMY_SESSIONS);
+  const [unreadFinals, setUnreadFinals] = useState([]);
+
   useEffect(() => {
     getMySessions()
       .then(data => { if (data?.length) setSessions(data); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const viewed = JSON.parse(localStorage.getItem("scena_viewed_finals") || "[]");
+    const unread = sessions.filter(s =>
+      s.status === "completed" &&
+      (s.report_status === "final" || s.tag === "최종 리포트") &&
+      !viewed.includes(String(s.id))
+    );
+    setUnreadFinals(unread);
+  }, [sessions]);
 
   /* API 응답에서 UI 데이터 파생 */
   const completedSessions = sessions.filter(s => s.status === "completed");
@@ -294,7 +306,8 @@ export default function MenteeDashboard() {
     mentor: s.mentorName ? `${s.mentorName} 멘토` : "",
     score: s.aiScore ?? "-",
     tag: s.tag ?? "완료",
-    tagColor: C.teal,
+    tagColor: s.report_status === "final" || s.tag === "최종 리포트" ? C.navy : C.teal,
+    isFinal: s.report_status === "final" || s.tag === "최종 리포트",
   }));
 
   const upcoming = scheduledSessions.map(s => ({
@@ -320,6 +333,61 @@ export default function MenteeDashboard() {
 
       <Header userName={userName} accessToken={user?.accessToken}/>
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
+
+        {/* ── 미확인 최종 리포트 알림 배너 ── */}
+        {unreadFinals.map(s => (
+          <div key={s.id} style={{
+            background: "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)",
+            borderRadius: 16, padding: "20px 28px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 20, marginBottom: 16, flexWrap: "wrap",
+            boxShadow: "0 4px 24px rgba(13,34,64,0.18)",
+            position: "relative", overflow: "hidden",
+          }}>
+            {/* 배경 장식 */}
+            <div style={{ position:"absolute", right:-20, top:-20, width:120, height:120, borderRadius:"50%", background:"rgba(29,158,117,0.15)", pointerEvents:"none" }}/>
+            <div style={{ position:"absolute", right:60, bottom:-30, width:80, height:80, borderRadius:"50%", background:"rgba(29,158,117,0.1)", pointerEvents:"none" }}/>
+
+            <div style={{ display:"flex", alignItems:"center", gap:16, zIndex:1 }}>
+              {/* 아이콘 */}
+              <div style={{
+                width:48, height:48, borderRadius:14,
+                background: C.teal,
+                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+              }}>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <rect x="3" y="5" width="16" height="14" rx="2" stroke="white" strokeWidth="1.6"/>
+                  <path d="M7 3v4M15 3v4M3 10h16" stroke="white" strokeWidth="1.6" strokeLinecap="round"/>
+                  <path d="M7 14h8M7 17h5" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                  <span style={{ fontSize:11, fontWeight:700, background:C.teal, color:"white", padding:"2px 8px", borderRadius:99 }}>NEW</span>
+                  <p style={{ fontSize:15, fontWeight:700, color:"white" }}>최종 면접 리포트가 도착했습니다</p>
+                </div>
+                <p style={{ fontSize:12, color:"rgba(255,255,255,0.65)", lineHeight:1.5 }}>
+                  {s.title} · 멘토 코멘트 + AI 분석이 합쳐진 최종 리포트를 확인하세요
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate("/report/final", { state: { sessionId: s.id, role: "mentee" } })}
+              style={{
+                padding: "12px 24px", borderRadius: 10,
+                border: "none", background: C.teal,
+                color: "white", fontSize: 14, fontWeight: 700,
+                cursor: "pointer", fontFamily: "inherit",
+                flexShrink: 0, whiteSpace: "nowrap", zIndex: 1,
+                transition: "opacity 0.18s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity="0.85"}
+              onMouseLeave={e => e.currentTarget.style.opacity="1"}
+            >
+              지금 확인하기 →
+            </button>
+          </div>
+        ))}
 
         {/* ── 자소서 업로드 안내 배너 (면접 확정 시) ── */}
         {scheduledSessions.length > 0 && (
@@ -427,7 +495,10 @@ export default function MenteeDashboard() {
               <div>
                 {history.map((h, i) => (
                   <HistoryItem key={i} {...h}
-                    onView={() => navigate(`/report/ai/${h.id}`, { state: { role: "mentee" } })}
+                    onView={() => h.isFinal
+                      ? navigate("/report/final", { state: { sessionId: h.id, role: "mentee" } })
+                      : navigate(`/report/ai/${h.id}`, { state: { role: "mentee" } })
+                    }
                   />
                 ))}
                 <Link to="/dashboard/mentee" style={{

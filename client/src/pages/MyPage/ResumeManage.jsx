@@ -150,8 +150,8 @@ export default function ResumeManage() {
     ];
   });
 
-  const [targetCompany, setTargetCompany] = useState("");
-  const [targetJob,     setTargetJob]     = useState("");
+  const [jobUrl, setJobUrl] = useState("");
+  const [jobUrlFocused, setJobUrlFocused] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -176,7 +176,7 @@ export default function ResumeManage() {
     const resumeContent = items.map(it => `[${it.title}]\n${it.content}`).join("\n\n");
     navigate("/mentor/search", {
       state: {
-        jobPosting: { company: targetCompany, jobCategory: targetJob, rawText: targetCompany + " " + targetJob },
+        jobPosting: { jobPostingUrl: jobUrl, rawText: jobUrl },
         resumeContent,
       },
     });
@@ -228,31 +228,26 @@ export default function ResumeManage() {
         {/* 지원 정보 */}
         <div style={{ background:C.white, borderRadius:16, padding:"24px 28px", border:`1px solid ${C.border}`, marginBottom:20 }}>
           <h2 style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:18 }}>지원 정보</h2>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-            {[
-              { label:"목표 기업", val:targetCompany, set:setTargetCompany, ph:"예) 네이버, 카카오" },
-              { label:"지원 직무", val:targetJob,     set:setTargetJob,     ph:"예) 백엔드 개발" },
-            ].map((f, i) => {
-              const [focused, setFocused] = useState(false);
-              return (
-                <div key={i}>
-                  <label style={{ fontSize:13, fontWeight:600, color:C.text, display:"block", marginBottom:7 }}>{f.label}</label>
-                  <input
-                    placeholder={f.ph} value={f.val}
-                    onChange={e=>f.set(e.target.value)}
-                    onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}
-                    style={{
-                      width:"100%", padding:"11px 14px",
-                      background:focused?C.white:C.bg,
-                      border:`1.5px solid ${focused?C.navy:"transparent"}`,
-                      borderRadius:8, fontSize:14, color:C.text,
-                      outline:"none", fontFamily:"inherit", transition:"all 0.18s",
-                      boxSizing:"border-box",
-                    }}
-                  />
-                </div>
-              );
-            })}
+          <div>
+            <label style={{ fontSize:13, fontWeight:600, color:C.text, display:"block", marginBottom:7 }}>채용공고 URL</label>
+            <input
+              placeholder="https://www.wanted.co.kr/wd/..."
+              value={jobUrl}
+              onChange={e => setJobUrl(e.target.value)}
+              onFocus={() => setJobUrlFocused(true)}
+              onBlur={() => setJobUrlFocused(false)}
+              style={{
+                width:"100%", padding:"11px 14px",
+                background:jobUrlFocused ? C.white : C.bg,
+                border:`1.5px solid ${jobUrlFocused ? C.navy : "transparent"}`,
+                borderRadius:8, fontSize:14, color:C.text,
+                outline:"none", fontFamily:"inherit", transition:"all 0.18s",
+                boxSizing:"border-box",
+              }}
+            />
+            <p style={{ fontSize:11, color:C.textMuted, marginTop:6, lineHeight:1.5 }}>
+              채용공고 URL을 입력하면 AI가 자동으로 기업·직무 정보를 분석합니다.
+            </p>
           </div>
         </div>
 

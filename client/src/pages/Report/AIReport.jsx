@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import mockAiReport from "./mockAiReport";
 
@@ -7,7 +7,17 @@ const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
 const CARD = "#FFFFFF";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
-const USE_MOCK_REPORT = import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_REPORT === "true";
+const USE_MOCK_REPORT =
+  import.meta.env.VITE_USE_MOCK_REPORT === "false"
+    ? false
+    : import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_REPORT === "true";
+const LOADING_STEPS = [
+  "음성 데이터 분석 중...",
+  "WPM · 침묵 구간 측정 중...",
+  "STAR 구조화 지표 분류 중...",
+  "Fit-Gap 역량 교차 분석 중...",
+  "AI 리포트 생성 완료!",
+];
 
 function getAuthHeaders() {
   const raw = localStorage.getItem("scena_auth");
@@ -93,13 +103,6 @@ function formatReplayTime(replay = {}) {
 function LoadingScreen({ onDone }) {
   const [progress, setProgress] = useState(0);
   const [step, setStep] = useState(0);
-  const steps = [
-    "음성 데이터 분석 중...",
-    "WPM · 침묵 구간 측정 중...",
-    "STAR 구조화 지표 분류 중...",
-    "Fit-Gap 역량 교차 분석 중...",
-    "AI 리포트 생성 완료!",
-  ];
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -110,12 +113,12 @@ function LoadingScreen({ onDone }) {
           setTimeout(onDone, 600);
           return 100;
         }
-        setStep(Math.floor((next / 100) * (steps.length - 1)));
+        setStep(Math.floor((next / 100) * (LOADING_STEPS.length - 1)));
         return next;
       });
     }, 80);
     return () => clearInterval(interval);
-  }, []);
+  }, [onDone]);
 
   return (
     <div style={{ minHeight: "100vh", background: BG, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
@@ -137,7 +140,7 @@ function LoadingScreen({ onDone }) {
       <div style={{ width: 340, background: "#E0DDD8", borderRadius: 99, height: 6, margin: "0 auto 16px" }}>
         <div style={{ height: 6, borderRadius: 99, background: GREEN, width: `${progress}%`, transition: "width 0.08s linear" }} />
       </div>
-      <p style={{ color: "#555", fontSize: 13, textAlign: "center", minHeight: 20, transition: "opacity 0.3s" }}>{steps[step]}</p>
+      <p style={{ color: "#555", fontSize: 13, textAlign: "center", minHeight: 20, transition: "opacity 0.3s" }}>{LOADING_STEPS[step]}</p>
       <p style={{ color: "#999", fontSize: 12, marginTop: 8 }}>{Math.round(progress)}%</p>
 
       <style>{`@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }`}</style>
@@ -180,22 +183,6 @@ function Stars({ score, color = "#F59E0B" }) {
         </svg>
       ))}
     </span>
-  );
-}
-
-// ─── Fit-Gap Bar ─────────────────────────────────────────────────
-function FitGapBar({ label, pct }) {
-  const color = pct >= 70 ? GREEN : pct >= 45 ? "#F59E0B" : "#E24B4A";
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
-        <span style={{ color: "#333" }}>{label}</span>
-        <span style={{ fontWeight: 600, color }}>{pct}%</span>
-      </div>
-      <div style={{ background: "#E8E5DF", borderRadius: 99, height: 8 }}>
-        <div style={{ width: `${pct}%`, height: 8, borderRadius: 99, background: color, transition: "width 1s ease" }} />
-      </div>
-    </div>
   );
 }
 
@@ -510,8 +497,6 @@ function MenteeReport({ sessionId, report }) {
 // ─── Mentor Report ────────────────────────────────────────────────
 function MentorReport({ sessionId }) {
   const navigate = useNavigate();
-  const [feedback, setFeedback] = useState("");
-  const [saved, setSaved] = useState(false);
   const [filter, setFilter] = useState("전체");
   const mentees = [
     { initials: "김M", name: "김민준", track: "백엔드·신입", wpm: 118, star: "4/4", silence: 2, score: 4.2, color: "#3B5A8A",

@@ -1,14 +1,14 @@
-# 흐름은 답변 오디오를 백엔드가 S3에 저장한 다음, AI 서버에 /api/stt/jobs로 answer_id랑 audio_key, callback_url 보내기
+흐름은 답변 오디오를 백엔드가 S3에 저장한 다음, AI 서버에 /api/stt/jobs로 answer_id랑 audio_key, callback_url 보내기
 
-# AI 서버가 S3에서 오디오 받아서 faster-whisper-medium으로 STT 돌리고, 끝나면 callback_url로 결과 보냄
+AI 서버가 S3에서 오디오 받아서 faster-whisper-medium으로 STT 돌리고, 끝나면 callback_url로 결과 보냄
 
 
-# 1. InterviewAnswer에 sttStatus, sttModel, audioQualityStatus, audioQualityMessage, sttErrorMessage, durationSec 정도 추가
-# 2. 답변 업로드 후 sttStatus=PENDING 저장
-# 3. AI 서버 POST /api/stt/jobs 호출
-# 4. /api/internal/stt/callback API 만들어서 결과 받기
-# 5. callback 성공하면 sttText에 text 저장하고 sttStatus=COMPLETED로 변경
-# 6. 실패하면 sttStatus=FAILED, sttErrorMessage 저장
+1. InterviewAnswer에 sttStatus, sttModel, audioQualityStatus, audioQualityMessage, sttErrorMessage, durationSec 정도 추가
+2. 답변 업로드 후 sttStatus=PENDING 저장
+3. AI 서버 POST /api/stt/jobs 호출
+4. /api/internal/stt/callback API 만들어서 결과 받기
+5. callback 성공하면 sttText에 text 저장하고 sttStatus=COMPLETED로 변경
+6. 실패하면 sttStatus=FAILED, sttErrorMessage 저장
 
 ## 1. 백엔드가 AI 서버에 호출할 API
 

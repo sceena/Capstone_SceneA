@@ -4,7 +4,7 @@ import { io } from "socket.io-client";
 import { Device } from "mediasoup-client";
 import useAuthStore from "../../store/authStore";
 import { getAuthUser } from "../../store/authStore";
-import { getSessionReport } from "../../api/sessions";
+import { getSession, getSessionReport } from "../../api/sessions";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 
@@ -13,60 +13,52 @@ const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 
 // ─── 더미 세션 데이터 (실제 연동 시 API로 교체) ─────────────────
+const MOCK_BASE_REPORT = {
+  title: "AI 정밀 진단 리포트",
+  date: "2026.04.02",
+  totalScore: 85,
+  bestMoment: {
+    quote: "결국 벤치마킹 데이터를 정리해 팀원들을 설득했습니다.",
+    reason: "수치 기반 결과 제시 + 행동-결과 인과관계가 명확해 설득력이 높아요.",
+  },
+  worstMoment: {
+    quote: "어... 그러니까 제 생각에는 그게 좀...",
+    reason: "만연체 + 경험 없는 이론 나열. 구체적 사례로 전환 필요해요.",
+  },
+  scriptSegments: [
+    { text: "네, 저는 지난 캡스톤 프로젝트에서 팀원 간 역할 분담 문제로 갈등이 생긴 경험이 있습니다.", type: "S" },
+    { text: " 어... 그러니까 제 생각에는 그게 좀...", type: "BAD" },
+    { text: " 백엔드 팀원과 API 설계 방향에서 의견 충돌이 있었습니다.", type: "T" },
+    { text: " 저는 상대방의 입장을 먼저 들어보자는 생각으로...", type: "A" },
+  ],
+  fitGap: [
+    { label: "Java / Spring Boot", pct: 92 },
+    { label: "대규모 트래픽 경험", pct: 78 },
+    { label: "CI/CD · DevOps", pct: 51 },
+    { label: "MSA · 분산 시스템", pct: 44 },
+    { label: "데이터 파이프라인", pct: 22 },
+  ],
+  qnas: [
+    { id: "q1", question: "Q1 · 기술적 도전과 해결 과정을 말해주세요.", aiScore: 4.0, transcript: "카카오 인턴 당시 결제 서버 피크 타임 응답 지연 문제를 Redis 캐싱으로 해결, 응답 시간 340ms 달성." },
+    { id: "q2", question: "Q2 · 협업 중 의견 충돌 경험이 있나요?", aiScore: 5.0, transcript: "REST API 설계 방향 충돌 → 장단점 문서화 → 팀 합의 도출 → API 일관성 향상." },
+    { id: "q3", question: "Q3 · MSA 서비스 간 통신 방식을 설명해보세요.", aiScore: 2.0, transcript: "MSA는 서비스들이 독립적으로 운영되고 REST, 메시지 큐, gRPC 방법이 있는데 저는 주로 REST를 많이 써봤고..." },
+  ],
+};
+
+const MOCK_MENTEES = [
+  { id: "u1", name: "김민준", report: { ...MOCK_BASE_REPORT, menteeName: "김민준", totalScore: 85 } },
+  { id: "u2", name: "이서연", report: { ...MOCK_BASE_REPORT, menteeName: "이서연", totalScore: 72, bestMoment: { quote: "팀 내 갈등을 직접 나서서 조율했고, 결국 프로젝트를 기한 내 완료했습니다.", reason: "갈등 관리 역량과 책임감이 돋보여요." }, fitGap: [ { label: "Java / Spring Boot", pct: 75 }, { label: "대규모 트래픽 경험", pct: 60 }, { label: "CI/CD · DevOps", pct: 82 }, { label: "MSA · 분산 시스템", pct: 38 }, { label: "데이터 파이프라인", pct: 55 } ] } },
+  { id: "u3", name: "박준혁", report: { ...MOCK_BASE_REPORT, menteeName: "박준혁", totalScore: 91, bestMoment: { quote: "사용자 피드백을 직접 수집해 서비스 개선에 반영했고, MAU 30% 증가를 이끌었습니다.", reason: "데이터 기반 의사결정과 실행력이 탁월해요." }, fitGap: [ { label: "Java / Spring Boot", pct: 88 }, { label: "대규모 트래픽 경험", pct: 91 }, { label: "CI/CD · DevOps", pct: 70 }, { label: "MSA · 분산 시스템", pct: 65 }, { label: "데이터 파이프라인", pct: 48 } ] } },
+];
+
 const MOCK_SESSION = {
   sessionId: "sess-001",
-  title: "OOO 멘토 개인 멘토링 진행",
+  title: "그룹 면접 멘토링 세션",
   date: "2026.04.02",
   time: "19:00",
   mentor: { id: "m1", name: "박지훈", role: "Moderator", avatar: null },
-  mentee: { id: "u1", name: "김민준", avatar: null },
-  report: {
-    title: "AI 정밀 진단 리포트",
-    menteeName: "김민준",
-    date: "2026.04.02",
-    totalScore: 85,
-    bestMoment: {
-      quote: "결국 벤치마킹 데이터를 정리해 팀원들을 설득했습니다.",
-      reason: "수치 기반 결과 제시 + 행동-결과 인과관계가 명확해 설득력이 높아요.",
-    },
-    worstMoment: {
-      quote: "어... 그러니까 제 생각에는 그게 좀...",
-      reason: "만연체 + 경험 없는 이론 나열. 구체적 사례로 전환 필요해요.",
-    },
-    scriptSegments: [
-      { text: "네, 저는 지난 캡스톤 프로젝트에서 팀원 간 역할 분담 문제로 갈등이 생긴 경험이 있습니다.", type: "S" },
-      { text: " 어... 그러니까 제 생각에는 그게 좀...", type: "BAD" },
-      { text: " 백엔드 팀원과 API 설계 방향에서 의견 충돌이 있었습니다.", type: "T" },
-      { text: " 저는 상대방의 입장을 먼저 들어보자는 생각으로...", type: "A" },
-    ],
-    fitGap: [
-      { label: "Java / Spring Boot", pct: 92 },
-      { label: "대규모 트래픽 경험", pct: 78 },
-      { label: "CI/CD · DevOps", pct: 51 },
-      { label: "MSA · 분산 시스템", pct: 44 },
-      { label: "데이터 파이프라인", pct: 22 },
-    ],
-    qnas: [
-      {
-        id: "q1",
-        question: "Q1 · 기술적 도전과 해결 과정을 말해주세요.",
-        aiScore: 4.0,
-        transcript: "카카오 인턴 당시 결제 서버 피크 타임 응답 지연 문제를 Redis 캐싱으로 해결, 응답 시간 340ms 달성.",
-      },
-      {
-        id: "q2",
-        question: "Q2 · 협업 중 의견 충돌 경험이 있나요?",
-        aiScore: 5.0,
-        transcript: "REST API 설계 방향 충돌 → 장단점 문서화 → 팀 합의 도출 → API 일관성 향상.",
-      },
-      {
-        id: "q3",
-        question: "Q3 · MSA 서비스 간 통신 방식을 설명해보세요.",
-        aiScore: 2.0,
-        transcript: "MSA는 서비스들이 독립적으로 운영되고 REST, 메시지 큐, gRPC 방법이 있는데 저는 주로 REST를 많이 써봤고...",
-      },
-    ],
-  },
+  mentee: MOCK_MENTEES[0],
+  report: MOCK_MENTEES[0].report,
 };
 
 // ─── 세그먼트 색상 맵 ─────────────────────────────────────────────
@@ -389,6 +381,10 @@ export default function MentoringSessionPage() {
   const [isSharing, setIsSharing] = useState(true);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
+  /* ── 멀티 멘티 리포트 네비게이션 ── */
+  const [menteeList, setMenteeList] = useState(MOCK_MENTEES);
+  const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
+
   const timerRef = useRef(null);
 
   /* ── WebRTC refs ── */
@@ -404,6 +400,8 @@ export default function MentoringSessionPage() {
   const localAnalyserRef = useRef(null);
   const peerAnalysersRef = useRef({});
   const peersRef = useRef({});
+  const pendingProducersRef = useRef([]);
+  const recvTransportReadyRef = useRef(false);
 
   const [peerIds, setPeerIds] = useState([]);
   const [localMediaStream, setLocalMediaStream] = useState(null);
@@ -412,16 +410,11 @@ export default function MentoringSessionPage() {
 
   /* ── 드로잉(형광펜) ── */
   const [drawMode, setDrawMode] = useState(false);
-  const [drawTool, setDrawTool] = useState("highlight");
+  const [drawTool, setDrawTool] = useState("pen");
   const [drawColor, setDrawColor] = useState("#FFD700");
   const canvasRef = useRef(null);
   const scrollContainerRef = useRef(null);
-  const pendingRef = useRef(false);      // mousedown 후 아직 방향 미결정
-  const scrollModeRef = useRef(false);   // 드래그 → 스크롤 모드
-  const mouseStartRef = useRef({ x: 0, y: 0 });
-  const scrollStartTopRef = useRef(0);
-  const lastPosRef = useRef({ x: 0, y: 0 });
-  const DRAG_THRESHOLD = 6;
+  const isDrawingRef = useRef(false);
 
   const getPos = (e, canvas) => {
     const rect = canvas.getBoundingClientRect();
@@ -433,62 +426,42 @@ export default function MentoringSessionPage() {
   const startDraw = (e) => {
     if (!drawMode) return;
     e.preventDefault();
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-    mouseStartRef.current = { x: cx, y: cy };
-    lastPosRef.current = getPos(e, canvasRef.current);
-    pendingRef.current = true;
-    scrollModeRef.current = false;
-    scrollStartTopRef.current = scrollContainerRef.current?.scrollTop ?? 0;
+    isDrawingRef.current = true;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const pos = getPos(e, canvas);
+    if (drawTool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+    } else {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = drawColor;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+    }
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
   };
 
   const draw = (e) => {
-    if (!drawMode || !pendingRef.current && !scrollModeRef.current) return;
+    if (!drawMode || !isDrawingRef.current) return;
     e.preventDefault();
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-
-    if (pendingRef.current) {
-      const dist = Math.hypot(cx - mouseStartRef.current.x, cy - mouseStartRef.current.y);
-      if (dist > DRAG_THRESHOLD) {
-        pendingRef.current = false;
-        scrollModeRef.current = true;
-      }
-      return;
-    }
-
-    if (scrollModeRef.current) {
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = scrollStartTopRef.current - (cy - mouseStartRef.current.y);
-      }
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const pos = getPos(e, canvas);
+    if (drawTool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 16, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
     }
   };
 
   const stopDraw = () => {
-    if (pendingRef.current) {
-      // 클릭 → 해당 위치에 하이라이트 마크 찍기
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-      const { x, y } = lastPosRef.current;
-      ctx.beginPath();
-      if (drawTool === "highlight") {
-        ctx.globalCompositeOperation = "source-over";
-        ctx.fillStyle = drawColor + "55";
-        ctx.ellipse(x, y, 24, 11, 0, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (drawTool === "pen") {
-        ctx.globalCompositeOperation = "source-over";
-        ctx.fillStyle = drawColor;
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.arc(x, y, 18, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    pendingRef.current = false;
-    scrollModeRef.current = false;
+    isDrawingRef.current = false;
   };
 
   const clearCanvas = () => {
@@ -504,12 +477,37 @@ export default function MentoringSessionPage() {
     node.height = parent.clientHeight;
   }, []);
 
-  // 세션 리포트 조회
+  // 세션 정보 + 참여자 목록 조회
   useEffect(() => {
+    getSession(sessionId)
+      .then(data => {
+        const sessionMentees = (data.participants || []).filter(p => p.role !== 'mentor');
+        if (sessionMentees.length > 0) {
+          const withReports = sessionMentees.map(m => ({
+            ...m,
+            report: { ...MOCK_BASE_REPORT, menteeName: m.name },
+          }));
+          setMenteeList(withReports);
+        }
+        setSession(prev => ({ ...prev, ...data, mentor: data.mentor || prev.mentor }));
+      })
+      .catch(() => {});
     getSessionReport(sessionId)
-      .then(data => setSession(prev => ({ ...prev, ...data })))
+      .then(data => {
+        if (data) {
+          setSession(prev => ({ ...prev, report: data }));
+          setMenteeList(prev => prev.map((m, i) => i === 0 ? { ...m, report: { ...data, menteeName: m.name } } : m));
+        }
+      })
       .catch(() => {});
   }, [sessionId]);
+
+  // 멘티 리포트 네비게이션 (멘토만 조작, 소켓으로 전체 동기화)
+  const handleMenteeNav = useCallback((newIdx) => {
+    const clamped = Math.max(0, Math.min(newIdx, menteeList.length - 1));
+    setCurrentMenteeIdx(clamped);
+    socketRef.current?.emit("reportSync", { index: clamped });
+  }, [menteeList.length]);
 
   /* ── 미디어 소비 ── */
   const consumeProducer = useCallback((producerId, peerId, kind) => {
@@ -574,6 +572,9 @@ export default function MentoringSessionPage() {
         localAnalyserRef.current = analyser;
       } catch {}
 
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current = [];
+
       socket = io(MEDIA_SERVER, { withCredentials: true });
       socketRef.current = socket;
 
@@ -612,20 +613,39 @@ export default function MentoringSessionPage() {
             if (isCancelled) return;
             await consumeProducer(producerId, peerId, kind);
           }
+          // recvTransport 준비 완료 → 대기 중인 newProducer 처리
+          recvTransportReadyRef.current = true;
+          for (const pending of pendingProducersRef.current) {
+            if (isCancelled) break;
+            await consumeProducer(pending.producerId, pending.peerId, pending.kind);
+          }
+          pendingProducersRef.current = [];
         });
       });
 
-      socket.on("newProducer", ({ producerId, peerId, kind }) => { if (!isCancelled) consumeProducer(producerId, peerId, kind); });
+      socket.on("newProducer", ({ producerId, peerId, kind }) => {
+        if (isCancelled) return;
+        if (!recvTransportReadyRef.current) {
+          pendingProducersRef.current.push({ producerId, peerId, kind });
+        } else {
+          consumeProducer(producerId, peerId, kind);
+        }
+      });
       socket.on("peerLeft", ({ peerId }) => {
         delete peersRef.current[peerId];
         delete peerAnalysersRef.current[peerId];
         setPeerIds(prev => prev.filter(p => p !== peerId));
+      });
+      socket.on("reportSync", ({ index }) => {
+        if (!isCancelled) setCurrentMenteeIdx(index);
       });
     };
 
     init();
     return () => {
       isCancelled = true;
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current = [];
       videoProducerRef.current?.close();
       audioProducerRef.current?.close();
       sendTransportRef.current?.close();
@@ -697,14 +717,25 @@ export default function MentoringSessionPage() {
     // ──────────────────────────────────────────────────────────────
 
     if (user?.role === "mentor") {
-      navigate(`/mentor/feedback/${session.sessionId}`);
+      navigate(`/mentor/feedback/${session.sessionId || sessionId}`);
     } else {
-      // 멘티: 리포트 대기 화면 또는 마이페이지
-      navigate(`/report/ai-stream/${session.sessionId}`);
+      navigate(`/report/mentor-review/${session.sessionId || sessionId}`, {
+        state: {
+          mentorName: session.mentorName || "멘토",
+          nextPath: `/report/ai-stream/${session.sessionId || sessionId}`,
+        },
+      });
     }
   }, [navigate, session.sessionId, user?.role]);
 
   const isMentor = user?.role === "mentor";
+  const currentMentee = menteeList[currentMenteeIdx] || MOCK_MENTEES[0];
+  const currentReport = currentMentee?.report || session.report;
+
+  const getPeerName = (peerId) => {
+    const found = menteeList.find(m => String(m.id) === String(peerId));
+    return found ? found.name : null;
+  };
 
   return (
     <>
@@ -772,9 +803,11 @@ export default function MentoringSessionPage() {
         </div>
 
         {/* 참여자 아바타 */}
-        <div style={{ display: "flex", gap: -6 }}>
-          <Avatar name={session.mentor.name} size={36} bg={NAVY} />
-          <Avatar name={session.mentee.name} size={36} bg="#3A6A5A" />
+        <div style={{ display: "flex", gap: 4 }}>
+          <Avatar name={session.mentor?.name || "멘토"} size={32} bg={NAVY} />
+          {menteeList.map((m, i) => (
+            <Avatar key={m.id} name={m.name} size={32} bg={i === currentMenteeIdx ? GREEN : "#3A6A5A"} />
+          ))}
         </div>
 
         {/* 참여자 정보 카드 */}
@@ -855,9 +888,70 @@ export default function MentoringSessionPage() {
       ══════════════════════════════════════════════════════════ */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* 좌측: 공유 리포트 + 드로잉 레이어 */}
-        <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-          <div ref={scrollContainerRef} style={{ width: "100%", height: "100%", overflowY: "auto" }}>
-            <SharedReport report={session.report} />
+        <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {/* 멘티 전환 네비게이터 */}
+          <div style={{
+            background: "#fff", borderBottom: "1px solid #E8E0D0",
+            padding: "8px 20px", display: "flex", alignItems: "center",
+            justifyContent: "space-between", flexShrink: 0, gap: 16,
+          }}>
+            <button
+              onClick={() => handleMenteeNav(currentMenteeIdx - 1)}
+              disabled={currentMenteeIdx === 0 || !isMentor}
+              style={{
+                padding: "5px 14px", borderRadius: 8, border: "1px solid #D1D5DB",
+                background: currentMenteeIdx === 0 || !isMentor ? "#F3F4F6" : "#fff",
+                color: currentMenteeIdx === 0 || !isMentor ? "#9CA3AF" : NAVY,
+                fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx === 0 || !isMentor ? "default" : "pointer",
+                fontFamily: "inherit",
+              }}
+            >← 이전</button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {menteeList.map((m, i) => (
+                <button
+                  key={m.id}
+                  onClick={() => isMentor && handleMenteeNav(i)}
+                  style={{
+                    width: 30, height: 30, borderRadius: "50%",
+                    border: `2px solid ${i === currentMenteeIdx ? NAVY : "#D1D5DB"}`,
+                    background: i === currentMenteeIdx ? NAVY : "#fff",
+                    color: i === currentMenteeIdx ? "#fff" : "#555",
+                    fontSize: 12, fontWeight: 700,
+                    cursor: isMentor ? "pointer" : "default", fontFamily: "inherit",
+                    transition: "all 0.15s",
+                  }}
+                >{i + 1}</button>
+              ))}
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#111", marginLeft: 6 }}>
+                {currentMentee?.name} 멘티
+              </span>
+              <span style={{ fontSize: 11, color: "#9CA3AF" }}>
+                ({currentMenteeIdx + 1} / {menteeList.length})
+              </span>
+              {!isMentor && (
+                <span style={{ fontSize: 11, color: GREEN, fontWeight: 600, marginLeft: 4 }}>
+                  · 멘토가 화면을 제어합니다
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={() => handleMenteeNav(currentMenteeIdx + 1)}
+              disabled={currentMenteeIdx >= menteeList.length - 1 || !isMentor}
+              style={{
+                padding: "5px 14px", borderRadius: 8, border: "1px solid #D1D5DB",
+                background: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#F3F4F6" : "#fff",
+                color: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#9CA3AF" : NAVY,
+                fontSize: 13, fontWeight: 700,
+                cursor: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "default" : "pointer",
+                fontFamily: "inherit",
+              }}
+            >다음 →</button>
+          </div>
+
+          <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto" }}>
+            <SharedReport report={currentReport} />
           </div>
 
           {/* 캔버스 오버레이 */}
@@ -867,7 +961,7 @@ export default function MentoringSessionPage() {
               position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
               pointerEvents: drawMode ? "auto" : "none",
               cursor: drawMode
-                ? (scrollModeRef.current ? "grabbing" : drawTool === "eraser" ? "cell" : "crosshair")
+                ? (drawTool === "eraser" ? "cell" : "crosshair")
                 : "default",
               touchAction: "none",
             }}
@@ -884,11 +978,11 @@ export default function MentoringSessionPage() {
               boxShadow: "0 4px 20px rgba(0,0,0,0.18)", zIndex: 10,
               border: "1px solid #E8E0D0",
             }}>
-              {/* 형광펜 색상 */}
-              {[["#FFD700","노랑"],["#FF6B6B","빨강"],["#51CF66","초록"],["#74C0FC","파랑"],["#F783AC","분홍"]].map(([c, name]) => (
-                <button key={c} title={name} onClick={() => { setDrawColor(c); setDrawTool("highlight"); }} style={{
-                  width: 22, height: 22, borderRadius: "50%", border: (drawColor === c && drawTool === "highlight") ? "3px solid #0D2240" : "2px solid #ddd",
-                  background: c + "99", cursor: "pointer", padding: 0, transition: "transform 0.1s",
+              {/* 펜 색상 */}
+              {[["#111111","검정"],["#E24B4A","빨강"],["#2563EB","파랑"],["#1D9E75","초록"],["#F59E0B","주황"]].map(([c, name]) => (
+                <button key={c} title={name} onClick={() => { setDrawColor(c); setDrawTool("pen"); }} style={{
+                  width: 22, height: 22, borderRadius: "50%", border: drawColor === c ? "3px solid #0D2240" : "2px solid #ddd",
+                  background: c, cursor: "pointer", padding: 0, transition: "transform 0.1s",
                 }} />
               ))}
 
@@ -933,7 +1027,7 @@ export default function MentoringSessionPage() {
         {/* 우측: 비디오 + 세션 정보 패널 */}
         <div
           style={{
-            width: 280,
+            width: 320,
             background: "#111",
             display: "flex",
             flexDirection: "column",
@@ -942,47 +1036,53 @@ export default function MentoringSessionPage() {
             overflowY: "auto",
           }}
         >
-          {/* 비디오 영역 (각 50%) */}
-          <div style={{ height: 240, display: "flex", flexDirection: "column", flexShrink: 0 }}>
-            {/* 멘토 비디오 */}
-            <VideoTile
-              stream={isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
-              label={`${session.mentor.name} (멘토)`}
-              mirror={isMentor} muted={isMentor}
-              isSpeaking={(audioLevels[isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
-              camOff={isMentor && !isCamOn}
-            />
-            <div style={{ height: 1, background: "#222", flexShrink: 0 }} />
-            {/* 멘티 비디오 */}
-            <VideoTile
-              stream={!isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
-              label={`${session.mentee.name} (멘티)`}
-              mirror={!isMentor} muted={!isMentor}
-              isSpeaking={(audioLevels[!isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
-              camOff={!isMentor && !isCamOn}
-            />
+          {/* 비디오 영역 - 전체 참여자 */}
+          <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "50vh" }}>
+            {/* 나 (로컬) */}
+            <div style={{ height: 160, flexShrink: 0, display: "flex" }}>
+              <VideoTile
+                stream={localMediaStream}
+                label={`나 (${isMentor ? "멘토" : "멘티"})`}
+                mirror muted
+                isSpeaking={(audioLevels["__local"] || 0) > 0.025}
+                camOff={!isCamOn}
+              />
+            </div>
+            {/* 원격 참여자들 */}
+            {peerIds.map((pid, i) => (
+              <div key={pid} style={{ height: 160, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
+                <VideoTile
+                  stream={peersRef.current[pid] ?? null}
+                  label={getPeerName(pid) || `참여자 ${i + 1}`}
+                  isSpeaking={(audioLevels[pid] || 0) > 0.025}
+                />
+              </div>
+            ))}
           </div>
 
-          {/* 멘티 프로필 카드 */}
+          {/* 멘티 프로필 카드 (현재 선택된 멘티) */}
           <div style={{ background: "#0D2240", padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <Avatar name={session.mentee.name} size={36} bg="#1E6A5A" fontSize={12} />
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{session.mentee.name}</p>
-                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>멘티 · {session.report.date}</p>
+              <Avatar name={currentMentee?.name || "?"} size={36} bg="#1E6A5A" fontSize={12} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{currentMentee?.name}</p>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>멘티 {currentMenteeIdx + 1} / {menteeList.length}</p>
               </div>
             </div>
             {/* 종합 점수 */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>AI 종합 점수</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: GREEN }}>{session.report.totalScore}<span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/100</span></span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: GREEN }}>
+                {currentReport?.totalScore ?? "--"}
+                <span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/100</span>
+              </span>
             </div>
             <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height: 4 }}>
-              <div style={{ width: `${session.report.totalScore}%`, height: 4, borderRadius: 99, background: GREEN }} />
+              <div style={{ width: `${currentReport?.totalScore ?? 0}%`, height: 4, borderRadius: 99, background: GREEN, transition: "width 0.5s ease" }} />
             </div>
             {/* 취약 역량 태그 */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
-              {session.report.fitGap.filter(f => f.pct < 50).map(f => (
+              {(currentReport?.fitGap || []).filter(f => f.pct < 50).map(f => (
                 <span key={f.label} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "rgba(226,75,74,0.18)", color: "#E24B4A", fontWeight: 600 }}>
                   {f.label}
                 </span>
@@ -1115,7 +1215,7 @@ export default function MentoringSessionPage() {
           <ControlButton
             active={drawMode}
             onClick={() => setDrawMode(v => !v)}
-            label={drawMode ? "그리기 끄기" : "형광펜"}
+            label={drawMode ? "그리기 끄기" : "펜"}
             activeColor="#F59E0B"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -1141,7 +1241,7 @@ export default function MentoringSessionPage() {
 
         {/* 중앙: 세션 정보 */}
         <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>
-          {session.title} · {session.mentee.name} 멘티
+          {session.title} · {currentMentee?.name} 멘티 ({currentMenteeIdx + 1}/{menteeList.length})
         </p>
 
         {/* 우측: 세션 종료 */}

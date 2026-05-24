@@ -8,7 +8,7 @@ import { getAuthUser } from "../../store/authStore";
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 
 /* ── 통합 비디오 타일 ── */
-function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false }) {
+function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false, micOff = false }) {
   const ref = useRef(null);
   useEffect(() => {
     const video = ref.current;
@@ -28,24 +28,57 @@ function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = 
         width: "100%", height: "100%", objectFit: "cover",
         transform: mirror ? "scaleX(-1)" : "none",
         display: camOff ? "none" : "block",
+        filter: micOff && !camOff ? "brightness(0.65)" : "none",
+        transition: "filter 0.2s",
       }} />
       {camOff && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          background: micOff ? "rgba(0,0,0,0.15)" : "transparent",
+          transition: "background 0.2s",
+        }}>
           <div style={{
             width: 56, height: 56, borderRadius: "50%", background: "#1B4F7A",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 20, color: "#fff", fontWeight: 700,
+            opacity: micOff ? 0.6 : 1, transition: "opacity 0.2s",
           }}>
             {(label || "?")[0]}
           </div>
         </div>
       )}
       {label && (
-        <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.6)", borderRadius: 6, padding: "3px 10px" }}>
-          <span style={{ fontSize: 11, color: "#fff", fontWeight: 500 }}>{label}</span>
+        <div style={{
+          position: "absolute", bottom: 8, left: 8,
+          background: "rgba(0,0,0,0.6)", borderRadius: 6, padding: "3px 10px",
+          display: "flex", alignItems: "center", gap: 5,
+        }}>
+          {micOff && (
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+              <rect x="5" y="1" width="6" height="9" rx="3" stroke="#EF4444" strokeWidth="1.5"/>
+              <path d="M3 7c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="1" y1="1" x2="15" y2="15" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          )}
+          <span style={{ fontSize: 11, color: micOff ? "rgba(255,255,255,0.55)" : "#fff", fontWeight: 500 }}>{label}</span>
         </div>
       )}
-      {isSpeaking && (
+      {/* 음소거 상태 배지 (우하단) */}
+      {micOff && (
+        <div style={{
+          position: "absolute", bottom: 8, right: 8,
+          background: "#EF4444", borderRadius: "50%",
+          width: 22, height: 22,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 0 0 2px rgba(0,0,0,0.4)",
+        }}>
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+            <rect x="5" y="1" width="6" height="9" rx="3" stroke="#fff" strokeWidth="1.5"/>
+            <line x1="1" y1="1" x2="15" y2="15" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </div>
+      )}
+      {isSpeaking && !micOff && (
         <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "flex-end", gap: 2 }}>
           {[4, 8, 6, 10, 5].map((h, i) => (
             <div key={i} style={{
@@ -640,7 +673,7 @@ export default function InterviewSession({ role = "mentee" }) {
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", height: "100%", padding: 20 }}>
                   <div style={{ width: "min(640px, 100%)", height: "min(480px, 100%)" }}>
                     <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
-                      isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
+                      isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                   </div>
                 </div>
               ) : (
@@ -651,7 +684,7 @@ export default function InterviewSession({ role = "mentee" }) {
                   <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
                     {mainViewId === '__local' ? (
                       <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
-                        isSpeaking camOff={!camOn} />
+                        isSpeaking camOff={!camOn} micOff={!micOn} />
                     ) : (
                       <VideoTile stream={peersRef.current[mainViewId]} label="상대방"
                         isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
@@ -663,7 +696,7 @@ export default function InterviewSession({ role = "mentee" }) {
                     {/* 내 화면은 항상 첫 번째 */}
                     <div style={{ width: 160, flexShrink: 0, height: "100%", position: "relative" }}>
                       <VideoTile stream={localMediaStream} label="나" mirror muted
-                        isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} />
+                        isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                       {mainViewId === '__local' && (
                         <div style={{
                           position: "absolute", top: 6, left: 6, zIndex: 2,

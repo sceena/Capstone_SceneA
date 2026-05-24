@@ -370,3 +370,18 @@ export async function saveMentorScore(sessionId, questionId, answerId, score) {
   if (!res.ok) throw new Error("멘토 별점 저장 실패");
   return res.json();
 }
+
+/**
+ * POST /api/sessions/{id}/mentor-review
+ * 멘티가 멘토에게 별점 + 후기를 남긴다.
+ * @param {{ rating: number, comment: string }} data
+ */
+export async function saveMentorReview(sessionId, data) {
+  const res = await fetch(`/api/sessions/${sessionId}/mentor-review`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("멘토 후기 저장 실패");
+  return res.json();
+}

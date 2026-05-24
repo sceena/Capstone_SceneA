@@ -221,6 +221,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 7. 리포트 페이지 동기화 (멘토가 멘티 전환 시 전체 참여자에게 브로드캐스트)
+  socket.on('reportSync', ({ index }) => {
+    if (!currentRoom || !currentPeerId) return;
+    currentRoom.getOtherPeers(currentPeerId).forEach(({ socket: otherSocket }) => {
+      otherSocket.emit('reportSync', { index });
+    });
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     if (!currentRoom || !currentPeerId) return;

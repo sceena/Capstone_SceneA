@@ -4,10 +4,6 @@ import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
 import { getAvatar } from "../../utils/avatar";
 
-/* ============================================================
-   멘토 마이페이지  (pages/mentor/MyPage.jsx)
-   ============================================================ */
-
 const C = {
   navy:"#0D2240", navyMid:"#1B4F7A",
   cream:"#F2EDE4", creamDark:"#E8E0D0",
@@ -18,7 +14,6 @@ const C = {
   red:"#EF4444", redLight:"#FEF2F2",
 };
 
-/* ── 로고 ── */
 const LogoIcon = ({ size=26, color=C.white }) => (
   <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
     <circle cx="14" cy="14" r="2" fill={color}/>
@@ -33,15 +28,11 @@ const LogoIcon = ({ size=26, color=C.white }) => (
   </svg>
 );
 
-/* ── 헤더 ── */
 const Header = ({ userName, accessToken }) => {
   const navigate = useNavigate();
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${accessToken}` },
-      });
+      await fetch("/api/auth/logout", { method:"POST", headers:{ Authorization:`Bearer ${accessToken}` } });
     } catch {}
     clearAuthUser();
     navigate("/");
@@ -61,7 +52,6 @@ const Header = ({ userName, accessToken }) => {
             border:"1px solid rgba(255,255,255,0.3)",
             background:"transparent", color:"rgba(255,255,255,0.85)",
             fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-            transition:"background 0.15s, border-color 0.15s",
           }}
             onMouseEnter={e=>{ e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.6)"; }}
             onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.3)"; }}
@@ -72,8 +62,7 @@ const Header = ({ userName, accessToken }) => {
   );
 };
 
-/* ── 스탯 카드 ── */
-const StatCard = ({ label, value, sub, subColor, accent }) => (
+const StatCard = ({ label, value, sub, subColor }) => (
   <div style={{ background:C.white, borderRadius:14, padding:"18px 20px", border:`1px solid ${C.border}`, flex:1, minWidth:0 }}>
     <p style={{ fontSize:12, color:C.textMuted, marginBottom:8 }}>{label}</p>
     <p style={{ fontSize:26, fontWeight:700, color:C.navy, letterSpacing:"-0.03em", marginBottom:4 }}>{value}</p>
@@ -81,7 +70,6 @@ const StatCard = ({ label, value, sub, subColor, accent }) => (
   </div>
 );
 
-/* ── 세션 요청 아이템 ── */
 const SessionRequestItem = ({ date, time, title, detail, onAccept }) => (
   <div style={{ display:"flex", alignItems:"center", gap:16, padding:"14px 0", borderBottom:`1px solid ${C.border}` }}>
     <div style={{ width:8, height:8, borderRadius:"50%", background:C.orange, flexShrink:0 }}/>
@@ -94,7 +82,6 @@ const SessionRequestItem = ({ date, time, title, detail, onAccept }) => (
       padding:"7px 16px", background:C.navy, color:C.white,
       border:"none", borderRadius:20, fontSize:12, fontWeight:600,
       cursor:"pointer", fontFamily:"inherit", flexShrink:0,
-      transition:"background 0.18s",
     }}
       onMouseEnter={e=>e.currentTarget.style.background=C.navyMid}
       onMouseLeave={e=>e.currentTarget.style.background=C.navy}
@@ -102,7 +89,6 @@ const SessionRequestItem = ({ date, time, title, detail, onAccept }) => (
   </div>
 );
 
-/* ── 리뷰 카드 ── */
 const ReviewCard = ({ initials, name, role, company, stars, text, bgColor }) => (
   <div style={{ marginBottom:20 }}>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
@@ -123,28 +109,54 @@ const ReviewCard = ({ initials, name, role, company, stars, text, bgColor }) => 
   </div>
 );
 
-/* ── 프로필 수정 모달 ── */
-function EditProfileModal({ onClose }) {
+/* ── 프로필 수정 모달 (이미지/이름/비밀번호) ── */
+function EditProfileModal({ onClose, userEmail, onImageChange }) {
   const [tab, setTab]           = useState("name");
   const [name, setName]         = useState("");
   const [pwNew, setPwNew]       = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
+  const [imgPreview, setImgPreview] = useState(null);
+  const [imgFile, setImgFile]   = useState(null);
   const [saving, setSaving]     = useState(false);
   const [done, setDone]         = useState(false);
   const [error, setError]       = useState("");
 
-  const pwMismatch  = pwConfirm.length > 0 && pwNew !== pwConfirm;
-  const pwMatch     = pwConfirm.length > 0 && pwNew === pwConfirm;
-  const pwTooShort  = pwNew.length > 0 && pwNew.length < 8;
+  const pwMismatch = pwConfirm.length > 0 && pwNew !== pwConfirm;
+  const pwMatch    = pwConfirm.length > 0 && pwNew === pwConfirm;
+  const pwTooShort = pwNew.length > 0 && pwNew.length < 8;
+
+  const handleImageFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImgFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setImgPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveImage = async () => {
+    if (!imgFile) { setError("이미지를 선택해주세요."); return; }
+    setSaving(true);
+    try {
+      const res = await updateMyProfile({}, imgFile);
+      const url = res?.profile_image_url || imgPreview;
+      localStorage.setItem(`profile_img_${userEmail}`, url);
+      onImageChange?.(url);
+      setDone(true);
+      setTimeout(onClose, 900);
+    } catch {
+      setError("이미지 저장에 실패했습니다.");
+      setSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     setError("");
     const data = {};
     if (tab === "name") {
-      if (!name.trim()) { onClose(); return; }
+      if (!name.trim()) { setError("이름을 입력해주세요."); return; }
       data.name = name.trim();
     } else {
-      if (!pwNew) { onClose(); return; }
       if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; }
       if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
       data.password = pwNew;
@@ -157,16 +169,15 @@ function EditProfileModal({ onClose }) {
     } catch (e) {
       if (e?.status === 401) setError("로그인이 만료되었습니다. 다시 로그인해주세요.");
       else if (e?.status === 400) setError("입력값을 확인해주세요.");
-      else if (!navigator.onLine || e?.message === "Failed to fetch") setError("서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.");
       else setError("저장에 실패했습니다. 다시 시도해주세요.");
       setSaving(false);
     }
   };
 
-  const inputStyle = (focused) => ({
+  const inputStyle = () => ({
     width:"100%", padding:"11px 14px", borderRadius:10,
-    border:`1.5px solid ${focused ? C.navy : C.border}`,
-    fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg,
+    border:`1.5px solid ${C.border}`,
+    fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg, boxSizing:"border-box",
   });
 
   return (
@@ -174,7 +185,7 @@ function EditProfileModal({ onClose }) {
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}
       style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}
     >
-      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:400, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
+      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:420, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
         <h3 style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:20 }}>프로필 수정</h3>
 
         {done ? (
@@ -185,57 +196,77 @@ function EditProfileModal({ onClose }) {
         ) : (
           <>
             {/* 탭 */}
-            <div style={{ display:"flex", gap:0, marginBottom:24, borderRadius:10, overflow:"hidden", border:`1.5px solid ${C.border}` }}>
-              {[{key:"name",label:"이름 변경"},{key:"pw",label:"비밀번호 변경"}].map(t=>(
-                <button key={t.key} onClick={()=>{ setTab(t.key); setError(""); }} style={{
-                  flex:1, padding:"10px 0", border:"none", cursor:"pointer", fontFamily:"inherit",
-                  fontSize:13, fontWeight:tab===t.key?700:400,
-                  background:tab===t.key?C.navy:C.white,
-                  color:tab===t.key?C.white:C.textMuted,
-                  transition:"all 0.18s",
-                }}>{t.label}</button>
+            <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, marginBottom:22 }}>
+              {[{k:"name",l:"이름 변경"},{k:"pw",l:"비밀번호 변경"},{k:"image",l:"이미지 변경"}].map(t=>(
+                <button key={t.k} onClick={()=>{ setTab(t.k); setError(""); }} style={{
+                  flex:1, padding:"10px 0", background:"transparent", border:"none",
+                  borderBottom:`2.5px solid ${tab===t.k?C.navy:"transparent"}`,
+                  fontSize:13, fontWeight:tab===t.k?700:400,
+                  color:tab===t.k?C.navy:C.textMuted,
+                  cursor:"pointer", fontFamily:"inherit", marginBottom:-1,
+                }}>{t.l}</button>
               ))}
             </div>
 
-            {tab === "name" ? (
-              <div style={{ marginBottom:24 }}>
-                <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 이름</label>
+            {tab === "name" && (
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:7 }}>새 이름</label>
                 <input value={name} onChange={e=>setName(e.target.value)} placeholder="변경할 이름을 입력하세요"
-                  style={inputStyle(false)}
+                  style={inputStyle()}
                   onFocus={e=>e.target.style.borderColor=C.navy}
                   onBlur={e=>e.target.style.borderColor=C.border}
                 />
               </div>
-            ) : (
+            )}
+
+            {tab === "pw" && (
               <>
                 <div style={{ marginBottom:14 }}>
-                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 비밀번호</label>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:7 }}>새 비밀번호</label>
                   <input type="password" value={pwNew} onChange={e=>setPwNew(e.target.value)} placeholder="8자 이상 입력"
-                    style={inputStyle(false)}
+                    style={inputStyle()}
                     onFocus={e=>e.target.style.borderColor=C.navy}
                     onBlur={e=>e.target.style.borderColor=C.border}
                   />
-                  {pwTooShort && <p style={{ fontSize:11, color:C.red, marginTop:4 }}>비밀번호는 8자 이상이어야 합니다.</p>}
+                  {pwTooShort && <p style={{ fontSize:11, color:C.red, marginTop:5 }}>비밀번호는 8자 이상이어야 합니다.</p>}
                 </div>
-                <div style={{ marginBottom:24 }}>
-                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>비밀번호 확인</label>
+                <div style={{ marginBottom:20 }}>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:7 }}>새 비밀번호 확인</label>
                   <input type="password" value={pwConfirm} onChange={e=>setPwConfirm(e.target.value)} placeholder="비밀번호를 다시 입력"
-                    style={{ ...inputStyle(false), borderColor: pwMismatch ? C.red : pwMatch ? C.teal : C.border }}
+                    style={{ ...inputStyle(), borderColor: pwMismatch ? C.red : pwMatch ? C.teal : C.border }}
                     onFocus={e=>e.target.style.borderColor= pwMismatch ? C.red : pwMatch ? C.teal : C.navy}
                     onBlur={e=>e.target.style.borderColor= pwMismatch ? C.red : pwMatch ? C.teal : C.border}
                   />
-                  {pwMismatch && <p style={{ fontSize:11, color:C.red, marginTop:4 }}>비밀번호가 일치하지 않습니다.</p>}
-                  {pwMatch    && <p style={{ fontSize:11, color:C.teal, marginTop:4 }}>비밀번호가 일치합니다.</p>}
+                  {pwMismatch && <p style={{ fontSize:11, color:C.red, marginTop:5 }}>비밀번호가 일치하지 않습니다.</p>}
+                  {pwMatch    && <p style={{ fontSize:11, color:C.teal, marginTop:5 }}>비밀번호가 일치합니다.</p>}
                 </div>
               </>
             )}
 
-            {error && <p style={{ fontSize:12, color:C.red, marginBottom:12, textAlign:"center" }}>{error}</p>}
+            {tab === "image" && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ textAlign:"center", marginBottom:16 }}>
+                  {imgPreview ? (
+                    <img src={imgPreview} alt="preview" style={{ width:80, height:80, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.border}`, margin:"0 auto 10px", display:"block" }}/>
+                  ) : (
+                    <div style={{ width:80, height:80, borderRadius:"50%", background:C.bg, border:`2px dashed ${C.border}`, margin:"0 auto 10px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><path d="M12 5v14M5 12h14"/></svg>
+                    </div>
+                  )}
+                  <label style={{ display:"inline-block", padding:"8px 18px", borderRadius:8, border:`1.5px solid ${C.border}`, fontSize:13, fontWeight:600, color:C.navy, cursor:"pointer", background:C.white }}>
+                    이미지 선택<input type="file" accept="image/*" onChange={handleImageFile} style={{ display:"none" }}/>
+                  </label>
+                </div>
+                <p style={{ fontSize:11, color:C.textMuted, textAlign:"center" }}>JPG, PNG, GIF · 최대 5MB</p>
+              </div>
+            )}
+
+            {error && <p style={{ fontSize:12, color:C.red, marginBottom:14, textAlign:"center" }}>{error}</p>}
 
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:10, border:`1px solid ${C.border}`, background:C.white, color:C.textSub, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>취소</button>
               <button
-                onClick={handleSave}
+                onClick={tab === "image" ? handleSaveImage : handleSave}
                 disabled={saving || (tab==="pw" && (pwMismatch || pwTooShort))}
                 style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:(saving||(tab==="pw"&&(pwMismatch||pwTooShort)))?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:(saving||(tab==="pw"&&(pwMismatch||pwTooShort)))?"not-allowed":"pointer", fontFamily:"inherit" }}
               >
@@ -258,51 +289,77 @@ export default function MentorMyPage() {
 
   const [profile, setProfile]   = useState(null);
   const [showEdit, setShowEdit] = useState(false);
+  const [profileImage, setProfileImage] = useState(
+    () => localStorage.getItem(`profile_img_${user?.email}`) || null
+  );
+
+  const [requests, setRequests] = useState([]);
+  const [confirmed, setConfirmed] = useState([]);
+  const [completedSessions, setCompletedSessions] = useState([]);
+  const [pendingFeedbackSessions, setPendingFeedbackSessions] = useState([]);
 
   useEffect(() => {
-    getMyProfile().then(setProfile).catch(() => {});
+    getMyProfile().then(p => {
+      setProfile(p);
+      if (p?.profile_image_url) {
+        setProfileImage(p.profile_image_url);
+        localStorage.setItem(`profile_img_${user?.email}`, p.profile_image_url);
+      }
+    }).catch(() => {});
+
     getUserSessions().then(data => {
       if (!data?.length) return;
-      const pending   = data.filter(s => s.status === "pending");
-      const confirmed = data.filter(s => s.status === "scheduled");
-      if (pending.length)   setRequests(pending.map(s => ({ id:s.id, date:s.scheduledAt?.slice(5,10).replace("-",".") ?? "", time:s.scheduledAt?.slice(11,16) ?? "", title:s.title ?? "", detail:`${s.sessionType ?? "1:1"} · ${s.menteeName ?? ""}` })));
+      const fmt = (s) => ({
+        id: s.id,
+        date: s.started_at?.slice(5,10).replace("-",".") ?? "",
+        time: s.started_at?.slice(11,16) ?? "",
+        title: s.job_category ? `${s.job_category} 면접` : "모의 면접",
+        detail: `${s.session_type ?? "1:1"} · ${s.mentee_name ?? ""}`,
+        reportStatus: s.report_status,
+      });
+      const pending   = data.filter(s => s.status === "pending").map(fmt);
+      const confirmed = data.filter(s => s.status === "scheduled").map(fmt);
+      const completed = data.filter(s => s.status === "completed").map(fmt);
+      const needsFeedback = completed.filter(s => s.reportStatus !== "final");
+
+      setRequests(pending);
+      setConfirmed(confirmed);
+      setCompletedSessions(completed);
+      setPendingFeedbackSessions(needsFeedback);
     }).catch(() => {});
   }, []);
 
   const displayName = profile?.name ?? userName;
+  const tags = profile?.tags?.map(t => t.name) ?? ["기술 면접", "인성 면접", "포트폴리오"];
+
+  const totalSessions = completedSessions.length || 42;
+  const thisMonth = completedSessions.filter(s => {
+    const now = new Date();
+    return s.date?.startsWith(`${String(now.getMonth()+1).padStart(2,"0")}.`);
+  }).length || 7;
 
   const handleWithdraw = async () => {
     if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
     try {
       await fetch("/api/auth/withdraw", {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user?.accessToken}` },
+        method:"DELETE",
+        headers:{ Authorization:`Bearer ${user?.accessToken}` },
       });
     } catch {}
     clearAuthUser();
     navigate("/");
   };
-  const [requests, setRequests] = useState([
-    { id:1, date:"04.02", time:"19:00", title:"김민준 — 백엔드 개발자 모의 면접", detail:"1:1 · 60분 · 50P · 수락 기한 18시간 32분 남음" },
-    { id:2, date:"04.07", time:"20:00", title:"박서연 외 2명 — 프론트엔드 그룹 면접", detail:"그룹 3인 · 60분 · 150P · 수락 기한 6시간 14분 남음" },
-    { id:3, date:"04.10", time:"19:00", title:"최현아 — 풀스택 기술 면접", detail:"1:1 · 60분 · 50P · 수락 기한 22시간 5분 남음" },
-  ]);
-  const confirmed = [
-    { id:4, date:"04.12", time:"14:00", title:"이준석 — PM 직군 인성 면접", detail:"1:1 · 60분 · 50P" },
-    { id:5, date:"04.15", time:"19:00", title:"한기욱 — 인프라 기술 면접", detail:"1:1 · 60분 · 50P" },
-  ];
-  const completed = Array.from({length:5},(_,i)=>({ id:i+10, date:`03.${String(i+1).padStart(2,"0")}`, time:"19:00", title:`완료된 세션 ${i+1}`, detail:"1:1 · 60분" }));
 
   const handleAccept = (id) => setRequests(r=>r.filter(x=>x.id!==id));
 
-  const tabData = { pending: requests, confirmed, completed };
+  const tabData = { pending: requests, confirmed, completed: completedSessions };
   const tabList = [
     { key:"pending",   label:"대기중",  count:requests.length, color:C.orange },
     { key:"confirmed", label:"확정",    count:confirmed.length },
-    { key:"completed", label:"완료",    count:37 },
+    { key:"completed", label:"완료",    count:completedSessions.length || 37 },
   ];
 
-  const reviews = [
+  const MOCK_REVIEWS = [
     { initials:"김M", name:"김민준", role:"백엔드", company:"카카오 지원", stars:5, bgColor:"#1B4F7A",
       text:"실제 현장에서 어떤 답변을 원하는지 구체적으로 알려주셔서 너무 좋았어요. STAR 구조 피드백 덕분에 다음 면접에서 훨씬 자신감 있게 답변할 수 있었습니다!" },
     { initials:"박S", name:"박서연", role:"프론트엔드", company:"네이버 지원", stars:4, bgColor:"#0F6E56",
@@ -331,24 +388,26 @@ export default function MentorMyPage() {
             <p style={{ fontSize:13, color:C.textMuted }}>멘토 활동 현황과 예약을 관리하세요</p>
           </div>
           <div style={{ display:"flex", gap:10 }}>
-            {["가능 시간 관리","프로필 수정"].map((l,i)=>(
-              <button key={i} onClick={l==="프로필 수정"?()=>setShowEdit(true):undefined} style={{
-                padding:"10px 18px",
-                background:C.white, color:C.text,
-                border:`1.5px solid ${C.border}`, borderRadius:8,
-                fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-                transition:"border-color 0.15s",
-              }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-              >{l}</button>
-            ))}
-            <button onClick={handleWithdraw} style={{
-              padding:"10px 18px",
-              background:C.white, color:C.red,
+            <button onClick={()=>navigate("/mentor/register")} style={{
+              padding:"10px 18px", background:C.white, color:C.text,
               border:`1.5px solid ${C.border}`, borderRadius:8,
               fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-              transition:"border-color 0.15s",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+            >가능 시간 관리</button>
+            <button onClick={()=>setShowEdit(true)} style={{
+              padding:"10px 18px", background:C.white, color:C.text,
+              border:`1.5px solid ${C.border}`, borderRadius:8,
+              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+            >프로필 수정</button>
+            <button onClick={handleWithdraw} style={{
+              padding:"10px 18px", background:C.white, color:C.red,
+              border:`1.5px solid ${C.border}`, borderRadius:8,
+              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
             }}
               onMouseEnter={e=>e.currentTarget.style.borderColor=C.red}
               onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
@@ -363,28 +422,29 @@ export default function MentorMyPage() {
             <div style={{ background:C.white, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}`, marginBottom:16 }}>
               {/* 아바타 */}
               <div style={{ textAlign:"center", marginBottom:16 }}>
-                {(() => { const av = getAvatar(user?.email); return (
-                <div style={{
-                  width:68, height:68, borderRadius:"50%",
-                  background:av.color, margin:"0 auto 10px",
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:32,
-                }}>{av.animal}</div>
+                {profileImage ? (
+                  <img src={profileImage} alt="profile" style={{ width:68, height:68, borderRadius:"50%", objectFit:"cover", margin:"0 auto 10px", display:"block", border:`2px solid ${C.border}` }}/>
+                ) : (() => { const av = getAvatar(user?.email); return (
+                  <div style={{ width:68, height:68, borderRadius:"50%", background:av.color, margin:"0 auto 10px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32 }}>{av.animal}</div>
                 ); })()}
                 <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>{displayName}</p>
-                <p style={{ fontSize:12, color:C.textSub }}>카카오 · 백엔드 개발 5년</p>
+                <p style={{ fontSize:12, color:C.textSub }}>멘토</p>
               </div>
 
               {/* 태그 */}
               <div style={{ display:"flex", flexWrap:"wrap", gap:5, justifyContent:"center", marginBottom:16 }}>
-                {["기술 면접","인성 면접","포트폴리오"].map((t,i)=>(
+                {tags.map((t,i)=>(
                   <span key={i} style={{ fontSize:11, padding:"3px 10px", borderRadius:999, background:C.bg, color:C.textSub }}>{t}</span>
                 ))}
               </div>
 
               {/* 미니 스탯 */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:18, padding:"12px 0", borderTop:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}` }}>
-                {[{n:"42",l:"총 멘티"},{n:"4.9",l:"평균평점"},{n:"7",l:"이번달"}].map((s,i)=>(
+                {[
+                  {n: String(totalSessions), l:"총 멘티"},
+                  {n: "4.9", l:"평균평점"},
+                  {n: String(thisMonth), l:"이번달"},
+                ].map((s,i)=>(
                   <div key={i} style={{ textAlign:"center" }}>
                     <p style={{ fontSize:16, fontWeight:700, color:C.navy }}>{s.n}</p>
                     <p style={{ fontSize:10, color:C.textMuted, marginTop:1 }}>{s.l}</p>
@@ -393,10 +453,16 @@ export default function MentorMyPage() {
               </div>
 
               {/* 상세 정보 */}
-              {[{l:"소속",v:"카카오"},{l:"직무",v:"백엔드 개발"},{l:"경력",v:"5년"},{l:"최대 인원",v:"최대 3인"},{l:"세션 길이",v:"60분"},{l:"포인트",v:"50P / 세션"}].map((r,i)=>(
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:i<5?`1px solid ${C.border}`:"none" }}>
+              {[
+                {l:"대기 요청",v:`${requests.length}건`},
+                {l:"확정 세션",v:`${confirmed.length}건`},
+                {l:"완료 세션",v:`${totalSessions}건`},
+                {l:"피드백 미작성",v:`${pendingFeedbackSessions.length}건`},
+                {l:"보유 포인트",v:"2,100 P"},
+              ].map((r,i,arr)=>(
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none" }}>
                   <span style={{ fontSize:12, color:C.textMuted }}>{r.l}</span>
-                  <span style={{ fontSize:12, fontWeight:600, color:C.text }}>{r.v}</span>
+                  <span style={{ fontSize:12, fontWeight:600, color:r.l==="피드백 미작성"&&pendingFeedbackSessions.length>0?C.red:C.text }}>{r.v}</span>
                 </div>
               ))}
             </div>
@@ -407,10 +473,13 @@ export default function MentorMyPage() {
 
             {/* 스탯 4개 */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
-              <StatCard label="총 세션" value="42회" sub="누적"/>
-              <StatCard label="이번 달 세션" value="7회" sub="전월 대비 +2" subColor={C.teal}/>
+              <StatCard label="총 세션" value={`${totalSessions}회`} sub="누적"/>
+              <StatCard label="이번 달 세션" value={`${thisMonth}회`} sub="전월 대비 +2" subColor={C.teal}/>
               <StatCard label="평균 평점" value="4.9/5" sub="리뷰 38건"/>
-              <StatCard label="대기 중 요청" value="3건" sub="수락 기한 임박 1건" subColor={C.orange}/>
+              <StatCard label="대기 중 요청" value={`${requests.length}건`}
+                sub={requests.length > 0 ? "수락 기한 확인 필요" : "대기 중 없음"}
+                subColor={requests.length > 0 ? C.orange : C.textMuted}
+              />
             </div>
 
             {/* 수익 카드 */}
@@ -418,51 +487,52 @@ export default function MentorMyPage() {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 }}>
                 <div>
                   <p style={{ fontSize:12, color:C.textMuted, marginBottom:6 }}>이번 달 수익</p>
-                  <p style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.02em", marginBottom:4 }}>350 P</p>
-                  <p style={{ fontSize:11, color:C.textMuted, marginBottom:6 }}>세션 7회 × 50P</p>
+                  <p style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.02em", marginBottom:4 }}>{thisMonth * 50} P</p>
+                  <p style={{ fontSize:11, color:C.textMuted, marginBottom:6 }}>세션 {thisMonth}회 × 50P</p>
                   <p style={{ fontSize:11, color:C.textMuted, marginBottom:4 }}>정산 상태</p>
                   <span style={{ fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:999, background:C.tealLight, color:C.teal }}>정산 예정</span>
-                  <p style={{ fontSize:11, color:C.textMuted, marginTop:4 }}>지난 달 완료</p>
                 </div>
                 <div style={{ borderLeft:`1px solid ${C.border}`, paddingLeft:16 }}>
                   <p style={{ fontSize:12, color:C.textMuted, marginBottom:6 }}>누적 수익</p>
-                  <p style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.02em", marginBottom:4 }}>2,100 P</p>
-                  <p style={{ fontSize:11, color:C.textMuted }}>총 42회 누적</p>
+                  <p style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.02em", marginBottom:4 }}>{totalSessions * 50} P</p>
+                  <p style={{ fontSize:11, color:C.textMuted }}>총 {totalSessions}회 누적</p>
                 </div>
                 <div style={{ borderLeft:`1px solid ${C.border}`, paddingLeft:16 }}>
                   <p style={{ fontSize:12, color:C.textMuted, marginBottom:6 }}>정산 예정일</p>
-                  <p style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.02em", marginBottom:4 }}>04월 30일</p>
-                  <p style={{ fontSize:11, color:C.orange, fontWeight:600 }}>D-3</p>
+                  <p style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.02em", marginBottom:4 }}>매월 말일</p>
+                  <p style={{ fontSize:11, color:C.orange, fontWeight:600 }}>자동 정산</p>
                 </div>
               </div>
             </div>
 
             {/* 피드백 미작성 알림 */}
-            <div style={{
-              background:"#FFF8F0", border:`1.5px solid ${C.orange}40`,
-              borderRadius:12, padding:"14px 20px",
-              display:"flex", alignItems:"center", justifyContent:"space-between", gap:16,
-            }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <div style={{ width:8, height:8, borderRadius:"50%", background:C.red, flexShrink:0 }}/>
-                <p style={{ fontSize:13, color:C.text, fontWeight:500 }}>
-                  완료된 세션 중 <strong style={{ color:C.red }}>피드백 미작성 2건</strong>이 있어요. 멘티가 최종 리포트를 기다리고 있어요!
-                </p>
+            {pendingFeedbackSessions.length > 0 && (
+              <div style={{
+                background:"#FFF8F0", border:`1.5px solid ${C.orange}40`,
+                borderRadius:12, padding:"14px 20px",
+                display:"flex", alignItems:"center", justifyContent:"space-between", gap:16,
+              }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:8, height:8, borderRadius:"50%", background:C.red, flexShrink:0 }}/>
+                  <p style={{ fontSize:13, color:C.text, fontWeight:500 }}>
+                    완료된 세션 중 <strong style={{ color:C.red }}>피드백 미작성 {pendingFeedbackSessions.length}건</strong>이 있어요. 멘티가 최종 리포트를 기다리고 있어요!
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate(`/mentor/feedback/${pendingFeedbackSessions[0].id}`)}
+                  style={{
+                    padding:"8px 16px", background:C.white, color:C.navy,
+                    border:`1.5px solid ${C.border}`, borderRadius:8,
+                    fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0,
+                  }}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+                >바로 작성하기</button>
               </div>
-              <button style={{
-                padding:"8px 16px", background:C.white, color:C.navy,
-                border:`1.5px solid ${C.border}`, borderRadius:8,
-                fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0,
-                transition:"border-color 0.15s",
-              }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-              >바로 작성하기</button>
-            </div>
+            )}
 
             {/* 요청 탭 */}
             <div style={{ background:C.white, borderRadius:16, border:`1px solid ${C.border}`, overflow:"hidden" }}>
-              {/* 탭 헤더 */}
               <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
                 {tabList.map(t=>(
                   <button key={t.key} onClick={()=>setActiveTab(t.key)} style={{
@@ -470,7 +540,7 @@ export default function MentorMyPage() {
                     borderBottom:`2.5px solid ${activeTab===t.key?C.navy:"transparent"}`,
                     fontSize:14, fontWeight:activeTab===t.key?700:400,
                     color:activeTab===t.key?C.navy:C.textMuted,
-                    cursor:"pointer", fontFamily:"inherit", transition:"all 0.18s",
+                    cursor:"pointer", fontFamily:"inherit",
                     display:"flex", alignItems:"center", justifyContent:"center", gap:6,
                   }}>
                     {t.label}
@@ -483,31 +553,53 @@ export default function MentorMyPage() {
                 ))}
               </div>
 
-              {/* 탭 콘텐츠 */}
               <div style={{ padding:"4px 24px 8px" }}>
-                {activeTab==="pending" && requests.length>0 ? (
-                  requests.map(r=>(
-                    <SessionRequestItem key={r.id} date={r.date} time={r.time} title={r.title} detail={r.detail} onAccept={()=>handleAccept(r.id)}/>
-                  ))
-                ) : activeTab==="confirmed" ? (
-                  confirmed.map(r=>(
-                    <div key={r.id} style={{ display:"flex", alignItems:"center", gap:16, padding:"14px 0", borderBottom:`1px solid ${C.border}` }}>
-                      <div style={{ width:8, height:8, borderRadius:"50%", background:C.teal, flexShrink:0 }}/>
-                      <div style={{ flex:1 }}>
-                        <p style={{ fontSize:13, color:C.textMuted, marginBottom:2 }}>{r.date} {r.time}</p>
-                        <p style={{ fontSize:14, fontWeight:600, color:C.text }}>{r.title}</p>
-                        <p style={{ fontSize:12, color:C.textMuted }}>{r.detail}</p>
-                      </div>
-                      <span style={{ fontSize:11, padding:"4px 10px", borderRadius:999, background:C.tealLight, color:C.teal, fontWeight:600 }}>확정</span>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ padding:"20px 0", textAlign:"center", color:C.textMuted, fontSize:13 }}>
-                    총 37개의 완료된 세션이 있습니다
-                  </div>
+                {activeTab==="pending" && (
+                  requests.length > 0
+                    ? requests.map(r=>(
+                        <SessionRequestItem key={r.id} date={r.date} time={r.time} title={r.title} detail={r.detail} onAccept={()=>handleAccept(r.id)}/>
+                      ))
+                    : <div style={{ padding:"32px 0", textAlign:"center", color:C.textMuted, fontSize:13 }}>대기 중인 요청이 없습니다</div>
                 )}
-                {activeTab==="pending" && requests.length===0 && (
-                  <div style={{ padding:"32px 0", textAlign:"center", color:C.textMuted, fontSize:13 }}>대기 중인 요청이 없습니다</div>
+                {activeTab==="confirmed" && (
+                  confirmed.length > 0
+                    ? confirmed.map(r=>(
+                        <div key={r.id} style={{ display:"flex", alignItems:"center", gap:16, padding:"14px 0", borderBottom:`1px solid ${C.border}` }}>
+                          <div style={{ width:8, height:8, borderRadius:"50%", background:C.teal, flexShrink:0 }}/>
+                          <div style={{ flex:1 }}>
+                            <p style={{ fontSize:13, color:C.textMuted, marginBottom:2 }}>{r.date} {r.time}</p>
+                            <p style={{ fontSize:14, fontWeight:600, color:C.text }}>{r.title}</p>
+                            <p style={{ fontSize:12, color:C.textMuted }}>{r.detail}</p>
+                          </div>
+                          <span style={{ fontSize:11, padding:"4px 10px", borderRadius:999, background:C.tealLight, color:C.teal, fontWeight:600 }}>확정</span>
+                        </div>
+                      ))
+                    : <div style={{ padding:"32px 0", textAlign:"center", color:C.textMuted, fontSize:13 }}>확정된 세션이 없습니다</div>
+                )}
+                {activeTab==="completed" && (
+                  completedSessions.length > 0
+                    ? completedSessions.slice(0, 5).map(r=>(
+                        <div key={r.id} style={{ display:"flex", alignItems:"center", gap:16, padding:"14px 0", borderBottom:`1px solid ${C.border}` }}>
+                          <div style={{ width:8, height:8, borderRadius:"50%", background:C.textMuted, flexShrink:0 }}/>
+                          <div style={{ flex:1 }}>
+                            <p style={{ fontSize:13, color:C.textMuted, marginBottom:2 }}>{r.date}</p>
+                            <p style={{ fontSize:14, fontWeight:600, color:C.text }}>{r.title}</p>
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                            {r.reportStatus === "final" ? (
+                              <span style={{ fontSize:11, padding:"4px 10px", borderRadius:999, background:C.tealLight, color:C.teal, fontWeight:600 }}>피드백 완료</span>
+                            ) : (
+                              <button onClick={() => navigate(`/mentor/feedback/${r.id}`)} style={{
+                                fontSize:11, padding:"4px 12px", borderRadius:999,
+                                background:"#FFF8F0", color:C.orange,
+                                border:`1px solid ${C.orange}40`, fontWeight:700,
+                                cursor:"pointer", fontFamily:"inherit",
+                              }}>피드백 작성</button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    : <div style={{ padding:"20px 0", textAlign:"center", color:C.textMuted, fontSize:13 }}>완료된 세션이 없습니다</div>
                 )}
               </div>
             </div>
@@ -516,12 +608,12 @@ export default function MentorMyPage() {
             <div style={{ background:C.white, borderRadius:16, padding:"24px", border:`1px solid ${C.border}` }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
                 <h3 style={{ fontSize:16, fontWeight:700, color:C.text }}>최근 멘티 리뷰</h3>
-                <Link to="#" style={{ fontSize:13, color:C.textMuted, textDecoration:"none" }}>전체보기 →</Link>
+                <span style={{ fontSize:12, color:C.textMuted }}>멘티가 남긴 후기</span>
               </div>
-              {reviews.map((r,i)=>(
+              {MOCK_REVIEWS.map((r,i)=>(
                 <div key={i}>
                   <ReviewCard {...r}/>
-                  {i<reviews.length-1&&<div style={{ borderBottom:`1px solid ${C.border}`, marginBottom:20 }}/>}
+                  {i<MOCK_REVIEWS.length-1&&<div style={{ borderBottom:`1px solid ${C.border}`, marginBottom:20 }}/>}
                 </div>
               ))}
             </div>
@@ -530,7 +622,13 @@ export default function MentorMyPage() {
         </div>
       </main>
 
-      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} />}
+      {showEdit && (
+        <EditProfileModal
+          onClose={() => setShowEdit(false)}
+          userEmail={user?.email}
+          onImageChange={(img) => setProfileImage(img)}
+        />
+      )}
     </>
   );
 }

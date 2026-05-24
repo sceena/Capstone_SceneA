@@ -10,7 +10,7 @@ AI 서버가 S3에서 오디오 받아서 faster-whisper-medium으로 STT 돌리
 5. callback 성공하면 sttText에 text 저장하고 sttStatus=COMPLETED로 변경
 6. 실패하면 sttStatus=FAILED, sttErrorMessage 저장
 
-## 1. 백엔드가 AI 서버에 호출할 API
+## 1. AI 서버에 호출할 API
 
 답변 오디오를 S3에 저장한 뒤 호출한다.
 
@@ -38,7 +38,7 @@ POST /api/stt/jobs
 
 `ACCEPTED`는 STT 완료가 아니라 작업 등록 성공이다.
 
-## 2. 백엔드가 만들어야 할 callback API
+## 2. 만들어야 할 callback API
 
 ```http
 POST /api/internal/stt/callback
@@ -76,7 +76,7 @@ POST /api/internal/stt/callback
 }
 ```
 
-## 3. InterviewAnswer 추가 권장 필드
+## 3. InterviewAnswer 추가 필드
 
 ```text
 sttStatus: PENDING | PROCESSING | COMPLETED | FAILED

@@ -179,8 +179,131 @@ export default function InterviewSession({ role = "mentee" }) {
   const [audioLevels, setAudioLevels] = useState({});
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const [connectionState, setConnectionState] = useState("connecting"); // connecting | connected | reconnecting | failed
+  const [isSessionRecording, setIsSessionRecording] = useState(false);
 
   const isMentor = role === "mentor";
+
+  /* ── 세션 전체 녹화 시작 ── */
+  const startSessionRecording = useCallback((localStream) => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1280;
+      canvas.height = 720;
+      sessionCanvasRef.current = canvas;
+
+      const localVid = document.createElement("video");
+      localVid.srcObject = localStream;
+      localVid.muted = true;
+      localVid.autoplay = true;
+      localVid.playsInline = true;
+      localVid.play().catch(() => {});
+      sessionVideoElemsRef.current = { __local: localVid };
+
+      const audioCtx = new AudioContext();
+      sessionAudioCtxRef.current = audioCtx;
+      const dest = audioCtx.createMediaStreamDestination();
+      sessionAudioDestRef.current = dest;
+      sessionAudioSrcsRef.current = new Set();
+      if (localStream.getAudioTracks().length > 0) {
+        audioCtx.createMediaStreamSource(localStream).connect(dest);
+        sessionAudioSrcsRef.current.add("__local");
+      }
+
+      const ctx2d = canvas.getContext("2d");
+      const drawFrame = () => {
+        sessionAnimRef.current = requestAnimationFrame(drawFrame);
+        const elems = sessionVideoElemsRef.current;
+        const keys = Object.keys(elems);
+        ctx2d.fillStyle = "#111827";
+        ctx2d.fillRect(0, 0, 1280, 720);
+        const count = keys.length;
+        if (count === 0) return;
+        const cols = count === 1 ? 1 : 2;
+        const w = 1280 / cols;
+        const h = 720 / Math.ceil(count / cols);
+        keys.forEach((k, i) => {
+          try { ctx2d.drawImage(elems[k], (i % cols) * w, Math.floor(i / cols) * h, w, h); } catch {}
+        });
+      };
+      drawFrame();
+
+      const canvasStream = canvas.captureStream(30);
+      dest.stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+
+      const mimeType = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]
+        .find(t => MediaRecorder.isTypeSupported(t)) || "";
+      sessionChunksRef.current = [];
+      const recorder = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) sessionChunksRef.current.push(e.data); };
+      sessionRecorderRef.current = recorder;
+      recorder.start(1000);
+      setIsSessionRecording(true);
+    } catch (e) {
+      console.error("세션 녹화 시작 실패:", e);
+    }
+  }, []);
+
+  /* ── 세션 전체 녹화 종료 + 다운로드 ── */
+  const stopSessionRecording = useCallback(() => {
+    return new Promise((resolve) => {
+      cancelAnimationFrame(sessionAnimRef.current);
+      sessionAnimRef.current = null;
+      Object.values(sessionVideoElemsRef.current).forEach(v => { v.srcObject = null; });
+      sessionVideoElemsRef.current = {};
+      sessionAudioCtxRef.current?.close().catch(() => {});
+      sessionAudioCtxRef.current = null;
+      sessionAudioDestRef.current = null;
+      sessionAudioSrcsRef.current = new Set();
+
+      const recorder = sessionRecorderRef.current;
+      if (!recorder || recorder.state === "inactive") { resolve(); return; }
+      recorder.onstop = () => {
+        const blob = new Blob(sessionChunksRef.current, { type: "video/webm" });
+        if (blob.size > 0) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `session_${id}_${new Date().toISOString().replace(/[:.]/g, "-")}.webm`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+        sessionRecorderRef.current = null;
+        setIsSessionRecording(false);
+        resolve();
+      };
+      recorder.stop();
+    });
+  }, [id]);
+
+  /* ── 세션 녹화: 로컬 스트림 확보되면 자동 시작 ── */
+  useEffect(() => {
+    if (!localMediaStream) return;
+    startSessionRecording(localMediaStream);
+  }, [localMediaStream]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── 세션 녹화: 새 참여자 합류 시 오디오/비디오 추가 ── */
+  useEffect(() => {
+    if (!isSessionRecording || !sessionAudioCtxRef.current) return;
+    peerIds.forEach(peerId => {
+      const peerStream = peersRef.current[peerId];
+      if (!peerStream) return;
+      if (!sessionVideoElemsRef.current[peerId]) {
+        const vid = document.createElement("video");
+        vid.srcObject = peerStream;
+        vid.muted = true;
+        vid.autoplay = true;
+        vid.playsInline = true;
+        vid.play().catch(() => {});
+        sessionVideoElemsRef.current[peerId] = vid;
+      }
+      if (!sessionAudioSrcsRef.current.has(peerId) && peerStream.getAudioTracks().length > 0) {
+        try {
+          sessionAudioCtxRef.current.createMediaStreamSource(peerStream).connect(sessionAudioDestRef.current);
+          sessionAudioSrcsRef.current.add(peerId);
+        } catch {}
+      }
+    });
+  }, [peerIds, isSessionRecording]);
 
   /* ── 미디어 소비 ── */
   const consumeProducer = useCallback((producerId, peerId, kind) => {
@@ -440,6 +563,14 @@ export default function InterviewSession({ role = "mentee" }) {
       audioCtxRef.current?.close().catch(() => {});
       audioCtxRef.current = null;
       socket?.disconnect();
+      /* 세션 녹화 정리 */
+      cancelAnimationFrame(sessionAnimRef.current);
+      Object.values(sessionVideoElemsRef.current).forEach(v => { v.srcObject = null; });
+      sessionVideoElemsRef.current = {};
+      sessionAudioCtxRef.current?.close().catch(() => {});
+      sessionAudioCtxRef.current = null;
+      if (sessionRecorderRef.current?.state !== "inactive") sessionRecorderRef.current?.stop();
+      sessionRecorderRef.current = null;
     };
   }, [id, consumeProducer]);
 
@@ -488,7 +619,8 @@ export default function InterviewSession({ role = "mentee" }) {
     try {
       if (isMentor) await updateSessionStatus(id, "completed");
     } catch {}
-    await new Promise(r => setTimeout(r, 800));
+    await stopSessionRecording();
+    await new Promise(r => setTimeout(r, 300));
     navigate(`/report/ai/${id}`, { state: { role: isMentor ? "mentor" : "mentee" } });
   };
 
@@ -655,8 +787,23 @@ export default function InterviewSession({ role = "mentee" }) {
             )}
           </div>
 
-          <div style={{ fontSize: 12, color: "#9E9B95" }}>
-            세션 #{id} · 참여자 {peerIds.length + 1}명
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {isSessionRecording && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 5,
+                background: "#FEF2F2", border: "1px solid #FECACA",
+                borderRadius: 20, padding: "4px 10px",
+              }}>
+                <div style={{
+                  width: 7, height: 7, borderRadius: "50%", background: "#EF4444",
+                  animation: "pulse 1.2s ease-in-out infinite",
+                }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#EF4444", letterSpacing: "0.05em" }}>REC</span>
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: "#9E9B95" }}>
+              세션 #{id} · 참여자 {peerIds.length + 1}명
+            </div>
           </div>
         </div>
 

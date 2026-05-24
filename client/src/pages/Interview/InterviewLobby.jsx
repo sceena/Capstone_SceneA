@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getSession, joinSession, updateSessionStatus } from "../../api/sessions";
 
 /* ============================================================
    면접 준비 화면  (pages/interview/InterviewReady.jsx)
@@ -17,40 +18,111 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [micOn,  setMicOn]  = useState(true);
   const [camOn,  setCamOn]  = useState(true);
   const [stream, setStream] = useState(null);
+  const streamRef = useRef(null);
   const [camStatus, setCamStatus] = useState("idle"); // idle | loading | ok | denied
   const [entering, setEntering] = useState(false);
   const [checklist, setChecklist] = useState([false, false, false]);
+  const [sessionData, setSessionData] = useState(null);
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
 
-  /* 카메라 미리보기 */
+  /* 세션 정보 로드 */
   useEffect(() => {
-    if(!camOn) { if(stream){stream.getTracks().forEach(t=>t.stop());setStream(null);} return; }
+    if (!id || !/^\d+$/.test(id)) return;
+    getSession(id).then(setSessionData).catch(() => {});
+  }, [id]);
+
+  /* 사용 가능한 카메라 목록 로드 */
+  useEffect(() => {
+    navigator.mediaDevices?.enumerateDevices().then(devices => {
+      const cams = devices.filter(d => d.kind === "videoinput");
+      setVideoDevices(cams);
+      if (cams.length > 0 && !selectedDeviceId) {
+        setSelectedDeviceId(cams[0].deviceId);
+      }
+    }).catch(() => {});
+  }, []);
+
+  /* stream 준비되면 video에 연결 (ref가 아직 없을 때 대비) */
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream) return;
+    video.srcObject = stream;
+    video.muted = true;
+    video.play().catch(() => {});
+  }, [stream]);
+
+  /* 카메라 초기화 - selectedDeviceId 변경 시마다 재실행 */
+  useEffect(() => {
+    if (!navigator.mediaDevices || !selectedDeviceId) return;
+    let cancelled = false;
     setCamStatus("loading");
-    navigator.mediaDevices?.getUserMedia({ video:true, audio:micOn })
+
+    const videoConstraint = selectedDeviceId
+      ? { deviceId: { exact: selectedDeviceId } }
+      : true;
+
+    navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true })
       .then(s => {
+        if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+          videoRef.current.muted = true;
+          videoRef.current.play().catch(() => {});
+        }
         setStream(s);
-        if(videoRef.current) videoRef.current.srcObject = s;
         setCamStatus("ok");
+        localStorage.setItem('preferredCameraId', selectedDeviceId);
+        /* 권한 허용 후 카메라 목록 레이블 갱신 */
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+          const cams = devices.filter(d => d.kind === "videoinput");
+          setVideoDevices(cams);
+        }).catch(() => {});
       })
-      .catch(() => setCamStatus("denied"));
-    return () => { stream?.getTracks().forEach(t=>t.stop()); };
+      .catch(() => {
+        if (!cancelled) setCamStatus("denied");
+      });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    };
+  }, [selectedDeviceId]);
+
+  /* 마이크 트랙 활성/비활성 */
+  useEffect(() => {
+    streamRef.current?.getAudioTracks().forEach(t => { t.enabled = micOn; });
+  }, [micOn]);
+
+  /* 카메라 트랙 활성/비활성 */
+  useEffect(() => {
+    streamRef.current?.getVideoTracks().forEach(t => { t.enabled = camOn; });
   }, [camOn]);
 
-  const handleEnter = () => {
-    stream?.getTracks().forEach(t=>t.stop());
-    navigate(role==="mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
+  const handleEnter = async () => {
+    setEntering(true);
+    const isRealSession = id && /^\d+$/.test(id);
+    try {
+      if (isRealSession) {
+        await joinSession(id);
+        if (role === "mentor") await updateSessionStatus(id, "in_progress");
+      }
+    } catch {}
+    navigate(role === "mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
   };
 
-  /* 더미 세션 정보 */
+  /* API 데이터 우선, 없으면 fallback */
   const session = {
-    title:    "백엔드 개발자 모의 면접",
-    date:     "2026.04.02 19:00",
-    type:     "1:1 개인 세션",
-    menteeName:  "김민준",
-    menteeInfo:  "신입 지원자 · 컴퓨터공학 전공",
-    menteeGoal:  '"실제 프로젝트 기반의 기술 질문과 꼬리 질문에 대한 대응력을 키우고 싶습니다."',
-    aiReport:    "멘티가 제출한 이력서에서 '분산 처리' 관련 경험이 돋보입니다. 해당 개념의 원리와 실제 적용 사례에 대해 심도 있게 질문을 보내세요.",
-    mentorName:  "박지훈",
-    mentorInfo:  "네이버 · 백엔드 개발 6년차",
+    title:       sessionData?.title       ?? "세션 로딩 중...",
+    date:        sessionData?.scheduledAt ?? "",
+    type:        sessionData?.sessionType ?? "1:1 개인 세션",
+    menteeName:  sessionData?.menteeName  ?? "",
+    menteeInfo:  sessionData?.menteeInfo  ?? "",
+    menteeGoal:  sessionData?.menteeGoal  ?? "",
+    aiReport:    sessionData?.aiReport    ?? "",
+    mentorName:  sessionData?.mentorName  ?? "",
+    mentorInfo:  sessionData?.mentorInfo  ?? "",
   };
 
   const isMentor = role === "mentor";
@@ -101,26 +173,33 @@ export default function InterviewRobby({ role = "mentee" }) {
               position:"relative",
               display:"flex", alignItems:"center", justifyContent:"center",
             }}>
-              {camOn && camStatus==="ok"
-                ? <video ref={videoRef} autoPlay muted playsInline style={{ width:"100%", height:"100%", objectFit:"cover", transform:"scaleX(-1)" }}/>
-                : (
-                  <div style={{ textAlign:"center" }}>
-                    <div style={{
-                      width:72, height:72, borderRadius:"50%",
-                      background:"#1a3060", margin:"0 auto 12px",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                    }}>
-                      {camStatus==="loading"
-                        ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" style={{animation:"spin 1s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                        : <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="11" r="5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/><path d="M5 24c0-4.97 4.03-9 9-9s9 4.03 9 9" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                      }
-                    </div>
-                    <p style={{ fontSize:12, color:"rgba(255,255,255,0.35)" }}>
-                      {camStatus==="denied" ? "카메라 권한이 거부됐어요" : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
-                    </p>
+              {/* 항상 DOM에 존재 - CSS로 표시/숨김 제어 */}
+              <video
+                ref={videoRef}
+                autoPlay playsInline muted
+                style={{
+                  position:"absolute", inset:0, width:"100%", height:"100%",
+                  objectFit:"cover", transform:"scaleX(-1)",
+                  display: (camOn && camStatus==="ok") ? "block" : "none",
+                }}
+              />
+              {!(camOn && camStatus==="ok") && (
+                <div style={{ textAlign:"center" }}>
+                  <div style={{
+                    width:72, height:72, borderRadius:"50%",
+                    background:"#1a3060", margin:"0 auto 12px",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                  }}>
+                    {camStatus==="loading"
+                      ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" style={{animation:"spin 1s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                      : <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="11" r="5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/><path d="M5 24c0-4.97 4.03-9 9-9s9 4.03 9 9" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    }
                   </div>
-                )
-              }
+                  <p style={{ fontSize:12, color:"rgba(255,255,255,0.35)" }}>
+                    {camStatus==="denied" ? "카메라 권한이 거부됐어요" : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
+                  </p>
+                </div>
+              )}
 
               {/* 이름 레이블 */}
               <div style={{
@@ -167,6 +246,32 @@ export default function InterviewRobby({ role = "mentee" }) {
                 </div>
               ))}
             </div>
+
+            {/* 카메라 선택 드롭다운 */}
+            {videoDevices.length > 1 && (
+              <div style={{ width:"100%", maxWidth:340 }}>
+                <label style={{ fontSize:11, color:"rgba(255,255,255,0.4)", display:"block", marginBottom:6 }}>
+                  카메라 선택
+                </label>
+                <select
+                  value={selectedDeviceId}
+                  onChange={e => setSelectedDeviceId(e.target.value)}
+                  style={{
+                    width:"100%", padding:"8px 12px",
+                    background:"#1a3060", color:"#fff",
+                    border:"1px solid rgba(255,255,255,0.15)",
+                    borderRadius:8, fontSize:12,
+                    cursor:"pointer", outline:"none",
+                  }}
+                >
+                  {videoDevices.map(d => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `카메라 ${d.deviceId.slice(0, 6)}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <p style={{ fontSize:12, color:"rgba(255,255,255,0.3)", textAlign:"center" }}>
               입장 전 장치 설정을 확인해주세요

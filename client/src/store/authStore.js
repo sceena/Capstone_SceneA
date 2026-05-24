@@ -19,6 +19,10 @@ export function clearAuthUser() {
   setState({ user: null });
 }
 
+export function getAuthUser() {
+  return state.user;
+}
+
 export default function useAuthStore() {
   const [s, setS] = useState(state);
   useEffect(() => {

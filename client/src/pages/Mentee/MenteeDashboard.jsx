@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { clearAuthUser } from "../../store/authStore";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import { getMySessions } from "../../api/sessions";
 
 /* ============================================================
    멘티 대시보드  (pages/Dashboard/MenteeDashboard.jsx)
@@ -58,12 +59,21 @@ const SectionIcon = () => (
 );
 
 /* ── 헤더 ── */
-const Header = ({ userName }) => {
+const Header = ({ userName, accessToken }) => {
   const navigate = useNavigate();
-  const handleLogout = () => { clearAuthUser(); navigate("/"); };
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
   return (
     <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-      <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+      <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
           안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
         </span>
@@ -104,7 +114,7 @@ const QuoteIcon = () => (
 /* ── 면접 세션 카드 (검정 배경) ── */
 const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
   <div style={{
-    background:"#111111", borderRadius:12,
+    background:"#0D2240", borderRadius:12,
     padding:"18px 22px",
     display:"flex", alignItems:"center",
     justifyContent:"space-between", gap:16,
@@ -208,7 +218,7 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
 };
 
 /* ── 히스토리 리포트 아이템 ── */
-const HistoryItem = ({ date, title, mentor, score, tag, tagColor }) => (
+const HistoryItem = ({ date, title, mentor, score, tag, tagColor, onView }) => (
   <div style={{
     display:"flex", alignItems:"center", gap:14,
     padding:"13px 0", borderBottom:`1px solid ${C.border}`,
@@ -232,7 +242,7 @@ const HistoryItem = ({ date, title, mentor, score, tag, tagColor }) => (
       }}>
         {tag}
       </span>
-      <button style={{
+      <button onClick={onView} style={{
         background:"transparent", border:`1px solid ${C.border}`,
         borderRadius:6, padding:"5px 10px",
         fontSize:11, fontWeight:500, color:C.textSub,
@@ -248,29 +258,54 @@ const HistoryItem = ({ date, title, mentor, score, tag, tagColor }) => (
   </div>
 );
 
+/* ── 더미 세션 데이터 (API 미연결 시 표시용) ── */
+const DUMMY_SESSIONS = [
+  { id:"demo-1", status:"scheduled", title:"백엔드 개발자 모의 면접", scheduledAt:"2026-05-15T19:00", mentorName:"박지훈", sessionType:"1:1" },
+  { id:"demo-2", status:"scheduled", title:"Spring Boot 기술 면접 대비", scheduledAt:"2026-05-20T20:00", mentorName:"이수연", sessionType:"1:1" },
+  { id:"demo-3", status:"completed", title:"카카오 서버 개발 면접 대비", scheduledAt:"2026-04-02T19:00", mentorName:"박지훈", aiScore:"87", tag:"최종 리포트" },
+  { id:"demo-4", status:"completed", title:"네이버 백엔드 코딩 인터뷰", scheduledAt:"2026-03-15T18:00", mentorName:"한기욱", aiScore:"72", tag:"AI 리포트" },
+  { id:"demo-5", status:"completed", title:"토스 iOS 직무 인성 면접", scheduledAt:"2026-02-20T17:00", mentorName:"정민서", aiScore:"64", tag:"AI 리포트" },
+];
+
 /* ════════════════════════════════════════
    메인 컴포넌트
 ════════════════════════════════════════ */
 export default function MenteeDashboard() {
   const navigate = useNavigate();
-  const userName = "김민준";
+  const { user } = useAuthStore();
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
-  const todaySession = {
-    id:1, title:"백엔드 개발자 모의 면접",
-    date:"2026.04.02 오후 7:00", mentor:"멘토 박지훈",
-    type:"1:1 세션", time:"19:00",
-  };
+  const [sessions, setSessions] = useState(DUMMY_SESSIONS);
+  useEffect(() => {
+    getMySessions()
+      .then(data => { if (data?.length) setSessions(data); })
+      .catch(() => {});
+  }, []);
 
-  const history = [
-    { date:"03.22", title:"Java 백엔드 기술 면접", mentor:"박지훈 멘토", score:"87", tag:"우수",  tagColor:C.teal },
-    { date:"03.15", title:"자기소개 & 인성 면접",  mentor:"이수연 멘토", score:"74", tag:"보통",  tagColor:"#F59E0B" },
-    { date:"03.08", title:"CS 기초 심화 면접",     mentor:"최현아 멘토", score:"91", tag:"최우수", tagColor:"#185FA5" },
-  ];
+  /* API 응답에서 UI 데이터 파생 */
+  const completedSessions = sessions.filter(s => s.status === "completed");
+  const scheduledSessions = sessions.filter(s => s.status === "scheduled");
+  const todaySession = scheduledSessions[0] ?? null;
 
-  const upcoming = [
-    { date:"04.02", time:"19:00", title:"백엔드 개발자 모의 면접",  mentor:"박지훈 멘토", type:"1:1",    status:"confirmed" },
-    { date:"04.07", time:"20:00", title:"프론트엔드 그룹 면접 연습", mentor:"이수연 멘토", type:"그룹 3인", status:"pending"   },
-  ];
+  const history = completedSessions.map(s => ({
+    id: s.id,
+    date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
+    title: s.title ?? "",
+    mentor: s.mentorName ? `${s.mentorName} 멘토` : "",
+    score: s.aiScore ?? "-",
+    tag: s.tag ?? "완료",
+    tagColor: C.teal,
+  }));
+
+  const upcoming = scheduledSessions.map(s => ({
+    id: s.id,
+    date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
+    time: s.scheduledAt?.slice(11, 16) ?? "",
+    title: s.title ?? "",
+    mentor: s.mentorName ? `${s.mentorName} 멘토` : "",
+    type: s.sessionType ?? "1:1",
+    status: "confirmed",
+  }));
 
   return (
     <>
@@ -283,8 +318,35 @@ export default function MenteeDashboard() {
         }
       `}</style>
 
-      <Header userName={userName}/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
+
+        {/* ── 자소서 업로드 안내 배너 (면접 확정 시) ── */}
+        {scheduledSessions.length > 0 && (
+          <div style={{
+            background:"#FFF8F0", border:"1.5px solid #F59E0B",
+            borderRadius:14, padding:"16px 24px",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            gap:16, marginBottom:20, flexWrap:"wrap",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:22 }}>📋</span>
+              <div>
+                <p style={{ fontSize:14, fontWeight:700, color:"#92400E", marginBottom:2 }}>
+                  면접이 확정됐어요! 자소서를 미리 등록해두세요
+                </p>
+                <p style={{ fontSize:12, color:"#B45309" }}>
+                  멘토가 면접 전 자소서를 검토하고 맞춤 질문을 준비합니다
+                </p>
+              </div>
+            </div>
+            <Link to="/mentee/resume" style={{
+              padding:"9px 20px", background:"#F59E0B", color:"#fff",
+              borderRadius:8, fontSize:13, fontWeight:700,
+              textDecoration:"none", flexShrink:0, whiteSpace:"nowrap",
+            }}>자소서 등록하기 →</Link>
+          </div>
+        )}
 
         {/* ── 상단 배너 카드 (멘토 찾기 CTA) ── */}
         <div style={{
@@ -321,9 +383,9 @@ export default function MenteeDashboard() {
           {/* 우측 미니 스탯 */}
           <div style={{ display:"flex", gap:24, flexShrink:0 }}>
             {[
-              { n:"3회", label:"완료된 면접" },
-              { n:"87점", label:"평균 점수" },
-              { n:"2건", label:"예정된 일정" },
+              { n:`${completedSessions.length}회`, label:"완료된 면접" },
+              { n: completedSessions.length > 0 ? `${Math.round(completedSessions.reduce((a,s) => a + (Number(s.aiScore) || 0), 0) / completedSessions.length)}점` : "-", label:"평균 점수" },
+              { n:`${scheduledSessions.length}건`, label:"예정된 일정" },
             ].map((s, i) => (
               <div key={i} style={{ textAlign:"center" }}>
                 <p style={{ fontSize:22, fontWeight:700, color:C.navy, letterSpacing:"-0.03em" }}>{s.n}</p>
@@ -335,14 +397,23 @@ export default function MenteeDashboard() {
 
         {/* ── 오늘 예정된 일정 ── */}
         <DashCard title="오늘 예정된 일정" style={{ marginBottom:24 }}>
-          <SessionCard
-            title={todaySession.title}
-            date={todaySession.date}
-            mentor={todaySession.mentor}
-            type={todaySession.type}
-            time={todaySession.time}
-            onEnter={() => navigate(`/interview/ready/${todaySession.id}`)}
-          />
+          {todaySession ? (
+            <SessionCard
+              title={todaySession.title}
+              date={todaySession.date}
+              mentor={todaySession.mentor}
+              type={todaySession.type}
+              time={todaySession.time}
+              onEnter={() => navigate(`/interview/ready/${todaySession.id}`)}
+            />
+          ) : (
+            <div style={{ textAlign:"center", padding:"40px 0", color:C.textMuted, fontSize:14 }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.4" style={{ display:"block", margin:"0 auto 12px" }}>
+                <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+              </svg>
+              오늘 예정된 면접 세션이 없습니다
+            </div>
+          )}
         </DashCard>
 
         {/* ── 하단 2열 ── */}
@@ -354,8 +425,12 @@ export default function MenteeDashboard() {
           <DashCard title="나의 면접 히스토리 & 리포트">
             {history.length > 0 ? (
               <div>
-                {history.map((h, i) => <HistoryItem key={i} {...h}/>)}
-                <Link to="/my/history" style={{
+                {history.map((h, i) => (
+                  <HistoryItem key={i} {...h}
+                    onView={() => navigate(`/report/ai/${h.id}`, { state: { role: "mentee" } })}
+                  />
+                ))}
+                <Link to="/dashboard/mentee" style={{
                   display:"block", textAlign:"center",
                   marginTop:16, fontSize:13, color:C.textMuted,
                   textDecoration:"none",
@@ -408,7 +483,7 @@ export default function MenteeDashboard() {
             </div>
 
             {/* 멘토 신청 바로가기 */}
-            <Link to="/mentor/search" style={{
+            <Link to="/mentee/resume" style={{
               display:"block", marginTop:20,
               padding:"12px", borderRadius:10,
               background:C.bg, textAlign:"center",

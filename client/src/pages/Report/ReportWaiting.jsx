@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getSessionReport } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
@@ -27,6 +28,20 @@ export default function ReportWaitingPage() {
     }, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const poll = setInterval(async () => {
+      try {
+        const report = await getSessionReport(sessionId);
+        if (report?.report_status === "final") {
+          clearInterval(poll);
+          navigate("/report/final", { state: { sessionId, role: "mentee" } });
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(poll);
+  }, [sessionId, navigate]);
 
   return (
     <div style={{

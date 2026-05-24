@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import Login from './pages/Auth/Login'
 import Register from './pages/Auth/Register'
@@ -7,7 +7,6 @@ import MenteeDashboard from './pages/Mentee/MenteeDashboard'
 import MentorInfoRegister from './pages/Mentor/MentorRegister'
 import MentorSearch from './pages/Mentee/MentorSearch'
 import MentorApply from './pages/Mentee/MentorApply'
-import DocumentUpload from './pages/Mentee/DocumentUpload'
 import InterviewSession from './pages/Interview/InterviewSession'
 import InterviewRobby from './pages/Interview/InterviewLobby'
 import MentoringSessionPage from './pages/Interview/MentoringSession'
@@ -18,33 +17,51 @@ import FinalReportPage from './pages/Report/FinalReport'
 import MyPage from './pages/MyPage'
 import MentorMyPage from './pages/MyPage/MentorMypage'
 import MenteeMyPage from './pages/MyPage/MenteeMypage'
+import ResumeManage from './pages/MyPage/ResumeManage'
+import { getAuthUser } from './store/authStore'
+
+/* 로그인 필요 + 역할 체크 */
+function ProtectedRoute({ element, role }) {
+  const user = getAuthUser();
+  if (!user) return <Navigate to="/auth/login" replace />;
+  if (role && user.role !== role) {
+    return <Navigate to={user.role === 'mentor' ? '/dashboard/mentor' : '/dashboard/mentee'} replace />;
+  }
+  return element;
+}
 
 export default function App() {
   return (
     <Routes>
+      {/* 공개 */}
       <Route path="/" element={<Home />} />
       <Route path="/auth/login" element={<Login />} />
       <Route path="/auth/register" element={<Register />} />
-      <Route path="/dashboard/mentor" element={<MentorDashboard />} />
-      <Route path="/dashboard/mentee" element={<MenteeDashboard />} />
-      <Route path="/mentor/register" element={<MentorInfoRegister />} />
-      <Route path="/mentor/search" element={<MentorSearch />} />
-      <Route path="/mentor/apply/:id" element={<MentorApply />} />
-      <Route path="/mentee/documents" element={<DocumentUpload />} />
-      <Route path="/interview/ready/:id" element={<InterviewRobby role="mentee" />} />
-      <Route path="/interview/ready-mentor/:id" element={<InterviewRobby role="mentor" />} />
-      <Route path="/interview/mentee/:id" element={<InterviewSession role="mentee" />} />
-      <Route path="/interview/mentor/:id" element={<InterviewSession role="mentor" />} />
-      <Route path="/mentoring/mentee/:sessionId" element={<MentoringSessionPage />} />
-      <Route path="/mentoring/mentor/:sessionId" element={<MentoringSessionPage />} />
-      <Route path="/report/ai/:sessionId" element={<AIReportPage />} />
-      <Route path="/report/ai-stream/:sessionId" element={<ReportWaitingPage />} />
-      <Route path="/mentor/feedback/:sessionId" element={<MentorFeedbackPage />} />
-      <Route path="/report/final" element={<FinalReportPage />} />
-      <Route path="/mypage"          element={<MyPage />} />
-      <Route path="/mentor/mypage"  element={<MentorMyPage />} />
-      <Route path="/mentee/mypage"  element={<MenteeMyPage />} />
-      
+
+      {/* 멘토 전용 */}
+      <Route path="/dashboard/mentor"        element={<ProtectedRoute role="mentor" element={<MentorDashboard />} />} />
+      <Route path="/mentor/register"         element={<ProtectedRoute role="mentor" element={<MentorInfoRegister />} />} />
+      <Route path="/mentor/mypage"           element={<ProtectedRoute role="mentor" element={<MentorMyPage />} />} />
+      <Route path="/mentor/feedback/:sessionId" element={<ProtectedRoute role="mentor" element={<MentorFeedbackPage />} />} />
+      <Route path="/interview/ready-mentor/:id" element={<ProtectedRoute role="mentor" element={<InterviewRobby role="mentor" />} />} />
+      <Route path="/interview/mentor/:id"    element={<ProtectedRoute role="mentor" element={<InterviewSession role="mentor" />} />} />
+      <Route path="/mentoring/mentor/:sessionId" element={<ProtectedRoute role="mentor" element={<MentoringSessionPage />} />} />
+
+      {/* 멘티 전용 */}
+      <Route path="/dashboard/mentee"        element={<ProtectedRoute role="mentee" element={<MenteeDashboard />} />} />
+      <Route path="/mentor/search"           element={<ProtectedRoute role="mentee" element={<MentorSearch />} />} />
+      <Route path="/mentor/apply/:id"        element={<ProtectedRoute role="mentee" element={<MentorApply />} />} />
+      <Route path="/mentee/mypage"           element={<ProtectedRoute role="mentee" element={<MenteeMyPage />} />} />
+      <Route path="/mentee/resume"           element={<ProtectedRoute role="mentee" element={<ResumeManage />} />} />
+      <Route path="/interview/ready/:id"     element={<ProtectedRoute role="mentee" element={<InterviewRobby role="mentee" />} />} />
+      <Route path="/interview/mentee/:id"    element={<ProtectedRoute role="mentee" element={<InterviewSession role="mentee" />} />} />
+      <Route path="/mentoring/mentee/:sessionId" element={<ProtectedRoute role="mentee" element={<MentoringSessionPage />} />} />
+      <Route path="/report/ai/:sessionId"    element={<ProtectedRoute role="mentee" element={<AIReportPage />} />} />
+      <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute role="mentee" element={<ReportWaitingPage />} />} />
+      <Route path="/report/final"            element={<ProtectedRoute role="mentee" element={<FinalReportPage />} />} />
+
+      {/* 로그인만 필요 (공통) */}
+      <Route path="/mypage" element={<ProtectedRoute element={<MyPage />} />} />
     </Routes>
   )
 }

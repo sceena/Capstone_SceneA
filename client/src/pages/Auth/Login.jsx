@@ -10,15 +10,15 @@ import { setAuthUser } from "../../store/authStore";
 const C = {
   navy:     "#0D2240",
   navyMid:  "#1B4F7A",
-  cream:    "#F2EDE4",
-  creamDark:"#E8E0D0",
+  cream:    "#F4F2EE",
+  creamDark:"#EDEAE4",
   white:    "#FFFFFF",
   teal:     "#1D9E75",
   text:     "#1A1818",
   textSub:  "#6B6863",
   textMuted:"#9E9B95",
-  border:   "#E8E0D0",
-  inputBg:  "#F2EDE4",
+  border:   "#DDD9D3",
+  inputBg:  "#F4F2EE",
   error:    "#D94040",
 };
 
@@ -105,11 +105,19 @@ export default function Login() {
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
-  const [role, setRole]         = useState("mentee");
 
   /* 이메일 포커스 상태 */
   const [emailFocused, setEmailFocused]   = useState(false);
   const [pwFocused,    setPwFocused]      = useState(false);
+
+  const parseTokenRole = (token) => {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+      return payload.role?.toLowerCase();
+    } catch {
+      return null;
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -120,15 +128,51 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      /* TODO: 실제 로그인 API 연동 */
-      await new Promise(r => setTimeout(r, 900));
-      setAuthUser({ role, name: email });
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+        setLoading(false);
+        return;
+      }
+      if (res.status === 404) {
+        setError("존재하지 않는 계정입니다.");
+        setLoading(false);
+        return;
+      }
+      if (!res.ok) {
+        setError("로그인에 실패했습니다. 다시 시도해주세요.");
+        setLoading(false);
+        return;
+      }
+      const { access_token, refresh_token } = await res.json();
+      const role = parseTokenRole(access_token) || "mentee";
+      let name = email.split("@")[0];
+      try {
+        const profileRes = await fetch("/api/users/me", {
+          headers: { Authorization: `Bearer ${access_token}` },
+        });
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          if (profile.name) name = profile.name;
+        }
+      } catch {}
+      setAuthUser({ role, email, name, accessToken: access_token, refreshToken: refresh_token });
       navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
     } catch {
-      setError("이메일 또는 비밀번호를 확인해주세요.");
-    } finally {
+      /* 네트워크 에러(백엔드 미연결) 시 데모 진행 — 역할 선택 필요 */
+      setError("서버에 연결할 수 없습니다. 데모 모드로 접속하려면 역할을 선택하세요.");
       setLoading(false);
     }
+    setLoading(false);
+  };
+
+  const handleDemo = (role) => {
+    setAuthUser({ role, email: email || "demo@scena.com", accessToken: null, refreshToken: null });
+    navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
   };
 
   return (
@@ -142,7 +186,7 @@ export default function Login() {
         /* 인풋 자동완성 배경 제거 */
         input:-webkit-autofill,
         input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0 1000px #F2EDE4 inset !important;
+          -webkit-box-shadow: 0 0 0 1000px #F4F2EE inset !important;
           -webkit-text-fill-color: #1A1818 !important;
         }
 
@@ -151,7 +195,7 @@ export default function Login() {
           display: flex; align-items: center; justify-content: center;
           gap: 8px; padding: 12px 0;
           background: #FFFFFF;
-          border: 1px solid #E8E0D0;
+          border: 1px solid #E2E6EA;
           border-radius: 12px;
           cursor: pointer;
           font-family: 'Noto Sans KR', sans-serif;
@@ -161,8 +205,8 @@ export default function Login() {
           white-space: nowrap;
         }
         .social-btn:hover {
-          background: #F6F4EF;
-          border-color: #BFBCB5;
+          background: #EDEAE4;
+          border-color: #C8C3BB;
           transform: translateY(-1px);
         }
 
@@ -200,7 +244,7 @@ export default function Login() {
         inset: 0,
         zIndex: 1000,
         display: "flex",
-        overflowY: "auto",
+        overflow: "hidden",
         fontFamily: "'Noto Sans KR', sans-serif",
       }}>
 
@@ -293,6 +337,7 @@ export default function Login() {
           alignItems: "center",
           justifyContent: "center",
           padding: "40px 5%",
+          overflowY: "auto",
         }}>
           <div className="login-card" style={{
             width: "100%",
@@ -300,7 +345,7 @@ export default function Login() {
             background: C.creamDark,
             borderRadius: 20,
             padding: "44px 40px",
-            boxShadow: "0 2px 24px rgba(13,34,68,0.07)",
+            boxShadow: "0 2px 16px rgba(13,34,68,0.09), 0 0 0 1px rgba(0,0,0,0.04)",
           }}>
 
             {/* 헤더 */}
@@ -311,41 +356,8 @@ export default function Login() {
               Back to your digital life
             </h1>
             <p style={{ fontSize: 14, color: C.textSub, marginBottom: 32, lineHeight: 1.6 }}>
-              Choose one of the option to go
+              이메일과 비밀번호로 로그인하세요
             </p>
-
-            {/* 역할 선택 토글 */}
-            <div style={{
-              display: "flex",
-              background: C.inputBg,
-              borderRadius: 12,
-              padding: 4,
-              marginBottom: 20,
-            }}>
-              {["mentee", "mentor"].map(r => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  style={{
-                    flex: 1,
-                    padding: "10px 0",
-                    borderRadius: 9,
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: 14,
-                    fontWeight: role === r ? 700 : 400,
-                    fontFamily: "inherit",
-                    background: role === r ? C.white : "transparent",
-                    color: role === r ? C.navy : C.textMuted,
-                    boxShadow: role === r ? "0 1px 6px rgba(13,34,68,0.1)" : "none",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {r === "mentee" ? "멘티 (면접자)" : "멘토 (현직자)"}
-                </button>
-              ))}
-            </div>
 
             {/* 폼 */}
             <form onSubmit={handleSubmit} style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -424,13 +436,23 @@ export default function Login() {
 
               {/* 에러 메시지 */}
               {error && (
-                <p style={{
-                  fontSize:13, color:C.error,
-                  background:"#FCF0F0", border:`1px solid #F5C6C6`,
-                  borderRadius:8, padding:"10px 14px",
-                }}>
-                  {error}
-                </p>
+                <div style={{ fontSize:13, color:C.error, background:"#FCF0F0", border:`1px solid #F5C6C6`, borderRadius:8, padding:"10px 14px" }}>
+                  <p>{error}</p>
+                  {error.includes("데모") && (
+                    <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                      {["mentee","mentor"].map(r => (
+                        <button key={r} type="button" onClick={() => handleDemo(r)} style={{
+                          flex:1, padding:"8px 0", borderRadius:8,
+                          border:`1px solid ${C.error}`, background:"transparent",
+                          color:C.error, fontSize:12, fontWeight:700,
+                          cursor:"pointer", fontFamily:"inherit",
+                        }}>
+                          {r === "mentee" ? "멘티로 데모" : "멘토로 데모"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* 소셜 로그인 구분선 */}

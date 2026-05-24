@@ -9,15 +9,15 @@ import { Link, useNavigate } from "react-router-dom";
 const C = {
   navy:      "#0D2240",
   navyMid:   "#1B4F7A",
-  cream:     "#F2EDE4",
-  creamDark: "#E8E0D0",
+  cream:     "#F4F2EE",
+  creamDark: "#EDEAE4",
   white:     "#FFFFFF",
   teal:      "#1D9E75",
   text:      "#1A1818",
   textSub:   "#6B6863",
   textMuted: "#9E9B95",
-  border:    "#E8E0D0",
-  inputBg:   "#F2EDE4",
+  border:    "#DDD9D3",
+  inputBg:   "#F4F2EE",
   error:     "#D94040",
   errorBg:   "#FCF0F0",
 };
@@ -127,7 +127,7 @@ const PwStrength = ({ pw }) => {
         {[1,2,3,4].map(i => (
           <div key={i} style={{
             flex:1, height:3, borderRadius:999,
-            background: i <= score ? colors[score] : C.creamDark,
+            background: i <= score ? colors[score] : "#DDD9D3",
             transition:"background 0.3s",
           }}/>
         ))}
@@ -168,7 +168,7 @@ const StepTabs = ({ current }) => {
                   }}><CheckIcon/></span>
                 : <span style={{
                     width:18, height:18, borderRadius:"50%",
-                    background: active ? C.navy : C.creamDark,
+                    background: active ? C.navy : "#DDD9D3",
                     color: active ? C.white : C.textMuted,
                     display:"inline-flex", alignItems:"center",
                     justifyContent:"center", fontSize:10, fontWeight:700, flexShrink:0,
@@ -252,7 +252,7 @@ const RoleCard = ({ role, selected, onClick }) => {
   const desc      = isMentor ? "면접 진행 및 피드백 제공" : "면접 연습 및 AI 분석 수령";
   const tagBg     = selected && isMentor  ? C.white
                   : selected && !isMentor ? C.navy
-                  : C.creamDark;
+                  : "#E8E4DC";
   const tagColor  = selected && isMentor  ? C.navy
                   : selected && !isMentor ? C.white
                   : C.textMuted;
@@ -346,47 +346,76 @@ const Step2 = ({ data, onChange, errors }) => (
 );
 
 /* ──────────────────── STEP 3: 프로필 ──────────────────── */
-const Step3Mentee = ({ data, onChange, errors }) => (
-  <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-    <p style={{ fontSize:12, fontWeight:600, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
-      멘티 프로필
-    </p>
+const Step3Mentee = ({ data, onChange }) => (
+  <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
 
-    <Field label="목표 기업">
-      <TextInput
-        placeholder="예) 네이버, 카카오, 라인"
-        value={data.targetCompany}
-        onChange={e => onChange("targetCompany", e.target.value)}
-      />
-    </Field>
+    {/* 헤더 */}
+    <div style={{ paddingBottom:4 }}>
+      <p style={{ fontSize:15, fontWeight:700, color:C.text, marginBottom:4 }}>
+        편하게 알려주세요 :)
+      </p>
+      <p style={{ fontSize:12, color:C.textSub, lineHeight:1.6 }}>
+        아는 만큼만 적어도 돼요 — 나중에 언제든 수정할 수 있어요
+      </p>
+    </div>
 
-    <Field label="지원 직무">
+    {/* 학교 · 전공 */}
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+      <Field label="학교" hint="재학 중인 곳">
+        <TextInput
+          placeholder="예) 한양대학교"
+          value={data.school || ""}
+          onChange={e => onChange("school", e.target.value)}
+        />
+      </Field>
+      <Field label="전공 · 학과">
+        <TextInput
+          placeholder="예) 컴퓨터공학과"
+          value={data.major || ""}
+          onChange={e => onChange("major", e.target.value)}
+        />
+      </Field>
+    </div>
+
+    {/* 관심 직무 */}
+    <Field label="관심 직무" hint="어떤 일을 해보고 싶어요?">
       <TextInput
-        placeholder="예) 백엔드 개발, 프론트엔드 개발"
+        placeholder="예) 백엔드 개발, 데이터 분석, UX 디자인..."
         value={data.position}
         onChange={e => onChange("position", e.target.value)}
       />
     </Field>
 
-    <Field label="주요 기술 스택">
+    {/* 목표 기업 */}
+    <Field label="목표 기업 · 업계" hint="없어도 전혀 괜찮아요!">
       <TextInput
-        placeholder="예) Java, Spring, React, TypeScript"
+        placeholder="예) 네이버, 카카오, IT 스타트업 등"
+        value={data.targetCompany}
+        onChange={e => onChange("targetCompany", e.target.value)}
+      />
+    </Field>
+
+    {/* 기술 도구 */}
+    <Field label="다룰 줄 아는 기술 · 도구" hint="없으면 비워도 돼요 — 진짜로요!">
+      <TextInput
+        placeholder="예) Python, Figma, Excel, Git... 뭐든"
         value={data.techStack}
         onChange={e => onChange("techStack", e.target.value)}
       />
     </Field>
 
-    <Field label="자기소개 한 줄" hint="멘토가 나를 더 잘 이해할 수 있도록 적어주세요">
+    {/* 자기소개 */}
+    <Field label="한 줄 소개" hint="자소서 아니에요, 자유롭게 :)">
       <textarea
-        placeholder="예) CS 기반 탄탄한 백엔드 개발자를 목표로 공부 중입니다."
+        placeholder="예) 개발에 관심 생긴 지 1년 된 컴공 3학년입니다!"
         value={data.bio}
         onChange={e => onChange("bio", e.target.value)}
-        rows={3}
+        rows={2}
         style={{
           width:"100%", padding:"13px 16px",
           background:C.inputBg, border:"1.5px solid transparent",
           borderRadius:10, fontSize:14, color:C.text,
-          outline:"none", fontFamily:"inherit", resize:"vertical",
+          outline:"none", fontFamily:"inherit", resize:"none",
           lineHeight:1.7, transition:"border-color 0.18s, background 0.18s",
         }}
         onFocus={e => { e.target.style.background=C.white; e.target.style.borderColor=C.navy; }}
@@ -470,7 +499,7 @@ export default function Register() {
   const [roleInfo, setRoleInfo] = useState({ role:"", name:"", birth:"" });
   const [profile, setProfile] = useState({
     /* 멘티 */
-    targetCompany:"", position:"", techStack:"", bio:"",
+    school:"", major:"", targetCompany:"", position:"", techStack:"", bio:"",
     /* 멘토 */
     company:"", jobTitle:"", years:"",
   });
@@ -519,8 +548,18 @@ export default function Register() {
     e.preventDefault();
     setLoading(true);
     try {
-      /* TODO: 실제 회원가입 API 연동 */
-      await new Promise(r => setTimeout(r, 1000));
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: account.email,
+          password: account.password,
+          name: roleInfo.name,
+          nickname: roleInfo.name,
+          role: roleInfo.role.toUpperCase(),
+        }),
+      });
+      if (!res.ok) throw new Error("signup failed");
       navigate("/auth/login");
     } catch {
       setErrors({ submit:"회원가입 중 오류가 발생했습니다. 다시 시도해주세요." });
@@ -539,7 +578,7 @@ export default function Register() {
 
         input:-webkit-autofill,
         input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0 1000px #F2EDE4 inset !important;
+          -webkit-box-shadow: 0 0 0 1000px #F4F2EE inset !important;
           -webkit-text-fill-color: #1A1818 !important;
         }
 
@@ -589,7 +628,7 @@ export default function Register() {
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
       `}</style>
 
-      <div style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", overflowY:"auto", fontFamily:"'Noto Sans KR', sans-serif" }}>
+      <div style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", overflow:"hidden", fontFamily:"'Noto Sans KR', sans-serif" }}>
 
         {/* ════════ 왼쪽 네이비 패널 ════════ */}
         <div className="reg-left" style={{
@@ -662,11 +701,12 @@ export default function Register() {
             </div>
 
             <div style={{ marginTop:36, display:"flex", gap:8 }}>
-              {[1,0.35,0.2].map((op,i)=>(
-                <div key={i} style={{
+              {[1,2,3].map(s => (
+                <div key={s} style={{
                   height:3, borderRadius:999,
-                  background:`rgba(255,255,255,${op})`,
-                  width: i===0 ? 32 : 12,
+                  background: `rgba(255,255,255,${step > s ? 0.55 : step === s ? 1 : 0.2})`,
+                  width: step === s ? 32 : step > s ? 20 : 12,
+                  transition: "width 0.35s ease, background 0.35s ease",
                 }}/>
               ))}
             </div>
@@ -680,7 +720,7 @@ export default function Register() {
         {/* ════════ 오른쪽 폼 영역 ════════ */}
         <div className="reg-right" style={{
           flex:1, background:C.cream,
-          display:"flex", alignItems:"center",
+          display:"flex", alignItems:"flex-start",
           justifyContent:"center", padding:"40px 5%",
           overflowY:"auto",
         }}>
@@ -688,7 +728,7 @@ export default function Register() {
             width:"100%", maxWidth:460,
             background:C.creamDark,
             borderRadius:20, padding:"40px 36px",
-            boxShadow:"0 2px 24px rgba(13,34,68,0.07)",
+            boxShadow:"0 2px 16px rgba(13,34,68,0.09), 0 0 0 1px rgba(0,0,0,0.04)",
           }}>
 
             {/* 헤더 */}

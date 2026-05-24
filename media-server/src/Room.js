@@ -7,6 +7,12 @@ class Room {
   }
 
   addPeer(peerId, socket) {
+    // 재접속 시 기존 리소스 정리
+    if (this.peers.has(peerId)) {
+      const existing = this.peers.get(peerId);
+      if (existing.sendTransport) existing.sendTransport.close();
+      existing.recvTransports.forEach((t) => t.close());
+    }
     this.peers.set(peerId, {
       socket,
       sendTransport: null,

@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { io } from "socket.io-client";
+import { Device } from "mediasoup-client";
 import useAuthStore from "../../store/authStore";
+import { getAuthUser } from "../../store/authStore";
+import { getSessionReport } from "../../api/sessions";
+
+const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 
 // ─── 상수 ────────────────────────────────────────────────────────
 const NAVY = "#0D2240";
@@ -118,87 +124,48 @@ function FitBar({ label, pct }) {
   );
 }
 
-// ─── 비디오 피드 박스 ─────────────────────────────────────────────
-function VideoBox({ participant, isLocal = false }) {
+// ─── 비디오 타일 ─────────────────────────────────────────────────
+function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || !stream) return;
+    video.srcObject = stream;
+    video.muted = muted;
+    video.play().catch(() => {});
+  }, [stream, muted]);
   return (
-    <div
-      style={{
-        flex: 1,
-        background: "#0A0A0A",
-        position: "relative",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderBottom: "1px solid #222",
-        overflow: "hidden",
-        minHeight: 0,
-      }}
-    >
-      {/* 실제 구현 시 <video> 태그로 교체 */}
-      {/* <video ref={videoRef} autoPlay playsInline muted={isLocal} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> */}
-      <Avatar
-        name={participant.name}
-        size={56}
-        bg={isLocal ? "#1E3A5F" : "#3A5F3A"}
-        fontSize={18}
-      />
-
-      {/* 이름 레이블 */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 10,
-          left: 10,
-          background: "rgba(0,0,0,0.65)",
-          color: "white",
-          fontSize: 11,
-          padding: "3px 8px",
-          borderRadius: 5,
-          fontWeight: 600,
-        }}
-      >
-        {participant.name}
-      </div>
-
-      {/* 역할 뱃지 */}
-      {participant.role && (
-        <div
-          style={{
-            position: "absolute",
-            top: 10,
-            right: 10,
-            background: GREEN,
-            color: "white",
-            fontSize: 9,
-            padding: "2px 7px",
-            borderRadius: 4,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-          }}
-        >
-          {participant.role}
+    <div style={{
+      flex: 1, minHeight: 0, position: "relative",
+      background: "#0A0A0A", overflow: "hidden",
+      border: `2px solid ${isSpeaking ? GREEN : "transparent"}`,
+      transition: "border-color 0.3s",
+    }}>
+      <video ref={ref} autoPlay playsInline style={{
+        width: "100%", height: "100%", objectFit: "cover",
+        transform: mirror ? "scaleX(-1)" : "none",
+        display: camOff ? "none" : "block",
+      }} />
+      {camOff && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Avatar name={label || "?"} size={48} bg="#1E3A5F" fontSize={16} />
         </div>
       )}
-
-      {/* 마이크 상태 아이콘 */}
-      <div style={{ position: "absolute", bottom: 10, right: 10 }}>
-        {isLocal ? (
-          /* 음소거 아이콘 */
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2">
-            <line x1="1" y1="1" x2="23" y2="23" />
-            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-            <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-          </svg>
-        ) : (
-          /* 마이크 활성 아이콘 */
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-          </svg>
-        )}
-      </div>
+      {label && (
+        <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.65)", borderRadius: 5, padding: "2px 8px" }}>
+          <span style={{ color: "#fff", fontSize: 11, fontWeight: 600 }}>{label}</span>
+        </div>
+      )}
+      {isSpeaking && (
+        <div style={{ position: "absolute", top: 6, right: 6, display: "flex", alignItems: "flex-end", gap: 2 }}>
+          {[3, 6, 4, 8, 4].map((h, i) => (
+            <div key={i} style={{
+              width: 2, background: GREEN, borderRadius: 2, height: h,
+              animation: `speakPulse 0.5s ease-in-out ${i * 0.08}s infinite`,
+            }} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -415,7 +382,7 @@ export default function MentoringSessionPage() {
   const { sessionId } = useParams(); // /session/:sessionId
   const { user } = useAuthStore(); // { role: 'mentor' | 'mentee', name: '...' }
 
-  const [session] = useState(MOCK_SESSION);
+  const [session, setSession] = useState(MOCK_SESSION);
   const [elapsed, setElapsed] = useState(0);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
@@ -423,6 +390,272 @@ export default function MentoringSessionPage() {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
   const timerRef = useRef(null);
+
+  /* ── WebRTC refs ── */
+  const localStreamRef = useRef(null);
+  const socketRef = useRef(null);
+  const deviceRef = useRef(null);
+  const sendTransportRef = useRef(null);
+  const recvTransportRef = useRef(null);
+  const videoProducerRef = useRef(null);
+  const audioProducerRef = useRef(null);
+  const consumersRef = useRef(new Map());
+  const audioCtxRef = useRef(null);
+  const localAnalyserRef = useRef(null);
+  const peerAnalysersRef = useRef({});
+  const peersRef = useRef({});
+
+  const [peerIds, setPeerIds] = useState([]);
+  const [localMediaStream, setLocalMediaStream] = useState(null);
+  const [audioLevels, setAudioLevels] = useState({});
+  const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+
+  /* ── 드로잉(형광펜) ── */
+  const [drawMode, setDrawMode] = useState(false);
+  const [drawTool, setDrawTool] = useState("highlight");
+  const [drawColor, setDrawColor] = useState("#FFD700");
+  const canvasRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const pendingRef = useRef(false);      // mousedown 후 아직 방향 미결정
+  const scrollModeRef = useRef(false);   // 드래그 → 스크롤 모드
+  const mouseStartRef = useRef({ x: 0, y: 0 });
+  const scrollStartTopRef = useRef(0);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+  const DRAG_THRESHOLD = 6;
+
+  const getPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
+  };
+
+  const startDraw = (e) => {
+    if (!drawMode) return;
+    e.preventDefault();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    mouseStartRef.current = { x: cx, y: cy };
+    lastPosRef.current = getPos(e, canvasRef.current);
+    pendingRef.current = true;
+    scrollModeRef.current = false;
+    scrollStartTopRef.current = scrollContainerRef.current?.scrollTop ?? 0;
+  };
+
+  const draw = (e) => {
+    if (!drawMode || !pendingRef.current && !scrollModeRef.current) return;
+    e.preventDefault();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+
+    if (pendingRef.current) {
+      const dist = Math.hypot(cx - mouseStartRef.current.x, cy - mouseStartRef.current.y);
+      if (dist > DRAG_THRESHOLD) {
+        pendingRef.current = false;
+        scrollModeRef.current = true;
+      }
+      return;
+    }
+
+    if (scrollModeRef.current) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollStartTopRef.current - (cy - mouseStartRef.current.y);
+      }
+    }
+  };
+
+  const stopDraw = () => {
+    if (pendingRef.current) {
+      // 클릭 → 해당 위치에 하이라이트 마크 찍기
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const { x, y } = lastPosRef.current;
+      ctx.beginPath();
+      if (drawTool === "highlight") {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = drawColor + "55";
+        ctx.ellipse(x, y, 24, 11, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (drawTool === "pen") {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = drawColor;
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.arc(x, y, 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    pendingRef.current = false;
+    scrollModeRef.current = false;
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const initCanvas = useCallback((node) => {
+    if (!node) return;
+    canvasRef.current = node;
+    const parent = node.parentElement;
+    node.width = parent.clientWidth;
+    node.height = parent.clientHeight;
+  }, []);
+
+  // 세션 리포트 조회
+  useEffect(() => {
+    getSessionReport(sessionId)
+      .then(data => setSession(prev => ({ ...prev, ...data })))
+      .catch(() => {});
+  }, [sessionId]);
+
+  /* ── 미디어 소비 ── */
+  const consumeProducer = useCallback((producerId, peerId, kind) => {
+    return new Promise((resolve) => {
+      const socket = socketRef.current;
+      const device = deviceRef.current;
+      const recvTransport = recvTransportRef.current;
+      if (!socket || !device || !recvTransport) { resolve(); return; }
+      socket.emit("consume", { producerId, rtpCapabilities: device.rtpCapabilities }, async (res) => {
+        if (res.error) { resolve(); return; }
+        try {
+          const consumer = await recvTransport.consume({ id: res.id, producerId: res.producerId, kind: res.kind, rtpParameters: res.rtpParameters });
+          consumersRef.current.set(consumer.id, consumer);
+          if (!peersRef.current[peerId]) peersRef.current[peerId] = new MediaStream();
+          peersRef.current[peerId].addTrack(consumer.track);
+          setPeerIds(prev => prev.includes(peerId) ? [...prev] : [...prev, peerId]);
+          if (consumer.track.kind === 'audio') {
+            try {
+              if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+              const analyser = audioCtxRef.current.createAnalyser();
+              analyser.fftSize = 256;
+              audioCtxRef.current.createMediaStreamSource(peersRef.current[peerId]).connect(analyser);
+              peerAnalysersRef.current[peerId] = analyser;
+            } catch {}
+          }
+          socket.emit("resumeConsumer", { consumerId: consumer.id }, () => {});
+        } catch {}
+        resolve();
+      });
+    });
+  }, []);
+
+  /* ── WebRTC 초기화 ── */
+  useEffect(() => {
+    const user = getAuthUser();
+    const token = user?.accessToken;
+    if (!token) return;
+    let isCancelled = false;
+    let socket;
+
+    const init = async () => {
+      const preferredCameraId = localStorage.getItem('preferredCameraId');
+      const videoConstraint = preferredCameraId ? { deviceId: { exact: preferredCameraId } } : true;
+      let localStream;
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true });
+      } catch {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch {
+          localStream = new MediaStream();
+        }
+      }
+      if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
+      localStreamRef.current = localStream;
+      setLocalMediaStream(localStream);
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        const analyser = audioCtxRef.current.createAnalyser();
+        analyser.fftSize = 256;
+        audioCtxRef.current.createMediaStreamSource(localStream).connect(analyser);
+        localAnalyserRef.current = analyser;
+      } catch {}
+
+      socket = io(MEDIA_SERVER, { withCredentials: true });
+      socketRef.current = socket;
+
+      socket.emit("join", { sessionId, token }, async (res) => {
+        if (isCancelled || res.error) return;
+        const { rtpCapabilities, existingProducers } = res;
+        const device = new Device();
+        try { await device.load({ routerRtpCapabilities: rtpCapabilities }); } catch { return; }
+        if (isCancelled) return;
+        deviceRef.current = device;
+
+        socket.emit("createTransport", { direction: "send" }, async (sendRes) => {
+          if (isCancelled || sendRes.error) return;
+          const sendTransport = device.createSendTransport(sendRes);
+          sendTransportRef.current = sendTransport;
+          sendTransport.on("connect", ({ dtlsParameters }, cb, errback) => {
+            socket.emit("connectTransport", { transportId: sendTransport.id, dtlsParameters }, (r) => { r.error ? errback(new Error(r.error)) : cb(); });
+          });
+          sendTransport.on("produce", ({ kind, rtpParameters }, cb, errback) => {
+            socket.emit("produce", { transportId: sendTransport.id, kind, rtpParameters }, (r) => { r.error ? errback(new Error(r.error)) : cb({ id: r.producerId }); });
+          });
+          const videoTrack = localStream.getVideoTracks()[0];
+          if (videoTrack) try { videoProducerRef.current = await sendTransport.produce({ track: videoTrack }); } catch {}
+          const audioTrack = localStream.getAudioTracks()[0];
+          if (audioTrack) try { audioProducerRef.current = await sendTransport.produce({ track: audioTrack }); } catch {}
+        });
+
+        socket.emit("createTransport", { direction: "recv" }, async (recvRes) => {
+          if (isCancelled || recvRes.error) return;
+          const recvTransport = device.createRecvTransport(recvRes);
+          recvTransportRef.current = recvTransport;
+          recvTransport.on("connect", ({ dtlsParameters }, cb, errback) => {
+            socket.emit("connectTransport", { transportId: recvTransport.id, dtlsParameters }, (r) => { r.error ? errback(new Error(r.error)) : cb(); });
+          });
+          for (const { producerId, peerId, kind } of existingProducers) {
+            if (isCancelled) return;
+            await consumeProducer(producerId, peerId, kind);
+          }
+        });
+      });
+
+      socket.on("newProducer", ({ producerId, peerId, kind }) => { if (!isCancelled) consumeProducer(producerId, peerId, kind); });
+      socket.on("peerLeft", ({ peerId }) => {
+        delete peersRef.current[peerId];
+        delete peerAnalysersRef.current[peerId];
+        setPeerIds(prev => prev.filter(p => p !== peerId));
+      });
+    };
+
+    init();
+    return () => {
+      isCancelled = true;
+      videoProducerRef.current?.close();
+      audioProducerRef.current?.close();
+      sendTransportRef.current?.close();
+      recvTransportRef.current?.close();
+      consumersRef.current.forEach(c => c.close());
+      consumersRef.current.clear();
+      localStreamRef.current?.getTracks().forEach(t => t.stop());
+      localAnalyserRef.current = null;
+      Object.keys(peerAnalysersRef.current).forEach(k => delete peerAnalysersRef.current[k]);
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
+      socket?.disconnect();
+    };
+  }, [sessionId, consumeProducer]);
+
+  /* ── 오디오 레벨 폴링 ── */
+  useEffect(() => {
+    const THRESHOLD = 0.025;
+    const getLevel = (an) => { const d = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); return d.reduce((a, b) => a + b, 0) / d.length / 255; };
+    const interval = setInterval(() => {
+      const levels = {};
+      if (localAnalyserRef.current) levels['__local'] = getLevel(localAnalyserRef.current);
+      Object.entries(peerAnalysersRef.current).forEach(([pid, an]) => { levels[pid] = getLevel(an); });
+      setAudioLevels(levels);
+      let maxLv = THRESHOLD, speaker = null;
+      Object.entries(levels).forEach(([id, lv]) => { if (lv > maxLv) { maxLv = lv; speaker = id; } });
+      setActiveSpeakerId(speaker);
+    }, 300);
+    return () => clearInterval(interval);
+  }, []);
 
   // 세션 타이머
   useEffect(() => {
@@ -436,6 +669,22 @@ export default function MentoringSessionPage() {
     const s = sec % 60;
     if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  const handleMicToggle = () => {
+    const next = !isMicOn;
+    setIsMicOn(next);
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = next; });
+    if (next) audioProducerRef.current?.resume();
+    else audioProducerRef.current?.pause();
+  };
+
+  const handleCamToggle = () => {
+    const next = !isCamOn;
+    setIsCamOn(next);
+    localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = next; });
+    if (next) videoProducerRef.current?.resume();
+    else videoProducerRef.current?.pause();
   };
 
   // 세션 종료 처리
@@ -458,13 +707,25 @@ export default function MentoringSessionPage() {
   const isMentor = user?.role === "mentor";
 
   return (
+    <>
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+      html,body{height:100%;overflow:hidden;margin:0}
+      #root{height:100%;overflow:hidden;min-height:0;width:100%;max-width:100%;margin:0;display:block;text-align:left}
+      body{font-family:'Noto Sans KR',sans-serif;background:#FAF8F4;color:#1A1818}
+      @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+      @keyframes speakPulse{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
+      ::-webkit-scrollbar{width:4px}
+      ::-webkit-scrollbar-track{background:transparent}
+      ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
+    `}</style>
     <div
       style={{
         height: "100vh",
         display: "flex",
         flexDirection: "column",
-        background: "#F5F4F0",
-        fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
+        fontFamily: "'Noto Sans KR', sans-serif",
         overflow: "hidden",
       }}
     >
@@ -473,8 +734,8 @@ export default function MentoringSessionPage() {
       ══════════════════════════════════════════════════════════ */}
       <header
         style={{
-          background: "#F5F4F0",
-          borderBottom: "1px solid #E0DDD8",
+          background: "#fff",
+          borderBottom: "1px solid #E8E0D0",
           padding: "0 28px",
           height: 72,
           display: "flex",
@@ -488,7 +749,7 @@ export default function MentoringSessionPage() {
           style={{
             width: 44,
             height: 44,
-            background: "#2563EB",
+            background: "#0D2240",
             borderRadius: 11,
             display: "flex",
             alignItems: "center",
@@ -587,55 +848,207 @@ export default function MentoringSessionPage() {
           </span>
         </div>
 
-        <style>{`
-          @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
-        `}</style>
       </header>
 
       {/* ══════════════════════════════════════════════════════════
           메인 콘텐츠 (공유 리포트 + 비디오 패널)
       ══════════════════════════════════════════════════════════ */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* 좌측: 공유 리포트 */}
-        <SharedReport report={session.report} />
+        {/* 좌측: 공유 리포트 + 드로잉 레이어 */}
+        <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+          <div ref={scrollContainerRef} style={{ width: "100%", height: "100%", overflowY: "auto" }}>
+            <SharedReport report={session.report} />
+          </div>
 
-        {/* 우측: 비디오 + 공유 안내 */}
+          {/* 캔버스 오버레이 */}
+          <canvas
+            ref={initCanvas}
+            style={{
+              position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+              pointerEvents: drawMode ? "auto" : "none",
+              cursor: drawMode
+                ? (scrollModeRef.current ? "grabbing" : drawTool === "eraser" ? "cell" : "crosshair")
+                : "default",
+              touchAction: "none",
+            }}
+            onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+            onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
+          />
+
+          {/* 드로잉 툴바 */}
+          {drawMode && (
+            <div style={{
+              position: "absolute", top: 14, left: 14,
+              background: "#fff", borderRadius: 14, padding: "8px 14px",
+              display: "flex", alignItems: "center", gap: 10,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.18)", zIndex: 10,
+              border: "1px solid #E8E0D0",
+            }}>
+              {/* 형광펜 색상 */}
+              {[["#FFD700","노랑"],["#FF6B6B","빨강"],["#51CF66","초록"],["#74C0FC","파랑"],["#F783AC","분홍"]].map(([c, name]) => (
+                <button key={c} title={name} onClick={() => { setDrawColor(c); setDrawTool("highlight"); }} style={{
+                  width: 22, height: 22, borderRadius: "50%", border: (drawColor === c && drawTool === "highlight") ? "3px solid #0D2240" : "2px solid #ddd",
+                  background: c + "99", cursor: "pointer", padding: 0, transition: "transform 0.1s",
+                }} />
+              ))}
+
+              <div style={{ width: 1, height: 20, background: "#E0DDD8" }} />
+
+              {/* 펜 */}
+              <button title="펜" onClick={() => setDrawTool("pen")} style={{
+                width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
+                background: drawTool === "pen" ? "#0D2240" : "rgba(0,0,0,0.06)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={drawTool === "pen" ? "#fff" : "#555"} strokeWidth="2" strokeLinecap="round">
+                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                </svg>
+              </button>
+
+              {/* 지우개 */}
+              <button title="지우개" onClick={() => setDrawTool("eraser")} style={{
+                width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
+                background: drawTool === "eraser" ? "#0D2240" : "rgba(0,0,0,0.06)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={drawTool === "eraser" ? "#fff" : "#555"} strokeWidth="2" strokeLinecap="round">
+                  <path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/><path d="M6 14l4 4"/>
+                </svg>
+              </button>
+
+              {/* 전체 지우기 */}
+              <button title="전체 지우기" onClick={clearCanvas} style={{
+                width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
+                background: "rgba(0,0,0,0.06)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 우측: 비디오 + 세션 정보 패널 */}
         <div
           style={{
-            width: 220,
+            width: 280,
             background: "#111",
             display: "flex",
             flexDirection: "column",
             flexShrink: 0,
             borderLeft: "1px solid #222",
+            overflowY: "auto",
           }}
         >
-          {/* 멘토 비디오 */}
-          <VideoBox participant={session.mentor} isLocal={isMentor} />
+          {/* 비디오 영역 (각 50%) */}
+          <div style={{ height: 240, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+            {/* 멘토 비디오 */}
+            <VideoTile
+              stream={isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
+              label={`${session.mentor.name} (멘토)`}
+              mirror={isMentor} muted={isMentor}
+              isSpeaking={(audioLevels[isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
+              camOff={isMentor && !isCamOn}
+            />
+            <div style={{ height: 1, background: "#222", flexShrink: 0 }} />
+            {/* 멘티 비디오 */}
+            <VideoTile
+              stream={!isMentor ? localMediaStream : (peersRef.current[peerIds[0]] ?? null)}
+              label={`${session.mentee.name} (멘티)`}
+              mirror={!isMentor} muted={!isMentor}
+              isSpeaking={(audioLevels[!isMentor ? '__local' : peerIds[0]] || 0) > 0.025}
+              camOff={!isMentor && !isCamOn}
+            />
+          </div>
 
-          {/* 멘티 비디오 */}
-          <VideoBox participant={session.mentee} isLocal={!isMentor} />
+          {/* 멘티 프로필 카드 */}
+          <div style={{ background: "#0D2240", padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <Avatar name={session.mentee.name} size={36} bg="#1E6A5A" fontSize={12} />
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{session.mentee.name}</p>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>멘티 · {session.report.date}</p>
+              </div>
+            </div>
+            {/* 종합 점수 */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>AI 종합 점수</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: GREEN }}>{session.report.totalScore}<span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/100</span></span>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height: 4 }}>
+              <div style={{ width: `${session.report.totalScore}%`, height: 4, borderRadius: 99, background: GREEN }} />
+            </div>
+            {/* 취약 역량 태그 */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
+              {session.report.fitGap.filter(f => f.pct < 50).map(f => (
+                <span key={f.label} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "rgba(226,75,74,0.18)", color: "#E24B4A", fontWeight: 600 }}>
+                  {f.label}
+                </span>
+              ))}
+            </div>
+          </div>
 
-          {/* 화면 공유 안내 */}
-          <div
-            style={{
-              background: "#1A1A1A",
-              padding: "14px 14px",
-              borderTop: "1px solid #333",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2">
+          {/* 세션 아젠다 */}
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>세션 아젠다</p>
+            {[
+              { label: "AI 리포트 종합 리뷰", done: true },
+              { label: "BEST/WORST 구간 피드백", done: true },
+              { label: "스크립트 개선 포인트 논의", done: false },
+              { label: "취약 역량 집중 코칭", done: false },
+              { label: "다음 면접 전략 수립", done: false },
+            ].map((item, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{
+                  width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                  background: item.done ? GREEN : "transparent",
+                  border: `1.5px solid ${item.done ? GREEN : "rgba(255,255,255,0.2)"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {item.done && (
+                    <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                      <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                <span style={{ fontSize: 12, color: item.done ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.85)", textDecoration: item.done ? "line-through" : "none" }}>
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* 멘토 메모 */}
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flex: 1, display: "flex", flexDirection: "column" }}>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>멘토 메모</p>
+            <textarea
+              placeholder="세션 중 메모를 남겨두세요..."
+              style={{
+                flex: 1, minHeight: 80,
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8, padding: "10px 12px",
+                color: "rgba(255,255,255,0.8)", fontSize: 12,
+                fontFamily: "inherit", lineHeight: 1.6,
+                resize: "none", outline: "none",
+              }}
+              onFocus={e => { e.target.style.borderColor = "rgba(29,158,117,0.5)"; }}
+              onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
+            />
+          </div>
+
+          {/* 화면 공유 상태 */}
+          <div style={{ background: "#0A1929", padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
                 <polyline points="8 21 12 17 16 21" />
               </svg>
-              <span style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700 }}>
-                스크린 공유 중
-              </span>
+              <span style={{ color: GREEN, fontSize: 11, fontWeight: 700 }}>리포트 공유 중</span>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: GREEN, animation: "blink 1.5s ease-in-out infinite", marginLeft: "auto" }} />
             </div>
-            <p style={{ color: "#888", fontSize: 11, lineHeight: 1.6 }}>
-              멘토가 리포트를 스크롤하면 멘티 화면도 동기화됩니다. 특정 구간 클릭 시 피드백을 나누세요.
-            </p>
           </div>
         </div>
       </div>
@@ -645,8 +1058,8 @@ export default function MentoringSessionPage() {
       ══════════════════════════════════════════════════════════ */}
       <div
         style={{
-          background: "#1A1A1A",
-          borderTop: "1px solid #2A2A2A",
+          background: "#0D2240",
+          borderTop: "1px solid rgba(255,255,255,0.1)",
           padding: "0 28px",
           height: 60,
           display: "flex",
@@ -660,7 +1073,7 @@ export default function MentoringSessionPage() {
           {/* 마이크 */}
           <ControlButton
             active={isMicOn}
-            onClick={() => setIsMicOn((v) => !v)}
+            onClick={handleMicToggle}
             label={isMicOn ? "마이크 끄기" : "마이크 켜기"}
           >
             {isMicOn ? (
@@ -682,7 +1095,7 @@ export default function MentoringSessionPage() {
           {/* 카메라 */}
           <ControlButton
             active={isCamOn}
-            onClick={() => setIsCamOn((v) => !v)}
+            onClick={handleCamToggle}
             label={isCamOn ? "카메라 끄기" : "카메라 켜기"}
           >
             {isCamOn ? (
@@ -698,13 +1111,25 @@ export default function MentoringSessionPage() {
             )}
           </ControlButton>
 
+          {/* 형광펜 토글 */}
+          <ControlButton
+            active={drawMode}
+            onClick={() => setDrawMode(v => !v)}
+            label={drawMode ? "그리기 끄기" : "형광펜"}
+            activeColor="#F59E0B"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </ControlButton>
+
           {/* 화면 공유 토글 (멘토 전용) */}
           {isMentor && (
             <ControlButton
               active={isSharing}
               onClick={() => setIsSharing((v) => !v)}
               label={isSharing ? "공유 중지" : "화면 공유"}
-              activeColor="#2563EB"
+              activeColor="#1D9E75"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -715,7 +1140,7 @@ export default function MentoringSessionPage() {
         </div>
 
         {/* 중앙: 세션 정보 */}
-        <p style={{ color: "#666", fontSize: 12 }}>
+        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>
           {session.title} · {session.mentee.name} 멘티
         </p>
 
@@ -830,6 +1255,7 @@ export default function MentoringSessionPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 

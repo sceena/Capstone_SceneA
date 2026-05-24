@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
+import { getAvatar } from "../../utils/avatar";
 
 /* ============================================================
    멘토 마이페이지  (pages/mentor/MyPage.jsx)
@@ -31,20 +34,43 @@ const LogoIcon = ({ size=26, color=C.white }) => (
 );
 
 /* ── 헤더 ── */
-const Header = () => (
-  <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-    <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
-      <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>이준호</span>님</span>
-      <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
-      <div style={{ display:"flex", gap:32 }}>
-        {[{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"#",bold:true}].map((x,i)=>(
-          <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
-            onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
-        ))}
-      </div>
-    </nav>
-  </header>
-);
+const Header = ({ userName, accessToken }) => {
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
+  return (
+    <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
+      <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+        <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
+        <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
+        <div style={{ display:"flex", alignItems:"center", gap:24 }}>
+          {[{l:"대시보드",to:"/dashboard/mentor"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"/mentor/mypage",bold:true}].map((x,i)=>(
+            <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
+              onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
+          ))}
+          <button onClick={handleLogout} style={{
+            padding:"7px 16px", borderRadius:8,
+            border:"1px solid rgba(255,255,255,0.3)",
+            background:"transparent", color:"rgba(255,255,255,0.85)",
+            fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+            transition:"background 0.15s, border-color 0.15s",
+          }}
+            onMouseEnter={e=>{ e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.6)"; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.3)"; }}
+          >로그아웃</button>
+        </div>
+      </nav>
+    </header>
+  );
+};
 
 /* ── 스탯 카드 ── */
 const StatCard = ({ label, value, sub, subColor, accent }) => (
@@ -97,10 +123,165 @@ const ReviewCard = ({ initials, name, role, company, stars, text, bgColor }) => 
   </div>
 );
 
+/* ── 프로필 수정 모달 ── */
+function EditProfileModal({ onClose }) {
+  const [tab, setTab]           = useState("name");
+  const [name, setName]         = useState("");
+  const [pwNew, setPwNew]       = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [saving, setSaving]     = useState(false);
+  const [done, setDone]         = useState(false);
+  const [error, setError]       = useState("");
+
+  const pwMismatch  = pwConfirm.length > 0 && pwNew !== pwConfirm;
+  const pwMatch     = pwConfirm.length > 0 && pwNew === pwConfirm;
+  const pwTooShort  = pwNew.length > 0 && pwNew.length < 8;
+
+  const handleSave = async () => {
+    setError("");
+    const data = {};
+    if (tab === "name") {
+      if (!name.trim()) { onClose(); return; }
+      data.name = name.trim();
+    } else {
+      if (!pwNew) { onClose(); return; }
+      if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; }
+      if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
+      data.password = pwNew;
+    }
+    setSaving(true);
+    try {
+      await updateMyProfile(data);
+      setDone(true);
+      setTimeout(onClose, 900);
+    } catch (e) {
+      if (e?.status === 401) setError("로그인이 만료되었습니다. 다시 로그인해주세요.");
+      else if (e?.status === 400) setError("입력값을 확인해주세요.");
+      else if (!navigator.onLine || e?.message === "Failed to fetch") setError("서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.");
+      else setError("저장에 실패했습니다. 다시 시도해주세요.");
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = (focused) => ({
+    width:"100%", padding:"11px 14px", borderRadius:10,
+    border:`1.5px solid ${focused ? C.navy : C.border}`,
+    fontSize:14, fontFamily:"inherit", outline:"none", background:C.bg,
+  });
+
+  return (
+    <div
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }}
+    >
+      <div style={{ background:C.white, borderRadius:18, padding:"32px 36px", width:400, boxShadow:"0 8px 40px rgba(13,34,68,0.18)" }}>
+        <h3 style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:20 }}>프로필 수정</h3>
+
+        {done ? (
+          <div style={{ textAlign:"center", padding:"24px 0" }}>
+            <div style={{ fontSize:40, marginBottom:10 }}>✓</div>
+            <p style={{ color:C.teal, fontWeight:600, fontSize:15 }}>저장되었습니다!</p>
+          </div>
+        ) : (
+          <>
+            {/* 탭 */}
+            <div style={{ display:"flex", gap:0, marginBottom:24, borderRadius:10, overflow:"hidden", border:`1.5px solid ${C.border}` }}>
+              {[{key:"name",label:"이름 변경"},{key:"pw",label:"비밀번호 변경"}].map(t=>(
+                <button key={t.key} onClick={()=>{ setTab(t.key); setError(""); }} style={{
+                  flex:1, padding:"10px 0", border:"none", cursor:"pointer", fontFamily:"inherit",
+                  fontSize:13, fontWeight:tab===t.key?700:400,
+                  background:tab===t.key?C.navy:C.white,
+                  color:tab===t.key?C.white:C.textMuted,
+                  transition:"all 0.18s",
+                }}>{t.label}</button>
+              ))}
+            </div>
+
+            {tab === "name" ? (
+              <div style={{ marginBottom:24 }}>
+                <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 이름</label>
+                <input value={name} onChange={e=>setName(e.target.value)} placeholder="변경할 이름을 입력하세요"
+                  style={inputStyle(false)}
+                  onFocus={e=>e.target.style.borderColor=C.navy}
+                  onBlur={e=>e.target.style.borderColor=C.border}
+                />
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>새 비밀번호</label>
+                  <input type="password" value={pwNew} onChange={e=>setPwNew(e.target.value)} placeholder="8자 이상 입력"
+                    style={inputStyle(false)}
+                    onFocus={e=>e.target.style.borderColor=C.navy}
+                    onBlur={e=>e.target.style.borderColor=C.border}
+                  />
+                  {pwTooShort && <p style={{ fontSize:11, color:C.red, marginTop:4 }}>비밀번호는 8자 이상이어야 합니다.</p>}
+                </div>
+                <div style={{ marginBottom:24 }}>
+                  <label style={{ fontSize:12, color:C.textMuted, display:"block", marginBottom:6 }}>비밀번호 확인</label>
+                  <input type="password" value={pwConfirm} onChange={e=>setPwConfirm(e.target.value)} placeholder="비밀번호를 다시 입력"
+                    style={{ ...inputStyle(false), borderColor: pwMismatch ? C.red : pwMatch ? C.teal : C.border }}
+                    onFocus={e=>e.target.style.borderColor= pwMismatch ? C.red : pwMatch ? C.teal : C.navy}
+                    onBlur={e=>e.target.style.borderColor= pwMismatch ? C.red : pwMatch ? C.teal : C.border}
+                  />
+                  {pwMismatch && <p style={{ fontSize:11, color:C.red, marginTop:4 }}>비밀번호가 일치하지 않습니다.</p>}
+                  {pwMatch    && <p style={{ fontSize:11, color:C.teal, marginTop:4 }}>비밀번호가 일치합니다.</p>}
+                </div>
+              </>
+            )}
+
+            {error && <p style={{ fontSize:12, color:C.red, marginBottom:12, textAlign:"center" }}>{error}</p>}
+
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:10, border:`1px solid ${C.border}`, background:C.white, color:C.textSub, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>취소</button>
+              <button
+                onClick={handleSave}
+                disabled={saving || (tab==="pw" && (pwMismatch || pwTooShort))}
+                style={{ flex:1, padding:"12px", borderRadius:10, border:"none", background:(saving||(tab==="pw"&&(pwMismatch||pwTooShort)))?C.textMuted:C.navy, color:C.white, fontSize:14, fontWeight:700, cursor:(saving||(tab==="pw"&&(pwMismatch||pwTooShort)))?"not-allowed":"pointer", fontFamily:"inherit" }}
+              >
+                {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════ 메인 ══════════════ */
 export default function MentorMyPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const [activeTab, setActiveTab] = useState("pending");
+
+  const [profile, setProfile]   = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
+
+  useEffect(() => {
+    getMyProfile().then(setProfile).catch(() => {});
+    getUserSessions().then(data => {
+      if (!data?.length) return;
+      const pending   = data.filter(s => s.status === "pending");
+      const confirmed = data.filter(s => s.status === "scheduled");
+      if (pending.length)   setRequests(pending.map(s => ({ id:s.id, date:s.scheduledAt?.slice(5,10).replace("-",".") ?? "", time:s.scheduledAt?.slice(11,16) ?? "", title:s.title ?? "", detail:`${s.sessionType ?? "1:1"} · ${s.menteeName ?? ""}` })));
+    }).catch(() => {});
+  }, []);
+
+  const displayName = profile?.name ?? userName;
+
+  const handleWithdraw = async () => {
+    if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
+    try {
+      await fetch("/api/auth/withdraw", {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${user?.accessToken}` },
+      });
+    } catch {}
+    clearAuthUser();
+    navigate("/");
+  };
   const [requests, setRequests] = useState([
     { id:1, date:"04.02", time:"19:00", title:"김민준 — 백엔드 개발자 모의 면접", detail:"1:1 · 60분 · 50P · 수락 기한 18시간 32분 남음" },
     { id:2, date:"04.07", time:"20:00", title:"박서연 외 2명 — 프론트엔드 그룹 면접", detail:"그룹 3인 · 60분 · 150P · 수락 기한 6시간 14분 남음" },
@@ -139,7 +320,7 @@ export default function MentorMyPage() {
         @media(max-width:900px){.mypage-layout{flex-direction:column!important}.mypage-sidebar{width:100%!important}}
       `}</style>
 
-      <Header/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
 
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 
@@ -151,7 +332,7 @@ export default function MentorMyPage() {
           </div>
           <div style={{ display:"flex", gap:10 }}>
             {["가능 시간 관리","프로필 수정"].map((l,i)=>(
-              <button key={i} style={{
+              <button key={i} onClick={l==="프로필 수정"?()=>setShowEdit(true):undefined} style={{
                 padding:"10px 18px",
                 background:C.white, color:C.text,
                 border:`1.5px solid ${C.border}`, borderRadius:8,
@@ -162,6 +343,16 @@ export default function MentorMyPage() {
                 onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
               >{l}</button>
             ))}
+            <button onClick={handleWithdraw} style={{
+              padding:"10px 18px",
+              background:C.white, color:C.red,
+              border:`1.5px solid ${C.border}`, borderRadius:8,
+              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+              transition:"border-color 0.15s",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.red}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+            >회원탈퇴</button>
           </div>
         </div>
 
@@ -172,13 +363,15 @@ export default function MentorMyPage() {
             <div style={{ background:C.white, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}`, marginBottom:16 }}>
               {/* 아바타 */}
               <div style={{ textAlign:"center", marginBottom:16 }}>
+                {(() => { const av = getAvatar(user?.email); return (
                 <div style={{
                   width:68, height:68, borderRadius:"50%",
-                  background:"#1B4F7A", margin:"0 auto 10px",
+                  background:av.color, margin:"0 auto 10px",
                   display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:22, fontWeight:700, color:C.white,
-                }}>이J</div>
-                <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>이준호</p>
+                  fontSize:32,
+                }}>{av.animal}</div>
+                ); })()}
+                <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>{displayName}</p>
                 <p style={{ fontSize:12, color:C.textSub }}>카카오 · 백엔드 개발 5년</p>
               </div>
 
@@ -336,6 +529,8 @@ export default function MentorMyPage() {
           </div>
         </div>
       </main>
+
+      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} />}
     </>
   );
 }

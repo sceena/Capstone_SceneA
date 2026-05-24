@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { clearAuthUser } from "../../store/authStore";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import { getMySessions } from "../../api/sessions";
+import { respondReservation } from "../../api/reservations";
 
 /* ============================================================
    멘토 대시보드  (pages/Dashboard/MentorDashboard.jsx)
@@ -65,9 +67,15 @@ const QuoteIcon = () => (
 );
 
 /* ── 헤더 ── */
-const Header = ({ userName }) => {
+const Header = ({ userName, accessToken }) => {
   const navigate = useNavigate();
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+      });
+    } catch {}
     clearAuthUser();
     navigate("/");
   };
@@ -77,12 +85,11 @@ const Header = ({ userName }) => {
       position:"sticky", top:0, zIndex:100,
     }}>
       <nav style={{
-        maxWidth:1200, margin:"0 auto",
         display:"flex", alignItems:"center",
         justifyContent:"space-between", height:64,
       }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
-          안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
+          안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>멘토님
         </span>
         <Link to="/" style={{ textDecoration:"none" }}>
           <LogoIcon size={28} color={C.white}/>
@@ -118,15 +125,13 @@ const Header = ({ userName }) => {
   );
 };
 
-/* ── 면접 세션 카드 (검정 배경) ── */
+//* ── 면접 세션 카드 (검정 배경) ── */
 const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
   <div style={{
-    background:"#111111",
-    borderRadius:12,
-    padding:"16px 20px",
+    background:"#0D2240", borderRadius:12,
+    padding:"18px 22px",
     display:"flex", alignItems:"center",
-    justifyContent:"space-between",
-    gap:16,
+    justifyContent:"space-between", gap:16,
     transition:"transform 0.2s",
   }}
     onMouseEnter={e => e.currentTarget.style.transform="translateY(-1px)"}
@@ -135,12 +140,10 @@ const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
     <div style={{ flex:1, minWidth:0 }}>
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
         <span style={{
-          background:"#333", color:"#ccc",
+          background:"#333", color:"#bbb",
           fontSize:9, fontWeight:700, letterSpacing:"0.08em",
           padding:"2px 6px", borderRadius:3,
-        }}>
-          0:1
-        </span>
+        }}>0:1</span>
       </div>
       <p style={{ fontSize:15, fontWeight:700, color:C.white, marginBottom:5 }}>{title}</p>
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -169,11 +172,10 @@ const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
         onClick={onEnter}
         style={{
           background:"transparent", color:C.white,
-          border:`1px solid rgba(255,255,255,0.4)`,
+          border:"1px solid rgba(255,255,255,0.4)",
           borderRadius:6, padding:"8px 16px",
           fontSize:12, fontWeight:600, cursor:"pointer",
-          fontFamily:"inherit",
-          transition:"background 0.18s, border-color 0.18s",
+          fontFamily:"inherit", transition:"background 0.18s, border-color 0.18s",
         }}
         onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.1)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.8)"; }}
         onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.4)"; }}
@@ -288,33 +290,101 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
   );
 };
 
+/* ── 더미 데이터 (API 미연결 시) ── */
+const DUMMY_SESSIONS = [
+  {
+    id: "demo-1",
+    status: "scheduled",
+    title: "백엔드 개발자 모의 면접",
+    scheduledAt: "2026-05-23T19:00",
+    menteeName: "김민준",
+    sessionType: "1:1 면접",
+    kind: "interview",
+  },
+  {
+    id: "demo-m1",
+    status: "scheduled",
+    title: "OOO 멘토 개인 멘토링 진행",
+    scheduledAt: "2026-05-23T20:30",
+    menteeName: "박서연",
+    sessionType: "1:1 멘토링",
+    kind: "mentoring",
+  },
+];
+
+const DUMMY_REQUESTS = [
+  {
+    id: "req-1",
+    name: "이준석",
+    company: "카카오 백엔드 개발자 지원",
+    message: "Spring Boot + MSA 관련 기술 면접 준비 중입니다. 실무 경험 기반의 피드백을 꼭 받고 싶습니다. 잘 부탁드립니다!",
+    avatarColor: "#1B4F7A",
+  },
+];
+
 /* ════════════════════════════════════════
    메인 컴포넌트
 ════════════════════════════════════════ */
 export default function MentorDashboard() {
+  const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  /* 더미 데이터 */
-  const userName = "박지훈";
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
-  const sessions = [
-    { id:1, title:"백엔드 개발자 모의 면접", date:"2026.04.02 오후 7:00", mentor:"멘토 박지훈", type:"1:1 세션", time:"19:00" },
-    { id:2, title:"백엔드 개발자 모의 면접", date:"2026.04.02 오후 7:00", mentor:"멘토 박지훈", type:"1:1 세션", time:"19:00" },
-  ];
+  const [allSessions, setAllSessions] = useState([]);
+  useEffect(() => {
+    getMySessions().then(data => { if (data?.length) setAllSessions(data); }).catch(() => {});
+  }, []);
 
-  const [requests, setRequests] = useState([
-    { id:1, name:"김민준", company:"카카오 백엔드 개발자 지원", message:"안녕하세요. 카카오 공채를 준비 중인 취준생입니다. Java/Spring 기반 백엔드 면접에 특히 약점이 있어 선생님의 도움이 필요합니다.", avatarColor:"#1B4F7A" },
-    { id:2, name:"이수현", company:"네이버 프론트엔드 지원", message:"React와 성능 최적화 관련 기술 면접을 앞두고 있어 코칭을 요청드립니다. 잘 부탁드립니다!", avatarColor:"#0F6E56" },
-  ]);
+  const rawSessions = allSessions.length > 0 ? allSessions : DUMMY_SESSIONS;
 
-  const upcoming = [
-    { date:"04.02", time:"19:00", title:"백엔드 개발자 모의 면접", mentor:"박지훈 멘토", type:"1:1",    status:"confirmed" },
-    { date:"04.07", time:"20:00", title:"프론트엔드 그룹 면접 연습", mentor:"이수연 멘토", type:"그룹 3인", status:"pending"   },
-    { date:"04.12", time:"14:00", title:"PM 직군 인성 면접",        mentor:"최현아 멘토", type:"1:1",    status:"none"      },
-  ];
+  /* API 응답에서 UI 데이터 파생 */
+  const sessions = rawSessions
+    .filter(s => s.status === "scheduled" || s.status === "in_progress")
+    .map(s => ({
+      id: s.id,
+      title: s.title ?? "",
+      date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
+      mentor: s.menteeName ?? "",
+      type: s.sessionType ?? "1:1 세션",
+      time: s.scheduledAt?.slice(11, 16) ?? "",
+      kind: s.kind ?? "interview",
+    }));
 
-  const handleAccept  = (id) => setRequests(r => r.filter(x => x.id !== id));
-  const handleDecline = (id) => setRequests(r => r.filter(x => x.id !== id));
+  const [requests, setRequests] = useState(DUMMY_REQUESTS);
+  useEffect(() => {
+    const pending = allSessions.filter(s => s.status === "pending");
+    if (pending.length > 0) {
+      setRequests(pending.map(s => ({
+        id: s.id,
+        name: s.menteeName ?? "",
+        company: s.menteeCompany ?? "",
+        message: s.menteeMessage ?? "",
+        avatarColor: "#1B4F7A",
+      })));
+    }
+  }, [allSessions]);
+
+  const upcoming = rawSessions
+    .filter(s => s.status === "scheduled")
+    .map(s => ({
+      id: s.id,
+      date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
+      time: s.scheduledAt?.slice(11, 16) ?? "",
+      title: s.title ?? "",
+      mentor: s.menteeName ?? "",
+      type: s.sessionType ?? "1:1",
+      status: "confirmed",
+    }));
+
+  const handleAccept = async (id) => {
+    try { await respondReservation({ reservationId: id, accepted: true }); } catch {}
+    setRequests(r => r.filter(x => x.id !== id));
+  };
+  const handleDecline = async (id) => {
+    try { await respondReservation({ reservationId: id, accepted: false }); } catch {}
+    setRequests(r => r.filter(x => x.id !== id));
+  };
 
   return (
     <>
@@ -328,14 +398,14 @@ export default function MentorDashboard() {
         }
       `}</style>
 
-      <Header userName={userName}/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
 
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 
         {/* ── 예정된 일정 ── */}
         <DashCard
           title="예정된 일정"
-          sub="Lepidopterist at Butterflai"
+          sub={`오늘 ${sessions.length}건의 세션이 예정되어 있습니다`}
           style={{ marginBottom:28 }}
         >
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -347,7 +417,14 @@ export default function MentorDashboard() {
                 mentor={s.mentor}
                 type={s.type}
                 time={s.time}
-                onEnter={() => navigate(`/interview/ready-mentor/${s.id}`)}
+                kind={s.kind}
+                onEnter={() => {
+                  if (s.kind === "mentoring") {
+                    navigate(`/mentoring/mentor/${s.id}`);
+                  } else {
+                    navigate(`/interview/ready-mentor/${s.id}`);
+                  }
+                }}
               />
             ))}
             {sessions.length === 0 && (
@@ -364,7 +441,7 @@ export default function MentorDashboard() {
         }}>
 
           {/* 수락 대기 중인 요청 */}
-          <DashCard title="수락 대기 중인 요청" sub="Lepidopterist at Butterflai">
+          <DashCard title="수락 대기 중인 요청" sub="멘티가 멘토링을 요청했습니다">
             {requests.length > 0 ? (
               requests.map(r => (
                 <RequestCard
@@ -385,7 +462,7 @@ export default function MentorDashboard() {
           </DashCard>
 
           {/* 다가오는 면접 세션 */}
-          <DashCard title="다가오는 면접 세션" sub="Lepidopterist at Butterflai">
+          <DashCard title="다가오는 면접 세션" sub="확정된 일정을 확인하세요">
             <div>
               {upcoming.map((u, i) => (
                 <UpcomingItem key={i} {...u}/>

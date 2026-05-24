@@ -36,7 +36,7 @@ const LogoIcon = ({ size=26, color=C.white }) => (
 /* ── 헤더 ── */
 const Header = ({ userName="박지훈" }) => (
   <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-    <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
+    <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
       <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
         안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
       </span>

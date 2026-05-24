@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { requestReservation } from "../../api/reservations";
+import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 
 const C = {
   navy:"#0D2240",navyMid:"#1B4F7A",cream:"#F2EDE4",creamDark:"#E8E0D0",
@@ -17,7 +19,7 @@ const LogoIcon=({size=26,color=C.white})=>(
 
 const Header=()=>(
   <header style={{background:C.navy,padding:"0 5%",position:"sticky",top:0,zIndex:100}}>
-    <nav style={{maxWidth:1200,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
+    <nav style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
       <span style={{fontSize:15,fontWeight:600,color:C.white}}>안녕하세요 <span style={{color:"rgba(255,255,255,0.75)"}}>김민준</span>님</span>
       <Link to="/" style={{textDecoration:"none"}}><LogoIcon size={28}/></Link>
       <div style={{display:"flex",gap:32}}>
@@ -49,6 +51,7 @@ const MENTOR={
 
 export default function MentorApply(){
   const navigate=useNavigate();
+  const { state: navState } = useLocation();
   const mentor=MENTOR;
   const [sessType,setSessType]=useState("1:1");
   const [participants,setParticipants]=useState(2);
@@ -63,7 +66,43 @@ export default function MentorApply(){
   const handleSubmit=async()=>{
     if(!canSubmit)return;
     setLoading(true);
-    await new Promise(r=>setTimeout(r,1000));
+    try {
+      const selectedSlot = mentor.availableDates[selDateIdx];
+      const jobPosting = navState?.jobPosting;
+      const resumeContent = navState?.resumeContent;
+
+      let sessionId = null;
+      let jobPostingId = null;
+
+      try {
+        const session = await createSession({
+          mentor_id: mentor.id,
+          job_category: jobPosting?.jobCategory || mentor.job,
+        });
+        sessionId = session?.id;
+      } catch {}
+
+      if (sessionId && jobPosting?.company) {
+        try {
+          const jp = await saveJobPosting(sessionId, {
+            company: jobPosting.company,
+            jobCategory: jobPosting.jobCategory || mentor.job,
+            rawText: jobPosting.rawText || jobPosting.company,
+          });
+          jobPostingId = jp?.id;
+        } catch {}
+      }
+
+      if (sessionId && resumeContent) {
+        try { await saveResume(sessionId, resumeContent); } catch {}
+      }
+
+      await requestReservation({
+        mentor_id: mentor.id,
+        availability_id: selectedSlot.availabilityId ?? 1,
+        job_posting_id: jobPostingId ?? null,
+      });
+    } catch {}
     setLoading(false);
     setSubmitted(true);
   };

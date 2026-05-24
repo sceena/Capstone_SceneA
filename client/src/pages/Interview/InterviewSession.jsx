@@ -133,6 +133,16 @@ export default function InterviewSession({ role = "mentee" }) {
   const audioChunksRef = useRef([]);
   const answerStartRef = useRef(null);
 
+  /* ── 세션 전체 녹화 refs ── */
+  const sessionRecorderRef = useRef(null);
+  const sessionChunksRef = useRef([]);
+  const sessionCanvasRef = useRef(null);
+  const sessionVideoElemsRef = useRef({});
+  const sessionAudioCtxRef = useRef(null);
+  const sessionAudioDestRef = useRef(null);
+  const sessionAudioSrcsRef = useRef(new Set());
+  const sessionAnimRef = useRef(null);
+
   /* ── 질문 목록 ── */
   const [questions, setQuestions] = useState([]);
   useEffect(() => {

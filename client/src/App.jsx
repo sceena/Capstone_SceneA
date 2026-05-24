@@ -13,6 +13,7 @@ import MentoringSessionPage from './pages/Interview/MentoringSession'
 import AIReportPage from './pages/Report/AIReport'
 import ReportWaitingPage from './pages/Report/ReportWaiting'
 import MentorFeedbackPage from './pages/Report/MentorFeedback'
+import MentorReviewPage from './pages/Report/MentorReview'
 import FinalReportPage from './pages/Report/FinalReport'
 import MyPage from './pages/MyPage'
 import MentorMyPage from './pages/MyPage/MentorMypage'
@@ -56,8 +57,9 @@ export default function App() {
       <Route path="/interview/ready/:id"     element={<ProtectedRoute role="mentee" element={<InterviewRobby role="mentee" />} />} />
       <Route path="/interview/mentee/:id"    element={<ProtectedRoute role="mentee" element={<InterviewSession role="mentee" />} />} />
       <Route path="/mentoring/mentee/:sessionId" element={<ProtectedRoute role="mentee" element={<MentoringSessionPage />} />} />
-      <Route path="/report/ai/:sessionId"    element={<ProtectedRoute role="mentee" element={<AIReportPage />} />} />
+      <Route path="/report/ai/:sessionId"    element={<ProtectedRoute element={<AIReportPage />} />} />
       <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute role="mentee" element={<ReportWaitingPage />} />} />
+      <Route path="/report/mentor-review/:sessionId" element={<ProtectedRoute role="mentee" element={<MentorReviewPage />} />} />
       <Route path="/report/final"            element={<ProtectedRoute role="mentee" element={<FinalReportPage />} />} />
 
       {/* 로그인만 필요 (공통) */}

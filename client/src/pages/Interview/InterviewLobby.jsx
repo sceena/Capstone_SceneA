@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getSession, joinSession, updateSessionStatus } from "../../api/sessions";
+import { getSession, joinSession, updateSessionStatus, getQuestions } from "../../api/sessions";
 
 /* ============================================================
    면접 준비 화면  (pages/interview/InterviewReady.jsx)
@@ -25,12 +25,27 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [sessionData, setSessionData] = useState(null);
   const [videoDevices, setVideoDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [questions, setQuestions] = useState([]);
+  const [questionsOpen, setQuestionsOpen] = useState(true);
+
+  /* ── 오디오 레벨 분석 ── */
+  const [micLevel, setMicLevel] = useState(0);
+  const [micOk, setMicOk] = useState(false);
+  const audioCtxLobbyRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animFrameRef = useRef(null);
 
   /* 세션 정보 로드 */
   useEffect(() => {
     if (!id || !/^\d+$/.test(id)) return;
     getSession(id).then(setSessionData).catch(() => {});
-  }, [id]);
+    if (role === "mentor") {
+      getQuestions(id).then(data => {
+        if (Array.isArray(data)) setQuestions(data);
+        else if (data?.questions) setQuestions(data.questions);
+      }).catch(() => {});
+    }
+  }, [id, role]);
 
   /* 사용 가능한 카메라 목록 로드 */
   useEffect(() => {
@@ -94,6 +109,38 @@ export default function InterviewRobby({ role = "mentee" }) {
   useEffect(() => {
     streamRef.current?.getAudioTracks().forEach(t => { t.enabled = micOn; });
   }, [micOn]);
+
+  /* 마이크 레벨 실시간 분석 */
+  useEffect(() => {
+    if (!stream) { setMicLevel(0); return; }
+    let cancelled = false;
+    try {
+      const ctx = new AudioContext();
+      audioCtxLobbyRef.current = ctx;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      analyserRef.current = analyser;
+      const tick = () => {
+        if (cancelled) return;
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        const lv = Math.min(100, avg * 3.5);
+        setMicLevel(lv);
+        if (lv > 8) setMicOk(true);
+        animFrameRef.current = requestAnimationFrame(tick);
+      };
+      animFrameRef.current = requestAnimationFrame(tick);
+    } catch {}
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animFrameRef.current);
+      audioCtxLobbyRef.current?.close().catch(() => {});
+      audioCtxLobbyRef.current = null;
+      analyserRef.current = null;
+    };
+  }, [stream]);
 
   /* 카메라 트랙 활성/비활성 */
   useEffect(() => {
@@ -273,9 +320,57 @@ export default function InterviewRobby({ role = "mentee" }) {
               </div>
             )}
 
-            <p style={{ fontSize:12, color:"rgba(255,255,255,0.3)", textAlign:"center" }}>
-              입장 전 장치 설정을 확인해주세요
-            </p>
+            {/* 마이크 레벨 미터 */}
+            <div style={{ width:"100%", maxWidth:360 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", fontWeight:600 }}>🎙 마이크 레벨</span>
+                {!micOn
+                  ? <span style={{ fontSize:11, color:"#EF4444" }}>마이크가 꺼져 있어요</span>
+                  : micOk
+                    ? <span style={{ fontSize:11, color:C_teal, fontWeight:700 }}>✓ 정상 감지됨</span>
+                    : <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>말씀해보세요...</span>
+                }
+              </div>
+              <div style={{ height:8, background:"rgba(255,255,255,0.08)", borderRadius:99, overflow:"hidden" }}>
+                <div style={{
+                  width:`${micOn ? micLevel : 0}%`, height:8, borderRadius:99,
+                  background: micLevel > 70 ? "#EF4444" : micLevel > 20 ? C_teal : "rgba(255,255,255,0.2)",
+                  transition:"width 0.08s ease",
+                }}/>
+              </div>
+              {/* 눈금 */}
+              <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
+                {["낮음","적정","높음"].map((l,i)=>(
+                  <span key={i} style={{ fontSize:9, color:"rgba(255,255,255,0.2)" }}>{l}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* 장치 상태 배지 */}
+            <div style={{ display:"flex", gap:10 }}>
+              <div style={{
+                display:"flex", alignItems:"center", gap:6,
+                padding:"5px 12px", borderRadius:99,
+                background: camStatus==="ok" ? "rgba(29,158,117,0.15)" : "rgba(239,68,68,0.12)",
+                border:`1px solid ${camStatus==="ok" ? "rgba(29,158,117,0.4)" : "rgba(239,68,68,0.3)"}`,
+              }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background: camStatus==="ok" ? C_teal : "#EF4444" }}/>
+                <span style={{ fontSize:11, color: camStatus==="ok" ? C_teal : "#EF4444", fontWeight:600 }}>
+                  {camStatus==="ok" ? "카메라 정상" : "카메라 확인 필요"}
+                </span>
+              </div>
+              <div style={{
+                display:"flex", alignItems:"center", gap:6,
+                padding:"5px 12px", borderRadius:99,
+                background: micOk ? "rgba(29,158,117,0.15)" : "rgba(255,255,255,0.05)",
+                border:`1px solid ${micOk ? "rgba(29,158,117,0.4)" : "rgba(255,255,255,0.1)"}`,
+              }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background: micOk ? C_teal : "rgba(255,255,255,0.2)", animation: !micOk && micOn ? "pulse 1.2s ease-in-out infinite" : "none" }}/>
+                <span style={{ fontSize:11, color: micOk ? C_teal : "rgba(255,255,255,0.4)", fontWeight:600 }}>
+                  {micOk ? "마이크 정상" : "마이크 테스트 중"}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* ════ 오른쪽: 브리핑 ════ */}
@@ -287,6 +382,25 @@ export default function InterviewRobby({ role = "mentee" }) {
             borderLeft:"1px solid rgba(255,255,255,0.08)",
             overflowY:"auto",
           }}>
+            {/* 장치 테스트 안내 배너 */}
+            {(!camStatus === "ok" || !micOk) && (
+              <div style={{
+                background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)",
+                borderRadius:10, padding:"10px 14px",
+                display:"flex", gap:10, alignItems:"flex-start",
+              }}>
+                <span style={{ fontSize:16, flexShrink:0 }}>⚠️</span>
+                <div>
+                  <p style={{ fontSize:12, fontWeight:700, color:"#F59E0B", marginBottom:3 }}>
+                    카메라·오디오 테스트를 먼저 진행해주세요
+                  </p>
+                  <p style={{ fontSize:11, color:"rgba(255,255,255,0.5)", lineHeight:1.6 }}>
+                    왼쪽 화면에서 카메라 영상이 보이고, 마이크 레벨 바가 움직이는 것을 확인한 후 입장하세요.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* 세션 정보 */}
             <div>
               <p style={{ fontSize:10, fontWeight:600, letterSpacing:"0.15em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:10 }}>
@@ -341,7 +455,168 @@ export default function InterviewRobby({ role = "mentee" }) {
               </p>
             </div>
 
-            {/* 체크리스트 (멘토만) */}
+            {/* ── 멘티 전용: 자소서 등록 확인 ── */}
+            {!isMentor && (
+              <div style={{
+                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"14px 16px",
+                border:"1px solid rgba(255,255,255,0.1)",
+              }}>
+                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:12 }}>
+                  자소서 등록 확인
+                </p>
+                {sessionData?.jobPosting || sessionData?.jobPostingUrl || sessionData?.coverLetter ? (
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                      <div style={{
+                        width:28, height:28, borderRadius:"50%",
+                        background:"rgba(29,158,117,0.2)", border:"1px solid rgba(29,158,117,0.5)",
+                        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C_teal} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <p style={{ fontSize:13, fontWeight:700, color:"#fff" }}>자기소개서 등록 완료</p>
+                        <p style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>면접 AI 분석에 반영됩니다</p>
+                      </div>
+                    </div>
+                    {(sessionData?.jobPosting?.url || sessionData?.jobPostingUrl) && (
+                      <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"8px 12px" }}>
+                        <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:2 }}>채용공고 URL</p>
+                        <p style={{ fontSize:11, color:C_teal, wordBreak:"break-all" }}>
+                          {sessionData?.jobPosting?.url || sessionData?.jobPostingUrl}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                    <div style={{
+                      width:28, height:28, borderRadius:"50%",
+                      background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)",
+                      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <p style={{ fontSize:13, fontWeight:700, color:"#EF4444", marginBottom:4 }}>자기소개서 미등록</p>
+                      <p style={{ fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.6 }}>
+                        자기소개서가 없으면 AI 맞춤 질문 생성이 제한됩니다.<br/>
+                        마이페이지에서 등록 후 입장을 권장드립니다.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── 멘티 전용: 입장 전 체크리스트 ── */}
+            {!isMentor && (
+              <div style={{
+                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"14px 16px",
+                border:"1px solid rgba(255,255,255,0.1)",
+              }}>
+                <p style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.5)", marginBottom:10 }}>입장 전 체크</p>
+                {[
+                  { label:"카메라 화면이 정상으로 보인다", auto: camStatus==="ok" },
+                  { label:"마이크 레벨 바가 움직이는 것을 확인했다", auto: micOk },
+                  { label:"조용하고 밝은 환경에 있다", auto: false },
+                ].map((item,i)=>(
+                  <label key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, cursor:"pointer" }}>
+                    <input type="checkbox"
+                      checked={item.auto || checklist[i]}
+                      onChange={()=>!item.auto && setChecklist(prev=>prev.map((v,j)=>j===i?!v:v))}
+                      style={{ accentColor:C_teal, width:14, height:14 }}
+                      readOnly={item.auto}
+                    />
+                    <span style={{
+                      fontSize:12,
+                      color:(item.auto||checklist[i])?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.45)",
+                      textDecoration:(item.auto||checklist[i])?"line-through":"none",
+                    }}>{item.label}</span>
+                    {item.auto && <span style={{ fontSize:10, color:C_teal, fontWeight:700 }}>자동</span>}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* ── 멘토 전용: AI 예상 질문 리스트 ── */}
+            {isMentor && (
+              <div style={{
+                background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px",
+                border: "1px solid rgba(255,255,255,0.1)",
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setQuestionsOpen(v => !v)}
+                  style={{
+                    width: "100%", background: "none", border: "none", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: 0, marginBottom: questionsOpen ? 12 : 0,
+                  }}
+                >
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#F59E0B", textTransform: "uppercase" }}>
+                    🎯 AI 예상 질문 리스트
+                  </p>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+                    {questionsOpen ? "▲" : "▼"}
+                  </span>
+                </button>
+                {questionsOpen && (
+                  questions.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {questions.map((q, i) => (
+                        <div key={q.id ?? i} style={{
+                          background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
+                          borderRadius: 8, padding: "8px 12px",
+                          display: "flex", gap: 10, alignItems: "flex-start",
+                        }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", flexShrink: 0, marginTop: 1 }}>
+                            Q{i + 1}
+                          </span>
+                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
+                            {q.content ?? q.question ?? q}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
+                      AI 예상 질문을 불러오는 중입니다. 세션 ID가 유효하면 자동으로 표시됩니다.
+                    </p>
+                  )
+                )}
+              </div>
+            )}
+
+            {/* ── 멘토 전용: 면접 진행 가이드 ── */}
+            {isMentor && (
+              <div style={{
+                background:"rgba(29,158,117,0.07)", borderRadius:12, padding:"14px 16px",
+                border:"1px solid rgba(29,158,117,0.2)",
+              }}>
+                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:C_teal, textTransform:"uppercase", marginBottom:12 }}>
+                  면접 진행 가이드
+                </p>
+                {[
+                  { icon:"⏱", text:"질문당 답변 시간은 2~3분을 권장합니다" },
+                  { icon:"📝", text:"답변 중 메모 기능을 활용해 핵심을 기록하세요" },
+                  { icon:"⭐", text:"STAR 기법(상황→과제→행동→결과)으로 구체적 답변을 유도하세요" },
+                  { icon:"🎯", text:"AI 추천 질문을 참고하되 자유롭게 응용하세요" },
+                  { icon:"💬", text:"면접 종료 후 멘토링 세션에서 심층 피드백이 진행됩니다" },
+                ].map((item,i)=>(
+                  <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:i<4?10:0 }}>
+                    <span style={{ fontSize:14, flexShrink:0 }}>{item.icon}</span>
+                    <p style={{ fontSize:12, color:"rgba(255,255,255,0.65)", lineHeight:1.65 }}>{item.text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── 멘토 전용: 입장 전 체크리스트 ── */}
             {isMentor && (
               <div style={{
                 background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"14px 16px",
@@ -349,14 +624,23 @@ export default function InterviewRobby({ role = "mentee" }) {
               }}>
                 <p style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.5)", marginBottom:10 }}>입장 전 체크</p>
                 {[
-                  "자기소개서 및 이력서 검토 완료",
-                  "AI 추천 질문 확인",
-                  "카메라·마이크 정상 작동",
+                  { label:"멘티 자기소개서 및 이력서 검토 완료", auto: false },
+                  { label:"AI 추천 질문 확인 완료", auto: false },
+                  { label:"카메라 화면이 정상으로 보인다", auto: camStatus==="ok" },
+                  { label:"마이크 레벨 바가 움직이는 것을 확인했다", auto: micOk },
                 ].map((item,i)=>(
                   <label key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, cursor:"pointer" }}>
-                    <input type="checkbox" checked={checklist[i]} onChange={()=>setChecklist(prev=>prev.map((v,j)=>j===i?!v:v))}
-                      style={{ accentColor:C_teal, width:14, height:14 }}/>
-                    <span style={{ fontSize:12, color:checklist[i]?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.45)", textDecoration:checklist[i]?"line-through":"none" }}>{item}</span>
+                    <input type="checkbox"
+                      checked={item.auto || checklist[i]}
+                      onChange={()=>!item.auto && setChecklist(prev=>prev.map((v,j)=>j===i?!v:v))}
+                      style={{ accentColor:C_teal, width:14, height:14 }}
+                    />
+                    <span style={{
+                      fontSize:12,
+                      color:(item.auto||checklist[i])?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.45)",
+                      textDecoration:(item.auto||checklist[i])?"line-through":"none",
+                    }}>{item.label}</span>
+                    {item.auto && <span style={{ fontSize:10, color:C_teal, fontWeight:700, marginLeft:2 }}>자동</span>}
                   </label>
                 ))}
               </div>

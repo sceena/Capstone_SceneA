@@ -446,11 +446,7 @@ export default function InterviewSession({ role = "mentee" }) {
       if (isMentor) await updateSessionStatus(id, "completed");
     } catch {}
     await new Promise(r => setTimeout(r, 800));
-    if (isMentor) {
-      navigate(`/mentoring/mentor/${id}`);
-    } else {
-      navigate(`/mentoring/mentee/${id}`);
-    }
+    navigate(`/report/ai/${id}`, { state: { role: isMentor ? "mentor" : "mentee" } });
   };
 
   /* ── 답변 상태 / 녹음 ── */

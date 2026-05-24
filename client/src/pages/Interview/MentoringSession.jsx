@@ -400,6 +400,8 @@ export default function MentoringSessionPage() {
   const localAnalyserRef = useRef(null);
   const peerAnalysersRef = useRef({});
   const peersRef = useRef({});
+  const pendingProducersRef = useRef([]);
+  const recvTransportReadyRef = useRef(false);
 
   const [peerIds, setPeerIds] = useState([]);
   const [localMediaStream, setLocalMediaStream] = useState(null);
@@ -570,6 +572,9 @@ export default function MentoringSessionPage() {
         localAnalyserRef.current = analyser;
       } catch {}
 
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current = [];
+
       socket = io(MEDIA_SERVER, { withCredentials: true });
       socketRef.current = socket;
 
@@ -608,10 +613,24 @@ export default function MentoringSessionPage() {
             if (isCancelled) return;
             await consumeProducer(producerId, peerId, kind);
           }
+          // recvTransport 준비 완료 → 대기 중인 newProducer 처리
+          recvTransportReadyRef.current = true;
+          for (const pending of pendingProducersRef.current) {
+            if (isCancelled) break;
+            await consumeProducer(pending.producerId, pending.peerId, pending.kind);
+          }
+          pendingProducersRef.current = [];
         });
       });
 
-      socket.on("newProducer", ({ producerId, peerId, kind }) => { if (!isCancelled) consumeProducer(producerId, peerId, kind); });
+      socket.on("newProducer", ({ producerId, peerId, kind }) => {
+        if (isCancelled) return;
+        if (!recvTransportReadyRef.current) {
+          pendingProducersRef.current.push({ producerId, peerId, kind });
+        } else {
+          consumeProducer(producerId, peerId, kind);
+        }
+      });
       socket.on("peerLeft", ({ peerId }) => {
         delete peersRef.current[peerId];
         delete peerAnalysersRef.current[peerId];
@@ -625,6 +644,8 @@ export default function MentoringSessionPage() {
     init();
     return () => {
       isCancelled = true;
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current = [];
       videoProducerRef.current?.close();
       audioProducerRef.current?.close();
       sendTransportRef.current?.close();
@@ -698,7 +719,12 @@ export default function MentoringSessionPage() {
     if (user?.role === "mentor") {
       navigate(`/mentor/feedback/${session.sessionId || sessionId}`);
     } else {
-      navigate(`/report/ai-stream/${session.sessionId || sessionId}`);
+      navigate(`/report/mentor-review/${session.sessionId || sessionId}`, {
+        state: {
+          mentorName: session.mentorName || "멘토",
+          nextPath: `/report/ai-stream/${session.sessionId || sessionId}`,
+        },
+      });
     }
   }, [navigate, session.sessionId, user?.role]);
 
@@ -1001,7 +1027,7 @@ export default function MentoringSessionPage() {
         {/* 우측: 비디오 + 세션 정보 패널 */}
         <div
           style={{
-            width: 280,
+            width: 320,
             background: "#111",
             display: "flex",
             flexDirection: "column",
@@ -1011,9 +1037,9 @@ export default function MentoringSessionPage() {
           }}
         >
           {/* 비디오 영역 - 전체 참여자 */}
-          <div style={{ maxHeight: 320, overflowY: "auto", flexShrink: 0 }}>
+          <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "50vh" }}>
             {/* 나 (로컬) */}
-            <div style={{ height: 100, flexShrink: 0, display: "flex" }}>
+            <div style={{ height: 160, flexShrink: 0, display: "flex" }}>
               <VideoTile
                 stream={localMediaStream}
                 label={`나 (${isMentor ? "멘토" : "멘티"})`}
@@ -1024,7 +1050,7 @@ export default function MentoringSessionPage() {
             </div>
             {/* 원격 참여자들 */}
             {peerIds.map((pid, i) => (
-              <div key={pid} style={{ height: 100, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
+              <div key={pid} style={{ height: 160, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
                 <VideoTile
                   stream={peersRef.current[pid] ?? null}
                   label={getPeerName(pid) || `참여자 ${i + 1}`}

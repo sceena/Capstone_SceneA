@@ -36,6 +36,23 @@ public class InterviewAnswer extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String sttText;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private SttStatus sttStatus = SttStatus.PENDING;
+
+    private String sttModel;
+
+    private Float durationSec;
+
+    @Enumerated(EnumType.STRING)
+    private AudioQualityStatus audioQualityStatus;
+
+    @Column(columnDefinition = "TEXT")
+    private String audioQualityMessage;
+
+    @Column(columnDefinition = "TEXT")
+    private String sttErrorMessage;
+
     private Float aiScore;
 
     private Float mentorScore;
@@ -60,6 +77,25 @@ public class InterviewAnswer extends BaseEntity {
 
     public void updateSttText(String sttText) {
         this.sttText = sttText;
+    }
+
+    public void completeStt(String text, String model, Float durationSec,
+                            AudioQualityStatus audioQualityStatus, String audioQualityMessage) {
+        this.sttText = text;
+        this.sttStatus = SttStatus.COMPLETED;
+        this.sttModel = model;
+        this.durationSec = durationSec;
+        this.audioQualityStatus = audioQualityStatus;
+        this.audioQualityMessage = audioQualityMessage;
+    }
+
+    public void failStt(String errorMessage) {
+        this.sttStatus = SttStatus.FAILED;
+        this.sttErrorMessage = errorMessage;
+    }
+
+    public void updateSttStatus(SttStatus status) {
+        this.sttStatus = status;
     }
 
     public void updateAiScore(Float aiScore) {

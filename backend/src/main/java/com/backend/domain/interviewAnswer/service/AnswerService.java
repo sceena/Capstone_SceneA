@@ -30,11 +30,8 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -52,7 +49,6 @@ public class AnswerService {
     private final SessionParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
-    private final S3Presigner s3Presigner;
     private final AiSttJobClient aiSttJobClient;
 
     @Value("${cloud.aws.s3.bucket}")
@@ -178,24 +174,12 @@ public class AnswerService {
 
     private void submitSttJob(InterviewAnswer answer) {
         try {
-            String presignedUrl = generatePresignedUrl(answer.getAudioUrl());
             String callbackUrl = callbackBaseUrl + "/api/internal/stt/callback";
-            aiSttJobClient.submitJob(new AiSttJobRequest(answer.getId(), presignedUrl, callbackUrl));
+            aiSttJobClient.submitJob(new AiSttJobRequest(answer.getId(), answer.getAudioUrl(), callbackUrl));
             log.info("STT job submitted for answerId={}", answer.getId());
         } catch (RuntimeException e) {
             log.warn("Failed to submit STT job for answerId={}; sttStatus remains PENDING", answer.getId(), e);
         }
-    }
-
-    private String generatePresignedUrl(String key) {
-        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(10))
-                .getObjectRequest(GetObjectRequest.builder()
-                        .bucket(bucket)
-                        .key(key)
-                        .build())
-                .build();
-        return s3Presigner.presignGetObject(presignRequest).url().toString();
     }
 
     private InterviewSession findSession(Long sessionId) {

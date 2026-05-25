@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record AiSttJobRequest(
         @JsonProperty("answer_id") Long answerId,
-        @JsonProperty("audio_presigned_url") String audioPresignedUrl,
+        @JsonProperty("audio_key") String audioKey,
         @JsonProperty("callback_url") String callbackUrl
 ) {
 }

@@ -1,12 +1,13 @@
 package com.backend.domain.interviewAnswer.service;
 
-import com.backend.domain.ai.client.AiSttClient;
-import com.backend.domain.ai.dto.response.AiSttResponse;
+import com.backend.domain.ai.client.AiSttJobClient;
+import com.backend.domain.ai.dto.request.AiSttJobRequest;
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
 import com.backend.domain.interviewAnswer.dto.response.MentorScoreResponse;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
+import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
 import com.backend.domain.interviewQuestion.entity.InterviewQuestion;
 import com.backend.domain.interviewQuestion.repository.InterviewQuestionRepository;
@@ -29,8 +30,11 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -48,10 +52,14 @@ public class AnswerService {
     private final SessionParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
-    private final AiSttClient aiSttClient;
+    private final S3Presigner s3Presigner;
+    private final AiSttJobClient aiSttJobClient;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
+
+    @Value("${app.callback-base-url}")
+    private String callbackBaseUrl;
 
     @Transactional
     public AnswerUploadResponse uploadAnswer(Long memberId, Long sessionId, Long questionId,
@@ -75,6 +83,7 @@ public class AnswerService {
             deleteFromS3(existing.get().getAudioUrl());
             existing.get().updateAudio(key, answerStart, answerEnd);
             existing.get().updateSttText(null);
+            existing.get().updateSttStatus(SttStatus.PENDING);
             answer = existing.get();
         } else {
             answer = answerRepository.save(InterviewAnswer.builder()
@@ -86,7 +95,7 @@ public class AnswerService {
                     .build());
         }
 
-        updateSttTextIfAvailable(answer, audio);
+        submitSttJob(answer);
 
         return AnswerUploadResponse.from(answer, sessionId);
     }
@@ -167,15 +176,26 @@ public class AnswerService {
         }
     }
 
-    private void updateSttTextIfAvailable(InterviewAnswer answer, MultipartFile audio) {
+    private void submitSttJob(InterviewAnswer answer) {
         try {
-            AiSttResponse response = aiSttClient.transcribe(audio);
-            if (response != null && response.text() != null && !response.text().isBlank()) {
-                answer.updateSttText(response.text());
-            }
+            String presignedUrl = generatePresignedUrl(answer.getAudioUrl());
+            String callbackUrl = callbackBaseUrl + "/api/internal/stt/callback";
+            aiSttJobClient.submitJob(new AiSttJobRequest(answer.getId(), presignedUrl, callbackUrl));
+            log.info("STT job submitted for answerId={}", answer.getId());
         } catch (RuntimeException e) {
-            log.warn("STT transcription failed for answerId={}; keeping uploaded audio without sttText", answer.getId(), e);
+            log.warn("Failed to submit STT job for answerId={}; sttStatus remains PENDING", answer.getId(), e);
         }
+    }
+
+    private String generatePresignedUrl(String key) {
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMinutes(10))
+                .getObjectRequest(GetObjectRequest.builder()
+                        .bucket(bucket)
+                        .key(key)
+                        .build())
+                .build();
+        return s3Presigner.presignGetObject(presignRequest).url().toString();
     }
 
     private InterviewSession findSession(Long sessionId) {

@@ -47,8 +47,31 @@ Response:
 - 멘토 인증이 필요하다.
 - 백엔드는 세션 참가자와 각 참가자의 이력서/자소서 내용을 조회한다.
 - 조회한 서류 내용을 AI 서버의 `/api/generate-session-questions`로 전달한다.
-- AI 서버 응답은 DB에 저장하지 않고 프론트엔드에 그대로 반환한다.
+- AI 서버 응답은 추천 질문 전용 테이블에 저장한 뒤 프론트엔드에 반환한다.
+- 이미 생성 완료된 추천 질문이 있으면 AI 서버를 다시 호출하지 않고 DB에 저장된 질문을 반환한다.
 - 프론트엔드는 멘토가 추천 질문을 확인/수정/선택한 뒤 기존 질문 생성 API로 저장하면 된다.
+
+## 백엔드 저장 구조
+
+추천 질문은 최종 면접 질문(`interview_question`)과 분리해서 저장한다.
+
+- `recommended_question_batch`
+  - 세션 단위 추천 질문 생성 상태를 저장한다.
+  - `session_id`는 세션당 하나만 존재한다.
+  - `status`: `PENDING`, `COMPLETED`, `FAILED`
+  - `session_type`: `ONE_TO_ONE` 또는 `GROUP`
+  - `error_message`: AI 서버 호출 실패 사유
+
+- `recommended_question`
+  - 실제 추천 질문 문항을 저장한다.
+  - `type`: `COMMON` 또는 `PERSONAL`
+  - `candidate_id`: 개인 질문일 때 지원자 ID, 공통 질문일 때 `null`
+  - `content`: 추천 질문 내용
+  - `order_index`: 표시 순서
+
+현재 구현은 동기 방식이다.
+첫 호출 시 AI 서버를 호출해 질문을 생성하고 저장한다.
+이후 같은 세션으로 다시 호출하면 저장된 질문을 재사용한다.
 
 백엔드의 AI 서버 주소 설정:
 

@@ -38,6 +38,7 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
                         .requestMatchers("/api/dev/**").permitAll()
+                        .requestMatchers("/api/internal/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/auth/withdraw").authenticated()
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()

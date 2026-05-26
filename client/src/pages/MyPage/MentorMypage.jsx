@@ -5,13 +5,20 @@ import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users"
 import { getAvatar } from "../../utils/avatar";
 
 const C = {
-  navy:"#0D2240", navyMid:"#1B4F7A",
-  cream:"#F2EDE4", creamDark:"#E8E0D0",
-  white:"#FFFFFF", teal:"#1D9E75", tealLight:"#E8F5EE",
-  text:"#1A1818", textSub:"#6B6863", textMuted:"#9E9B95",
-  border:"#E8E0D0", bg:"#FAF8F4",
-  orange:"#F59E0B", orangeLight:"#FEF3C7",
-  red:"#EF4444", redLight:"#FEF2F2",
+  navy:     "#0D2240",
+  accent:   "#1B4F7A",
+  mid:      "#3A7FAF",
+  cream:    "#e8e0d0",
+  light:    "#F2EDE4",
+  bg:       "#FAF8F4",
+  white:    "#FFFFFF",
+  text:     "#1A1818",
+  textSub:  "#6B6863",
+  textMuted:"#9E9B95",
+  border:   "#E8E0D0",
+  teal:     "#1D9E75", tealLight:"#E8F5EE",
+  orange:   "#F59E0B", orangeLight:"#FEF3C7",
+  red:      "#EF4444", redLight:"#FEF2F2",
 };
 
 const LogoIcon = ({ size=26, color=C.white }) => (
@@ -83,7 +90,7 @@ const SessionRequestItem = ({ date, time, title, detail, onAccept }) => (
       border:"none", borderRadius:20, fontSize:12, fontWeight:600,
       cursor:"pointer", fontFamily:"inherit", flexShrink:0,
     }}
-      onMouseEnter={e=>e.currentTarget.style.background=C.navyMid}
+      onMouseEnter={e=>e.currentTarget.style.background=C.accent}
       onMouseLeave={e=>e.currentTarget.style.background=C.navy}
     >수락하기</button>
   </div>

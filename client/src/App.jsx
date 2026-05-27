@@ -51,7 +51,7 @@ export default function App() {
 
       {/* 멘티 전용 */}
       <Route path="/dashboard/mentee"        element={<ProtectedRoute role="mentee" element={<MenteeDashboard />} />} />
-      <Route path="/mentor/search"           element={<ProtectedRoute role="mentee" element={<MentorSearch />} />} />
+      <Route path="/mentor/search"           element={<ProtectedRoute element={<MentorSearch />} />} />
       <Route path="/mentor/apply/:id"        element={<ProtectedRoute role="mentee" element={<MentorApply />} />} />
       <Route path="/mentee/mypage"           element={<ProtectedRoute role="mentee" element={<MenteeMyPage />} />} />
       <Route path="/mentee/resume"           element={<ProtectedRoute role="mentee" element={<ResumeManage />} />} />

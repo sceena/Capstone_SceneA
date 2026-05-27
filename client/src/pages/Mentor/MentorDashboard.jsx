@@ -95,8 +95,8 @@ const Header = ({ userName, accessToken }) => {
           <LogoIcon size={28} color={C.white}/>
         </Link>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-          {["멘토 탐색", "예약 확인", "MyPage"].map((label, i) => (
-            <Link key={i} to={["#", "#", "/mentor/mypage"][i]} style={{
+          {[{ label:"멘토 탐색", to:"/mentor/search" }, { label:"MyPage", to:"/mentor/mypage" }].map(({ label, to }) => (
+            <Link key={label} to={to} style={{
               fontSize:14, fontWeight: label==="MyPage" ? 700 : 400,
               color: C.white, textDecoration:"none",
               opacity: 0.85, transition:"opacity 0.15s",
@@ -125,7 +125,7 @@ const Header = ({ userName, accessToken }) => {
   );
 };
 
-//* ── 면접 세션 카드 (검정 배경) ── */
+/* ── 면접 세션 카드 (검정 배경) ── */
 const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
   <div style={{
     background:"#0D2240", borderRadius:12,
@@ -140,10 +140,10 @@ const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
     <div style={{ flex:1, minWidth:0 }}>
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
         <span style={{
-          background:"#333", color:"#bbb",
+          background:"#1D9E7533", color:"#1D9E75",
           fontSize:9, fontWeight:700, letterSpacing:"0.08em",
-          padding:"2px 6px", borderRadius:3,
-        }}>0:1</span>
+          padding:"2px 8px", borderRadius:3,
+        }}>면접 세션</span>
       </div>
       <p style={{ fontSize:15, fontWeight:700, color:C.white, marginBottom:5 }}>{title}</p>
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -210,81 +210,122 @@ const DashCard = ({ title, sub, children, style }) => (
 );
 
 /* ── 수락 대기 요청 카드 ── */
-const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline }) => (
-  <div style={{
-    background:C.bg,
-    borderRadius:12, padding:"16px 18px",
-    marginBottom:12,
-    border:`1px solid ${C.border}`,
-  }}>
-    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-      <div style={{
-        width:36, height:36, borderRadius:"50%", flexShrink:0,
-        background: avatarColor,
-        display:"flex", alignItems:"center", justifyContent:"center",
-      }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="5.5" r="2.5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.3"/>
-          <path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.3" strokeLinecap="round"/>
-        </svg>
-      </div>
-      <div>
-        <p style={{ fontSize:14, fontWeight:700, color:C.text }}>{name}</p>
-        <p style={{ fontSize:12, color:C.textMuted }}>{company}</p>
-      </div>
-    </div>
-    <p style={{ fontSize:13, color:C.textSub, lineHeight:1.75, marginBottom:14 }}>{message}</p>
-    <div style={{ display:"flex", gap:8 }}>
-      <button onClick={onAccept} style={{
-        flex:1, padding:"8px",
-        background:C.navy, color:C.white,
-        border:"none", borderRadius:8,
-        fontSize:12, fontWeight:600, cursor:"pointer",
-        fontFamily:"inherit", transition:"background 0.18s",
-      }}
-        onMouseEnter={e => e.currentTarget.style.background=C.navyMid}
-        onMouseLeave={e => e.currentTarget.style.background=C.navy}
-      >
-        수락
-      </button>
-      <button onClick={onDecline} style={{
-        flex:1, padding:"8px",
-        background:"transparent", color:C.textSub,
-        border:`1px solid ${C.border}`, borderRadius:8,
-        fontSize:12, fontWeight:500, cursor:"pointer",
-        fontFamily:"inherit", transition:"border-color 0.18s",
-      }}
-        onMouseEnter={e => e.currentTarget.style.borderColor=C.text}
-        onMouseLeave={e => e.currentTarget.style.borderColor=C.border}
-      >
-        거절
-      </button>
-    </div>
-  </div>
-);
+const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline, scheduledAt, sessionType }) => {
+  const dateLabel = scheduledAt ? (() => {
+    const dt = new Date(scheduledAt);
+    const days = ['일','월','화','수','목','금','토'];
+    return `${dt.getMonth()+1}월 ${dt.getDate()}일 (${days[dt.getDay()]}) ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+  })() : null;
 
-/* ── 다가오는 세션 아이템 ── */
-const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
-  const dotColor = status === "confirmed" ? C.teal : status === "pending" ? "#F59E0B" : C.border;
   return (
     <div style={{
-      display:"flex", gap:16, alignItems:"flex-start",
-      padding:"12px 0",
-      borderBottom:`1px solid ${C.border}`,
+      background:C.bg,
+      borderRadius:12, padding:"16px 18px",
+      marginBottom:12,
+      border:`1px solid ${C.border}`,
     }}>
-      <div style={{ flexShrink:0, width:72, textAlign:"right" }}>
-        <p style={{ fontSize:12, color:C.textMuted }}>{date}</p>
-        <p style={{ fontSize:12, color:C.textMuted }}>{time}</p>
-      </div>
-      <div style={{ display:"flex", alignItems:"flex-start", gap:10, flex:1 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
         <div style={{
-          width:8, height:8, borderRadius:"50%",
-          background:dotColor, flexShrink:0, marginTop:4,
-        }}/>
-        <div>
-          <p style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:2 }}>{title}</p>
-          <p style={{ fontSize:12, color:C.textMuted }}>{mentor} · {type}</p>
+          width:36, height:36, borderRadius:"50%", flexShrink:0,
+          background: avatarColor,
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="5.5" r="2.5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.3"/>
+            <path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
         </div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize:14, fontWeight:700, color:C.text }}>{name}</p>
+          <p style={{ fontSize:12, color:C.textMuted }}>{company}</p>
+        </div>
+      </div>
+
+      {/* 날짜·시간·유형 배지 */}
+      {(dateLabel || sessionType) && (
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+          {dateLabel && (
+            <span style={{ fontSize:11, fontWeight:700, background:"#E1F5EE", color:C.teal, padding:"3px 10px", borderRadius:99, display:"flex", alignItems:"center", gap:4 }}>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <rect x="1" y="2" width="8" height="7" rx="1" stroke={C.teal} strokeWidth="1.2"/>
+                <path d="M3.5 1v2M6.5 1v2M1 5h8" stroke={C.teal} strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              {dateLabel}
+            </span>
+          )}
+          {sessionType && (
+            <span style={{ fontSize:11, fontWeight:600, background:"#E8E5DF", color:"#555", padding:"3px 10px", borderRadius:99 }}>{sessionType}</span>
+          )}
+        </div>
+      )}
+
+      <p style={{ fontSize:13, color:C.textSub, lineHeight:1.75, marginBottom:14 }}>{message}</p>
+      <div style={{ display:"flex", gap:8 }}>
+        <button onClick={onAccept} style={{
+          flex:1, padding:"8px",
+          background:C.navy, color:C.white,
+          border:"none", borderRadius:8,
+          fontSize:12, fontWeight:600, cursor:"pointer",
+          fontFamily:"inherit", transition:"background 0.18s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.background=C.navyMid}
+          onMouseLeave={e => e.currentTarget.style.background=C.navy}
+        >
+          수락
+        </button>
+        <button onClick={onDecline} style={{
+          flex:1, padding:"8px",
+          background:"transparent", color:C.textSub,
+          border:`1px solid ${C.border}`, borderRadius:8,
+          fontSize:12, fontWeight:500, cursor:"pointer",
+          fontFamily:"inherit", transition:"border-color 0.18s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor=C.text}
+          onMouseLeave={e => e.currentTarget.style.borderColor=C.border}
+        >
+          거절
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/* ── 다가오는 세션 아이템 (시각화 강화) ── */
+const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
+  const dotColor = status === "confirmed" ? C.teal : status === "pending" ? "#F59E0B" : C.border;
+  const bgColor  = status === "confirmed" ? "#E8F5EE" : status === "pending" ? "#FEF3C7" : C.bg;
+  const statusLabel = status === "confirmed" ? "확정" : status === "pending" ? "대기 중" : "미확정";
+
+  const [m, d] = (date || "").split('.').map(Number);
+  const now = new Date();
+  const target = new Date(now.getFullYear(), (m || 1) - 1, d || 1);
+  const diff = Math.ceil((target - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  const dday = diff === 0 ? "D-DAY" : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
+
+  return (
+    <div style={{
+      display:"flex", gap:14, alignItems:"center",
+      padding:"12px 0", borderBottom:`1px solid ${C.border}`,
+    }}>
+      {/* 달력 날짜 박스 */}
+      <div style={{
+        width:54, flexShrink:0, textAlign:"center",
+        background:bgColor, borderRadius:10, padding:"8px 4px",
+        border:`1px solid ${dotColor}33`,
+      }}>
+        <p style={{ fontSize:9, fontWeight:700, color:dotColor, letterSpacing:"0.04em", margin:"0 0 2px" }}>{m || "--"}월</p>
+        <p style={{ fontSize:22, fontWeight:800, color:dotColor, lineHeight:1.1, margin:0 }}>{d || "--"}</p>
+        <p style={{ fontSize:9, color:dotColor, fontWeight:600, margin:"2px 0 0" }}>{time}</p>
+      </div>
+      {/* 내용 */}
+      <div style={{ flex:1, minWidth:0 }}>
+        <p style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{title}</p>
+        <p style={{ fontSize:11, color:C.textMuted }}>{mentor} · {type}</p>
+      </div>
+      {/* D-day + 상태 */}
+      <div style={{ textAlign:"right", flexShrink:0 }}>
+        <span style={{ fontSize:12, fontWeight:800, color:dotColor, background:bgColor, padding:"3px 9px", borderRadius:6, display:"block", marginBottom:4 }}>{dday}</span>
+        <span style={{ fontSize:10, color:dotColor, fontWeight:600 }}>{statusLabel}</span>
       </div>
     </div>
   );
@@ -319,6 +360,8 @@ const DUMMY_REQUESTS = [
     company: "카카오 백엔드 개발자 지원",
     message: "Spring Boot + MSA 관련 기술 면접 준비 중입니다. 실무 경험 기반의 피드백을 꼭 받고 싶습니다. 잘 부탁드립니다!",
     avatarColor: "#1B4F7A",
+    scheduledAt: "2026-06-10T19:00",
+    sessionType: "1:1 면접",
   },
 ];
 
@@ -338,9 +381,9 @@ export default function MentorDashboard() {
 
   const rawSessions = allSessions.length > 0 ? allSessions : DUMMY_SESSIONS;
 
-  /* API 응답에서 UI 데이터 파생 */
+  /* API 응답에서 UI 데이터 파생 — 면접 세션만 (멘토링은 면접 종료 후 자동 진입) */
   const sessions = rawSessions
-    .filter(s => s.status === "scheduled" || s.status === "in_progress")
+    .filter(s => (s.status === "scheduled" || s.status === "in_progress") && s.kind !== "mentoring")
     .map(s => ({
       id: s.id,
       title: s.title ?? "",
@@ -348,7 +391,6 @@ export default function MentorDashboard() {
       mentor: s.menteeName ?? "",
       type: s.sessionType ?? "1:1 세션",
       time: s.scheduledAt?.slice(11, 16) ?? "",
-      kind: s.kind ?? "interview",
     }));
 
   const [requests, setRequests] = useState(DUMMY_REQUESTS);
@@ -361,6 +403,8 @@ export default function MentorDashboard() {
         company: s.menteeCompany ?? "",
         message: s.menteeMessage ?? "",
         avatarColor: "#1B4F7A",
+        scheduledAt: s.scheduledAt ?? null,
+        sessionType: s.sessionType ?? "1:1 면접",
       })));
     }
   }, [allSessions]);
@@ -394,7 +438,6 @@ export default function MentorDashboard() {
         body { font-family: 'Noto Sans KR', sans-serif; background: ${C.bg}; }
         @media (max-width: 768px) {
           .dash-bottom { grid-template-columns: 1fr !important; }
-          .dash-header-nav { gap: 16px !important; font-size: 13px !important; }
         }
       `}</style>
 
@@ -453,10 +496,10 @@ export default function MentorDashboard() {
           );
         })()}
 
-        {/* ── 예정된 일정 ── */}
+        {/* ── 예정된 면접 일정 ── */}
         <DashCard
-          title="예정된 일정"
-          sub={`오늘 ${sessions.length}건의 세션이 예정되어 있습니다`}
+          title="예정된 면접 일정"
+          sub={`면접 세션 ${sessions.length}건 · 면접 종료 후 멘토링 세션이 자동 연결됩니다`}
           style={{ marginBottom:28 }}
         >
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -468,19 +511,15 @@ export default function MentorDashboard() {
                 mentor={s.mentor}
                 type={s.type}
                 time={s.time}
-                kind={s.kind}
-                onEnter={() => {
-                  if (s.kind === "mentoring") {
-                    navigate(`/mentoring/mentor/${s.id}`);
-                  } else {
-                    navigate(`/interview/ready-mentor/${s.id}`);
-                  }
-                }}
+                onEnter={() => navigate(`/interview/ready-mentor/${s.id}`)}
               />
             ))}
             {sessions.length === 0 && (
               <div style={{ textAlign:"center", padding:"32px 0", color:C.textMuted, fontSize:14 }}>
-                예정된 면접 일정이 없습니다.
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.4" style={{ display:"block", margin:"0 auto 12px" }}>
+                  <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+                </svg>
+                예정된 면접 일정이 없습니다
               </div>
             )}
           </div>
@@ -501,6 +540,8 @@ export default function MentorDashboard() {
                   company={r.company}
                   message={r.message}
                   avatarColor={r.avatarColor}
+                  scheduledAt={r.scheduledAt}
+                  sessionType={r.sessionType}
                   onAccept={()  => handleAccept(r.id)}
                   onDecline={() => handleDecline(r.id)}
                 />
@@ -515,20 +556,21 @@ export default function MentorDashboard() {
           {/* 다가오는 면접 세션 */}
           <DashCard title="다가오는 면접 세션" sub="확정된 일정을 확인하세요">
             <div>
-              {upcoming.map((u, i) => (
-                <UpcomingItem key={i} {...u}/>
-              ))}
+              {upcoming.length > 0 ? (
+                upcoming.map((u, i) => <UpcomingItem key={i} {...u}/>)
+              ) : (
+                <div style={{ textAlign:"center", padding:"32px 0", color:C.textMuted, fontSize:14 }}>
+                  예정된 면접 세션이 없습니다.
+                </div>
+              )}
             </div>
 
             {/* 범례 */}
-            <div style={{
-              display:"flex", gap:16, marginTop:16,
-              flexWrap:"wrap",
-            }}>
+            <div style={{ display:"flex", gap:16, marginTop:16, flexWrap:"wrap" }}>
               {[
-                { color:C.teal,   label:"확정" },
+                { color:C.teal,    label:"확정" },
                 { color:"#F59E0B", label:"대기 중" },
-                { color:C.border, label:"미확정" },
+                { color:C.border,  label:"미확정" },
               ].map((leg, i) => (
                 <div key={i} style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <div style={{ width:7, height:7, borderRadius:"50%", background:leg.color }}/>

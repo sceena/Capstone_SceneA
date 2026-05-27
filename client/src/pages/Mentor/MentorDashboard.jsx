@@ -402,6 +402,57 @@ export default function MentorDashboard() {
 
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
 
+        {/* ── 미완료 피드백 알림 배너 ── */}
+        {(() => {
+          const pendingFeedback = rawSessions.filter(s => s.status === "completed" && !s.feedbackSubmitted);
+          if (pendingFeedback.length === 0) return null;
+          return (
+            <div style={{
+              background: "#FEF3C7", border: "1px solid #F59E0B",
+              borderRadius: 14, padding: "18px 24px", marginBottom: 28,
+              display: "flex", alignItems: "center", gap: 16,
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: "50%",
+                background: "#F59E0B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#92400E", marginBottom: 3 }}>
+                  아직 전송하지 않은 피드백이 {pendingFeedback.length}건 있습니다
+                </p>
+                <p style={{ fontSize: 12, color: "#B45309" }}>
+                  멘티는 멘토의 최종 코멘트를 기다리고 있어요. 세션 종료 후 60분 이내에 전송해주세요.
+                </p>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {pendingFeedback.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => navigate(`/mentor/feedback/${s.id}`)}
+                    style={{
+                      padding: "8px 18px", borderRadius: 8, border: "none",
+                      background: "#92400E", color: "white",
+                      fontSize: 12, fontWeight: 700, cursor: "pointer",
+                      fontFamily: "inherit", whiteSpace: "nowrap",
+                      transition: "opacity 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
+                  >
+                    {s.title || "세션"} 피드백 작성 →
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── 예정된 일정 ── */}
         <DashCard
           title="예정된 일정"

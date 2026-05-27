@@ -15,6 +15,7 @@ import ReportWaitingPage from './pages/Report/ReportWaiting'
 import MentorFeedbackPage from './pages/Report/MentorFeedback'
 import MentorReviewPage from './pages/Report/MentorReview'
 import FinalReportPage from './pages/Report/FinalReport'
+import ReportGeneratingPage from './pages/Report/ReportGenerating'
 import MyPage from './pages/MyPage'
 import MentorMyPage from './pages/MyPage/MentorMypage'
 import MenteeMyPage from './pages/MyPage/MenteeMypage'
@@ -57,6 +58,7 @@ export default function App() {
       <Route path="/interview/ready/:id"     element={<ProtectedRoute role="mentee" element={<InterviewRobby role="mentee" />} />} />
       <Route path="/interview/mentee/:id"    element={<ProtectedRoute role="mentee" element={<InterviewSession role="mentee" />} />} />
       <Route path="/mentoring/mentee/:sessionId" element={<ProtectedRoute role="mentee" element={<MentoringSessionPage />} />} />
+      <Route path="/report/generating/:sessionId" element={<ProtectedRoute role="mentee" element={<ReportGeneratingPage />} />} />
       <Route path="/report/ai/:sessionId"    element={<ProtectedRoute element={<AIReportPage />} />} />
       <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute role="mentee" element={<ReportWaitingPage />} />} />
       <Route path="/report/mentor-review/:sessionId" element={<ProtectedRoute role="mentee" element={<MentorReviewPage />} />} />

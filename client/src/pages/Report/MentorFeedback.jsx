@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { getSessionReport, saveMentorScore, saveMentorFeedback } from "../../api/sessions";
 
 const NAVY = "#0D2240";
@@ -258,10 +258,24 @@ export default function MentorFeedbackPage() {
         display: "flex", alignItems: "center", justifyContent: "space-between",
         position: "sticky", top: 0, zIndex: 50,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN }} />
-          <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>멘토 최종 코멘트 작성</span>
+        {/* 좌측: 로고 + 페이지명 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <Link to="/dashboard/mentor" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: GREEN, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M6 12L2 8l4-4M10 4l4 4-4 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <span style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, fontWeight: 500 }}>대시보드</span>
+          </Link>
+          <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>/</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN }} />
+            <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>멘토 최종 코멘트 작성</span>
+          </div>
         </div>
+
+        {/* 우측: 타이머 + 진행 상황 */}
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {/* Countdown */}
           <div style={{

@@ -53,7 +53,7 @@ class AuthServiceTest {
 
     @Test
     void 회원가입_성공_태그없음() {
-        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", Role.MENTEE, null);
+        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", null, Role.MENTEE, null);
         given(memberRepository.existsByEmail(request.email())).willReturn(false);
         given(passwordEncoder.encode(request.password())).willReturn("encoded");
 
@@ -66,7 +66,7 @@ class AuthServiceTest {
     @Test
     void 회원가입_성공_태그있음_기존태그재사용() {
         Tag existingTag = Tag.builder().name("Java").category("기술스택").build();
-        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", Role.MENTEE,
+        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", null, Role.MENTEE,
                 List.of(new TagRequest("Java", "기술스택")));
         given(memberRepository.existsByEmail(request.email())).willReturn(false);
         given(passwordEncoder.encode(request.password())).willReturn("encoded");
@@ -82,7 +82,7 @@ class AuthServiceTest {
     @Test
     void 회원가입_성공_태그있음_신규태그생성() {
         Tag newTag = Tag.builder().name("Spring").category("기술스택").build();
-        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", Role.MENTEE,
+        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", null, Role.MENTEE,
                 List.of(new TagRequest("Spring", "기술스택")));
         given(memberRepository.existsByEmail(request.email())).willReturn(false);
         given(passwordEncoder.encode(request.password())).willReturn("encoded");
@@ -98,7 +98,7 @@ class AuthServiceTest {
 
     @Test
     void 회원가입_이메일_중복_예외() {
-        SignupRequest request = new SignupRequest("dup@test.com", "password", "홍길동", "길동이", Role.MENTEE, null);
+        SignupRequest request = new SignupRequest("dup@test.com", "password", "홍길동", "길동이", null, Role.MENTEE, null);
         given(memberRepository.existsByEmail(request.email())).willReturn(true);
 
         assertThatThrownBy(() -> authService.signup(request))

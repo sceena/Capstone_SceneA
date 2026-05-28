@@ -56,7 +56,7 @@ public class UserService {
 
     @Transactional
     public UserProfileUpdateResponse updateMyProfile(Long memberId, UserProfileUpdateRequest request, MultipartFile image) {
-        boolean noData = request == null || (request.name() == null && request.password() == null && request.tags() == null);
+        boolean noData = request == null || (request.name() == null && request.password() == null && request.bio() == null && request.tags() == null);
         boolean noImage = image == null || image.isEmpty();
         if (noData && noImage) {
             throw new CustomException(ErrorCode.INVALID_REQUEST);
@@ -67,7 +67,7 @@ public class UserService {
 
         if (request != null) {
             String encodedPassword = request.password() != null ? passwordEncoder.encode(request.password()) : null;
-            member.update(request.name(), encodedPassword);
+            member.update(request.name(), encodedPassword, request.bio());
 
             if (request.tags() != null) {
                 memberTagRepository.deleteAllByMember(member);

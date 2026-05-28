@@ -12,6 +12,7 @@ public record UserProfileResponse(
         String name,
         String email,
         String role,
+        String bio,
         List<TagInfo> tags,
         @JsonProperty("profile_image_url") String profileImageUrl,
         @JsonProperty("created_at") LocalDateTime createdAt
@@ -27,6 +28,7 @@ public record UserProfileResponse(
                 member.getName(),
                 member.getEmail(),
                 member.getRole().name().toLowerCase(),
+                member.getBio(),
                 tags,
                 member.getProfileImageUrl(),
                 member.getCreateDate()

@@ -50,7 +50,7 @@ class UserControllerTest {
     void 내_프로필_조회_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
         UserProfileResponse response = new UserProfileResponse(
-                1L, "홍길동", "hong@test.com", "mentee",
+                1L, "홍길동", "hong@test.com", "mentee", null,
                 List.of(new UserProfileResponse.TagInfo(1L, "Spring", "job_skill")),
                 null,
                 LocalDateTime.now()
@@ -78,8 +78,8 @@ class UserControllerTest {
     @Test
     void 내_프로필_수정_이름만_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null);
-        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "새이름", null, LocalDateTime.now());
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null, null);
+        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "새이름", null, null, LocalDateTime.now());
         given(userService.updateMyProfile(any(), any(), any())).willReturn(response);
 
         MockMultipartFile dataPart = new MockMultipartFile("data", "", MediaType.APPLICATION_JSON_VALUE,
@@ -97,7 +97,7 @@ class UserControllerTest {
     @Test
     void 내_프로필_수정_이미지만_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "홍길동", "http://s3/photo.jpg", LocalDateTime.now());
+        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "홍길동", null, "http://s3/photo.jpg", LocalDateTime.now());
         given(userService.updateMyProfile(any(), any(), any())).willReturn(response);
 
         MockMultipartFile imagePart = new MockMultipartFile("image", "photo.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{1, 2, 3});
@@ -116,7 +116,7 @@ class UserControllerTest {
                 .willThrow(new CustomException(ErrorCode.INVALID_REQUEST));
 
         MockMultipartFile dataPart = new MockMultipartFile("data", "", MediaType.APPLICATION_JSON_VALUE,
-                objectMapper.writeValueAsBytes(new UserProfileUpdateRequest(null, null, null)));
+                objectMapper.writeValueAsBytes(new UserProfileUpdateRequest(null, null, null, null)));
 
         mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me")
                         .file(dataPart)

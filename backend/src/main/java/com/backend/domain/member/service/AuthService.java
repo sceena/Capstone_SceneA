@@ -42,6 +42,7 @@ public class AuthService {
                 .password(passwordEncoder.encode(request.password()))
                 .name(request.name())
                 .nickname(request.nickname())
+                .bio(request.bio())
                 .role(request.role())
                 .build();
 

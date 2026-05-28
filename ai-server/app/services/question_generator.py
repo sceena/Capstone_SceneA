@@ -68,6 +68,18 @@ GROUP_COMMON_QUESTION_SYSTEM_PROMPT = (
     "9. 부연 설명, 번호, 마크다운 없이 문자열 5개짜리 JSON 배열만 출력해."
 )
 
+GROUP_PERSONAL_QUESTION_SYSTEM_PROMPT = (
+    "너는 IT 기업의 실무 면접관이야. "
+    "지원자 한 명의 제출 서류를 바탕으로 그룹 면접에서 사용할 개인 맞춤 질문 5개를 작성해. "
+    "규칙: "
+    "1. 실제 면접관이 직접 묻는 자연스러운 존댓말 한 문장으로 작성해. "
+    "2. 서류에 직접 포함된 경험과 기술만 근거로 삼고, 없는 도메인, 수치, 도구, 구현 세부사항은 추가하지 마. "
+    "3. 기술명이 있더라도 사용 목적이나 구현 범위가 서류에 없으면 추측하지 마. "
+    "4. 미구현, 학습 중, 경험 제한 항목은 수행 경험으로 묻지 말고 보완 계획이나 설계 방향을 묻는 가정형 질문으로 작성해. "
+    "5. 쉬운 경험 확인 질문부터 문제 해결 근거, 트레이드오프, 보완 방향을 묻는 질문 순서로 배치해. "
+    "6. 부연 설명, 번호, 마크다운 없이 문자열 5개짜리 JSON 배열만 출력해."
+)
+
 
 class QuestionGenerationUnavailable(RuntimeError):
     pass
@@ -180,12 +192,24 @@ class QuestionGenerator:
             return [future.result() for future in futures]
 
     def _generate_group_personal_question_set(self, candidate: dict[str, Any]) -> dict[str, Any]:
+        try:
+            raw = self._generate_group_personal_with_timeout(candidate["content"])
+        except TimeoutError as exc:
+            raise QuestionGenerationUnavailable("group personal question generation timed out") from exc
+        except QuestionGenerationUnavailable:
+            raise
+        except Exception as exc:
+            raise QuestionGenerationUnavailable(f"group personal question generation request failed: {exc}") from exc
+
+        try:
+            payload = self._extract_questions(raw)
+            questions = self._validate_questions(payload, expected_count=self.group_personal_question_count)
+        except (ModelJsonError, ValueError) as exc:
+            raise QuestionGenerationInvalidResponse(f"model returned invalid personal questions: {exc}") from exc
+
         return {
             "candidate_id": candidate["candidate_id"],
-            "questions": self.generate(
-                candidate["content"],
-                question_count=self.group_personal_question_count,
-            ),
+            "questions": questions,
         }
 
     def generate_common_questions(self, candidates: list[dict[str, Any]]) -> list[str]:
@@ -300,6 +324,23 @@ class QuestionGenerator:
             if executor is not None and future is not None and future.done():
                 executor.shutdown(wait=True)
 
+    def _generate_group_personal_with_timeout(self, document: str) -> str:
+        executor: ThreadPoolExecutor | None = None
+        future = None
+        try:
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(self._call_group_personal_llm, document)
+            return future.result(timeout=self.timeout_sec)
+        except TimeoutError:
+            if future is not None:
+                future.cancel()
+            if executor is not None:
+                executor.shutdown(wait=False, cancel_futures=True)
+            raise
+        finally:
+            if executor is not None and future is not None and future.done():
+                executor.shutdown(wait=True)
+
     def _call_analysis_llm(self, document: str) -> dict[str, list[str]]:
         if self.fake_mode:
             return self._build_fake_analysis(document)
@@ -379,6 +420,35 @@ class QuestionGenerator:
             )
         except Exception as exc:
             raise QuestionGenerationUnavailable(f"LLM common question generation failed: {exc}") from exc
+
+    def _call_group_personal_llm(self, document: str) -> str:
+        if self.fake_mode:
+            analysis = self._build_fake_analysis(document)
+            return json.dumps(
+                self._build_fake_questions(analysis, self.group_personal_question_count),
+                ensure_ascii=False,
+            )
+
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise QuestionGenerationUnavailable("GEMINI_API_KEY is not set")
+
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError as exc:
+            raise QuestionGenerationUnavailable("google-genai is not installed") from exc
+
+        client = genai.Client(api_key=api_key)
+        try:
+            return self._generate_content(
+                client=client,
+                types=types,
+                contents=self._build_group_personal_question_contents(types, document),
+                system_prompt=GROUP_PERSONAL_QUESTION_SYSTEM_PROMPT,
+            )
+        except Exception as exc:
+            raise QuestionGenerationUnavailable(f"LLM question generation failed: {exc}") from exc
 
     def _generate_content(self, client: Any, types: Any, contents: list[Any], system_prompt: str) -> str:
         last_error: Exception | None = None
@@ -494,6 +564,26 @@ class QuestionGenerator:
   "구현하지 못한 부분을 보완한다면 어떤 순서로 개선하고 싶으신가요?",
   "협업 과정에서 기술적 의견이 갈릴 때 어떤 기준으로 결정하셨나요?"
 ]"""
+                    )
+                ],
+            )
+        ]
+
+    def _build_group_personal_question_contents(self, types: Any, document: str) -> list[Any]:
+        caution_text = self._build_caution_text(document)
+        return [
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part.from_text(
+                        text=f"""지원자 제출 서류:
+{document}
+
+{caution_text}
+
+위 서류에 근거한 개인 맞춤 면접 질문 5개를 작성하세요.
+서류에 없는 구현 범위나 운영 경험을 추가로 가정하지 마세요.
+반드시 문자열 5개짜리 JSON 배열만 출력하세요."""
                     )
                 ],
             )

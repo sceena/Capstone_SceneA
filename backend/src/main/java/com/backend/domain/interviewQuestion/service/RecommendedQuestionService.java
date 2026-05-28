@@ -13,6 +13,7 @@ import com.backend.domain.interviewQuestion.repository.RecommendedQuestionBatchR
 import com.backend.domain.interviewQuestion.repository.RecommendedQuestionRepository;
 import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.interviewSession.entity.SessionParticipant;
+import com.backend.domain.member.entity.Member;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
 import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
 import com.backend.domain.resume.entity.Resume;
@@ -20,6 +21,7 @@ import com.backend.domain.resume.repository.ResumeRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +38,9 @@ public class RecommendedQuestionService {
 
     private static final String ONE_TO_ONE = "ONE_TO_ONE";
     private static final String GROUP = "GROUP";
+
+    @Value("${ai.question-generation.allow-missing-resume-fallback:false}")
+    private boolean allowMissingResumeFallback;
 
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
@@ -97,15 +102,32 @@ public class RecommendedQuestionService {
     }
 
     private AiQuestionCandidateRequest toCandidateRequest(InterviewSession session, SessionParticipant participant) {
-        Resume resume = resumeRepository
-                .findByInterviewSessionAndMember(session, participant.getMember())
-                .orElseThrow(() -> new CustomException(ErrorCode.RESUME_NOT_FOUND));
+        Member member = participant.getMember();
+        String content = resumeRepository.findByInterviewSessionAndMember(session, member)
+                .map(Resume::getContent)
+                .orElseGet(() -> {
+                    if (!allowMissingResumeFallback) {
+                        throw new CustomException(ErrorCode.RESUME_NOT_FOUND);
+                    }
+                    return buildFallbackResumeContent(session, member);
+                });
 
         return new AiQuestionCandidateRequest(
-                participant.getMember().getId(),
-                participant.getMember().getName(),
-                resume.getContent()
+                member.getId(),
+                member.getName(),
+                content
         );
+    }
+
+    private String buildFallbackResumeContent(InterviewSession session, Member member) {
+        String jobCategory = session.getJobCategory() != null ? session.getJobCategory() : "IT 개발";
+        return """
+                지원자 이름: %s
+                희망 직무: %s
+                개발용 테스트 데이터입니다. 실제 자기소개서가 아직 세션에 연결되지 않아, 추천 질문 화면 확인을 위해 임시 문서를 사용합니다.
+                지원자는 Spring Boot 기반 프로젝트 경험이 있으며 REST API 설계, 데이터베이스 연동, 성능 개선, 예외 처리, 협업 경험을 중심으로 면접 질문을 받을 수 있습니다.
+                실제 서비스에서는 지원자가 제출한 이력서와 자기소개서 원문을 기반으로 추천 질문을 생성해야 합니다.
+                """.formatted(member.getName(), jobCategory);
     }
 
     private String resolveSessionType(List<AiQuestionCandidateRequest> candidates) {

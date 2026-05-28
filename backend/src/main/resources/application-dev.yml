@@ -29,3 +29,7 @@ cloud:
       secret-key: minioadmin
     region:
       static: us-east-1
+
+ai:
+  question-generation:
+    allow-missing-resume-fallback: true

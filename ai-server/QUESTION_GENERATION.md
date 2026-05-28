@@ -120,3 +120,25 @@ $env:QUESTION_GENERATION_TIMEOUT_SEC="180"
 $env:QUESTION_GENERATION_MODEL="gemini-2.5-flash"
 $env:QUESTION_GENERATION_THINKING_LEVEL="NONE"
 ```
+
+## Dev Seed Flow
+
+The mentee application flow is not required to verify recommended questions locally.
+Use the dev-only seed endpoint to create one mentor, one group session, four participants, and one resume per participant:
+
+```http
+POST /api/dev/recommended-question-demo
+```
+
+The response includes `mentor_access_token` and `generate_recommendations_url`.
+Call the generated recommendation URL with the mentor token:
+
+```http
+POST /api/sessions/{sessionId}/questions/recommendations
+Authorization: Bearer {mentor_access_token}
+```
+
+For a four-person group session, the AI server should be called five times:
+
+- common questions: 1 call
+- personal questions: 4 calls, one per participant

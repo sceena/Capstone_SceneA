@@ -1,7 +1,14 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.schemas.fit_gap import FitGapAnalysisResponse, FitGapRequest
-from app.schemas.question_generation import QuestionGenerationRequest, QuestionGenerationResponse
+from app.schemas.question_generation import (
+    CommonQuestionGenerationRequest,
+    CommonQuestionGenerationResponse,
+    QuestionGenerationRequest,
+    QuestionGenerationResponse,
+    SessionQuestionGenerationRequest,
+    SessionQuestionGenerationResponse,
+)
 from app.schemas.report import ReportRequest, ReportResponse
 from app.schemas.stt import SttResponse
 from app.services.fit_gap_composer import FitGapComposer, FitGapComposerUnavailable
@@ -18,6 +25,14 @@ report_generator = ReportGenerator()
 fit_gap_composer = FitGapComposer()
 stt_service = SttService()
 question_generator = QuestionGenerator()
+
+
+def _question_generation_error_status(detail: str) -> int:
+    if "timed out" in detail:
+        return 504
+    if "RESOURCE_EXHAUSTED" in detail or "429" in detail:
+        return 429
+    return 503
 
 
 @router.post("/report", response_model=ReportResponse)
@@ -57,5 +72,33 @@ def generate_questions(request: QuestionGenerationRequest) -> QuestionGeneration
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except QuestionGenerationUnavailable as exc:
         detail = str(exc)
-        status_code = 504 if "timed out" in detail else 503
+        status_code = _question_generation_error_status(detail)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.post("/api/generate-common-questions", response_model=CommonQuestionGenerationResponse)
+def generate_common_questions(request: CommonQuestionGenerationRequest) -> CommonQuestionGenerationResponse:
+    try:
+        candidates = [candidate.model_dump() for candidate in request.candidates]
+        questions = question_generator.generate_common_questions(candidates)
+        return CommonQuestionGenerationResponse(common_questions=questions)
+    except QuestionGenerationInvalidResponse as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except QuestionGenerationUnavailable as exc:
+        detail = str(exc)
+        status_code = _question_generation_error_status(detail)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.post("/api/generate-session-questions", response_model=SessionQuestionGenerationResponse)
+def generate_session_questions(request: SessionQuestionGenerationRequest) -> SessionQuestionGenerationResponse:
+    try:
+        candidates = [candidate.model_dump() for candidate in request.candidates]
+        result = question_generator.generate_for_session(request.session_type, candidates)
+        return SessionQuestionGenerationResponse.model_validate(result)
+    except QuestionGenerationInvalidResponse as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except QuestionGenerationUnavailable as exc:
+        detail = str(exc)
+        status_code = _question_generation_error_status(detail)
         raise HTTPException(status_code=status_code, detail=detail) from exc

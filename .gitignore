@@ -20,3 +20,5 @@ venv/
 ai-server/.cache/
 ai-server/test_audio/
 ai-server/audio_dashboard_result.json
+question-test-result.json
+group-question-test-result.json

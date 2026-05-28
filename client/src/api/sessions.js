@@ -2,9 +2,22 @@ import { getAuthUser } from "../store/authStore";
 
 function authHeaders() {
   const user = getAuthUser();
+  const token = user?.accessToken || user?.token || user?.access_token;
   return {
     "Content-Type": "application/json",
-    ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+function requireAuthHeaders() {
+  const user = getAuthUser();
+  const token = user?.accessToken || user?.token || user?.access_token;
+  if (!token) {
+    throw new Error("실제 로그인 토큰이 필요합니다. 데모 로그인 말고 회원가입/로그인 후 다시 시도해 주세요.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
   };
 }
 
@@ -131,7 +144,8 @@ export async function getAnswerSegments(sessionId, questionId, answerId) {
 
 function authHeadersNoBody() {
   const user = getAuthUser();
-  return user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {};
+  const token = user?.accessToken || user?.token || user?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 /**
@@ -246,6 +260,29 @@ export async function createQuestions(sessionId, contents) {
  * GET /api/sessions/{id}/questions
  * 특정 세션의 전체 질문 목록을 조회한다.
  */
+export async function getRecommendedQuestions(sessionId) {
+  if (!/^\d+$/.test(String(sessionId ?? ""))) {
+    throw new Error("실제 세션에서만 AI 추천 질문을 불러올 수 있습니다. 데모 세션이 아니라 새로 생성된 세션으로 테스트해 주세요.");
+  }
+
+  const res = await fetch(`/api/sessions/${sessionId}/questions/recommendations`, {
+    method: "POST",
+    headers: requireAuthHeaders(),
+  });
+  if (!res.ok) {
+    let message = "AI 추천 질문 생성 실패";
+    try {
+      const data = await res.json();
+      message = data?.message || data?.detail || message;
+    } catch {
+      const text = await res.text().catch(() => "");
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 export async function getQuestions(sessionId) {
   const res = await fetch(`/api/sessions/${sessionId}/questions`, {
     headers: authHeaders(),

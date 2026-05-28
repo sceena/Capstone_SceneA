@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 /* ============================================================
    멘토 탐색  (pages/mentee/MentorSearch.jsx)
@@ -314,6 +314,7 @@ const MentorCard = ({ m, onClick }) => (
 
 export default function MentorSearch() {
   const navigate = useNavigate();
+  const { state: navState } = useLocation();
   const [filters, setFilters] = useState({ major:"", sub:"", career:"", sess:"" });
   const [search, setSearch]   = useState("");
   const [sortBy, setSortBy]   = useState("rating");
@@ -412,7 +413,7 @@ export default function MentorSearch() {
         {filtered.length > 0 ? (
           <div className="mgrid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:18 }}>
             {filtered.map(m=>(
-              <MentorCard key={m.id} m={m} onClick={()=>navigate(`/mentor/apply/${m.id}`)}/>
+              <MentorCard key={m.id} m={m} onClick={()=>navigate(`/mentor/apply/${m.id}`, { state: navState })}/>
             ))}
           </div>
         ) : (

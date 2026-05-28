@@ -41,7 +41,7 @@ class AuthControllerTest {
 
     @Test
     void 회원가입_성공_200() throws Exception {
-        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", Role.MENTEE, null);
+        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", null, Role.MENTEE, null);
         willDoNothing().given(authService).signup(any());
 
         mockMvc.perform(post("/api/auth/signup")

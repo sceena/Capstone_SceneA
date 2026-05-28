@@ -38,18 +38,22 @@ public class Member extends BaseEntity {
     @Column
     private String providerId;
 
+    @Column(length = 100)
+    private String bio;
+
     @Column
     private String profileImageUrl;
 
     private LocalDateTime deletedAt;
 
     @Builder
-    public Member(String email, String password, String name, String nickname, Role role,
+    public Member(String email, String password, String name, String nickname, String bio, Role role,
                   MemberProvider provider, String providerId) {
         this.email = email;
         this.password = password;
         this.name = name;
         this.nickname = nickname;
+        this.bio = bio;
         this.role = role;
         this.provider = provider != null ? provider : MemberProvider.LOCAL;
         this.providerId = providerId;
@@ -63,9 +67,10 @@ public class Member extends BaseEntity {
         return this.deletedAt != null;
     }
 
-    public void update(String name, String encodedPassword) {
+    public void update(String name, String encodedPassword, String bio) {
         if (name != null) this.name = name;
         if (encodedPassword != null) this.password = encodedPassword;
+        if (bio != null) this.bio = bio;
     }
 
     public void updateProfileImage(String url) {

@@ -119,7 +119,7 @@ class UserServiceTest {
     void 내_프로필_수정_이름만_변경_성공() {
         Member member = Member.builder()
                 .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null, null);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
 
@@ -134,7 +134,7 @@ class UserServiceTest {
     void 내_프로필_수정_비밀번호만_변경_성공() {
         Member member = Member.builder()
                 .email("hong@test.com").password("old_enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, "newpassword", null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, "newpassword", null, null);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(passwordEncoder.encode("newpassword")).willReturn("new_enc");
@@ -151,7 +151,7 @@ class UserServiceTest {
         Member member = Member.builder()
                 .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
         Tag existingTag = Tag.builder().name("Java").category("기술스택").build();
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, List.of(new TagRequest("Java", "기술스택")));
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null, List.of(new TagRequest("Java", "기술스택")));
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(tagRepository.findByNameAndCategory("Java", "기술스택")).willReturn(Optional.of(existingTag));
@@ -168,7 +168,7 @@ class UserServiceTest {
         Member member = Member.builder()
                 .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
         Tag newTag = Tag.builder().name("Kotlin").category("기술스택").build();
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, List.of(new TagRequest("Kotlin", "기술스택")));
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null, List.of(new TagRequest("Kotlin", "기술스택")));
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(tagRepository.findByNameAndCategory("Kotlin", "기술스택")).willReturn(Optional.empty());
@@ -185,7 +185,7 @@ class UserServiceTest {
     void 내_프로필_수정_태그_빈리스트_전체삭제() {
         Member member = Member.builder()
                 .email("hong@test.com").password("enc").name("홍길동").nickname("길동이").role(Role.MENTEE).build();
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, List.of());
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null, List.of());
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
 
@@ -229,7 +229,7 @@ class UserServiceTest {
 
     @Test
     void 내_프로필_수정_수정할_필드_없음_예외() {
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null, null, null);
 
         assertThatThrownBy(() -> userService.updateMyProfile(1L, request, null))
                 .isInstanceOf(CustomException.class)
@@ -245,7 +245,7 @@ class UserServiceTest {
 
     @Test
     void 내_프로필_수정_회원없음_예외() {
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null, null);
         given(memberRepository.findById(999L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> userService.updateMyProfile(999L, request, null))

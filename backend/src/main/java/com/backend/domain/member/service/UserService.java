@@ -7,6 +7,7 @@ import com.backend.domain.interviewSession.entity.SessionParticipant;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
 import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
 import com.backend.domain.member.dto.request.UserProfileUpdateRequest;
+import com.backend.domain.member.dto.response.MentorListResponse;
 import com.backend.domain.member.dto.response.MySessionHistoryResponse;
 import com.backend.domain.member.dto.response.UserProfileResponse;
 import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
@@ -46,6 +47,12 @@ public class UserService {
     private final SessionParticipantRepository participantRepository;
     private final AnalysisReportRepository reportRepository;
     private final PasswordEncoder passwordEncoder;
+
+    public MentorListResponse.PageResponse getMentors(String keyword, Pageable pageable) {
+        Page<MentorListResponse> page = memberRepository.findMentors(Role.MENTOR, keyword, pageable)
+                .map(m -> MentorListResponse.of(m, memberTagRepository.findAllByMember(m)));
+        return MentorListResponse.PageResponse.of(page);
+    }
 
     public UserProfileResponse getMyProfile(Long memberId) {
         Member member = memberRepository.findById(memberId)

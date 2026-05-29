@@ -223,73 +223,32 @@ jobs:
             set -e
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # ── 헬스체크 & 롤백 함수 ─────────────────────────────
-            # 사용법: deploy_with_rollback <컨테이너명> <헬스체크URL> <docker run 커맨드>
-            deploy_with_rollback() {
-              local NAME=$1
-              local HEALTH_URL=$2
-              shift 2
-              local RUN_CMD="$@"
-
-              # 이전 이미지 ID 저장
-              PREV_IMAGE=$(docker inspect --format='{{.Image}}' "$NAME" 2>/dev/null || echo "")
-
-              # 새 컨테이너 실행
-              eval "$RUN_CMD"
-
-              # 헬스체크 (5초 간격, 최대 30초)
-              echo "헬스체크: $NAME ($HEALTH_URL)"
-              for i in $(seq 1 6); do
-                sleep 5
-                if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
-                  echo "✓ $NAME 배포 성공"
-                  return 0
-                fi
-                echo "  대기 중... ($i/6)"
-              done
-
-              # 실패 → 롤백
-              echo "✗ 헬스체크 실패 — $NAME 롤백 시작"
-              docker stop "$NAME" || true
-              docker rm "$NAME" || true
-              if [ -n "$PREV_IMAGE" ]; then
-                eval "$(echo "$RUN_CMD" | sed "s|:latest|@${PREV_IMAGE}|")"
-                echo "✓ $NAME 이전 버전으로 롤백 완료"
-              else
-                echo "이전 이미지 없음 — 롤백 불가"
-              fi
-              exit 1
-            }
-
             # ── backend ──────────────────────────────────────────
             if [ "${{ needs.build-and-push.result }}" = "success" ]; then
               docker pull ${{ env.IMAGE_NAME }}:latest
               docker stop carpoolink-backend || true
               docker rm carpoolink-backend || true
+              docker run -d \
+                --name carpoolink-backend \
+                --restart unless-stopped \
+                -p 8080:8080 \
+                -e "DB_URL=${{ secrets.DB_URL }}" \
+                -e "DB_USERNAME=${{ secrets.DB_USERNAME }}" \
+                -e "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
+                -e "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
+                -e "AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}" \
+                -e "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" \
+                -e "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" \
+                -e "AWS_REGION=${{ secrets.AWS_REGION }}" \
+                -e "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+                -e "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+                -e "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" \
+                -e "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" \
+                -e "NAVER_CLIENT_ID=${{ secrets.NAVER_CLIENT_ID }}" \
+                -e "NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }}" \
+                -e "OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}" \
+                ${{ env.IMAGE_NAME }}:latest
 
-              deploy_with_rollback "carpoolink-backend" "http://localhost:8080/health" \
-                docker run -d \
-                  --name carpoolink-backend \
-                  --restart unless-stopped \
-                  -p 8080:8080 \
-                  -e "DB_URL=${{ secrets.DB_URL }}" \
-                  -e "DB_USERNAME=${{ secrets.DB_USERNAME }}" \
-                  -e "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
-                  -e "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
-                  -e "AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}" \
-                  -e "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" \
-                  -e "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" \
-                  -e "AWS_REGION=${{ secrets.AWS_REGION }}" \
-                  -e "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
-                  -e "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-                  -e "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" \
-                  -e "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" \
-                  -e "NAVER_CLIENT_ID=${{ secrets.NAVER_CLIENT_ID }}" \
-                  -e "NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }}" \
-                  -e "OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}" \
-                  ${{ env.IMAGE_NAME }}:latest
-
-              # media-server는 WebSocket 기반이라 헬스체크 없이 배포
               docker pull ${{ env.MEDIA_IMAGE_NAME }}:latest
               docker stop carpoolink-media-server || true
               docker rm carpoolink-media-server || true
@@ -310,13 +269,11 @@ jobs:
               docker pull ${{ env.CLIENT_IMAGE_NAME }}:latest
               docker stop carpoolink-client || true
               docker rm carpoolink-client || true
-
-              deploy_with_rollback "carpoolink-client" "http://localhost:80" \
-                docker run -d \
-                  --name carpoolink-client \
-                  --network host \
-                  --restart unless-stopped \
-                  ${{ env.CLIENT_IMAGE_NAME }}:latest
+              docker run -d \
+                --name carpoolink-client \
+                --network host \
+                --restart unless-stopped \
+                ${{ env.CLIENT_IMAGE_NAME }}:latest
             fi
 
             docker image prune -f

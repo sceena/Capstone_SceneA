@@ -1,12 +1,15 @@
 package com.backend.domain.dev.controller;
 
+import com.backend.domain.answerEvaluation.service.AnswerEvaluationService;
 import com.backend.domain.dev.dto.DevReportDemoResponse;
 import com.backend.domain.dev.service.DevReportDemoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,11 +21,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class DevReportDemoController {
 
     private final DevReportDemoService devReportDemoService;
+    private final AnswerEvaluationService answerEvaluationService;
 
     @Operation(summary = "AI 리포트 데모 데이터 생성", description = "세션/질문/답변/자소서/채용공고 mock 데이터를 생성하고 테스트용 JWT를 반환한다.")
     @PostMapping("/report-demo")
     public ResponseEntity<DevReportDemoResponse> createReportDemo() {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(devReportDemoService.createReportDemo());
+    }
+
+    @Operation(summary = "DPO JSONL export", description = "멘토 수정본이 있는 질문별 평가를 prompt/rejected/chosen JSONL 형태로 내보낸다.")
+    @GetMapping(value = "/dpo-export", produces = MediaType.APPLICATION_NDJSON_VALUE)
+    public ResponseEntity<String> exportDpoJsonl() {
+        return ResponseEntity.ok(answerEvaluationService.exportDpoJsonl());
     }
 }

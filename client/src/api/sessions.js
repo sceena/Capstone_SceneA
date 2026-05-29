@@ -174,6 +174,20 @@ export async function saveMentorFeedback(sessionId, feedback) {
 }
 
 /**
+ * PATCH /api/sessions/{sessionId}/answers/{answerId}/evaluation/mentor
+ * 질문별 AI 평가 초안에 대한 멘토 수정본을 저장한다. 향후 DPO chosen 데이터로 활용된다.
+ */
+export async function saveMentorAnswerEvaluation(sessionId, answerId, evaluation) {
+  const res = await fetch(`/api/sessions/${sessionId}/answers/${answerId}/evaluation/mentor`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(evaluation),
+  });
+  if (!res.ok) throw new Error("멘토 답변 평가 저장 실패");
+  return res.json();
+}
+
+/**
  * POST /api/sessions/{id}/questions/{questionId}/answers
  * 멘티 답변 오디오 업로드. 업로드 후 STT·AI 분석 비동기 진행.
  * @param {Blob} audioBlob

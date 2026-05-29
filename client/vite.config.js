@@ -12,8 +12,19 @@ export default defineConfig({
     host: true,  // 0.0.0.0 바인딩 → 같은 네트워크 기기에서 접근 가능
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://54.116.176.242:8080',
         changeOrigin: true,
+        headers: {
+          Origin: 'http://localhost:5173',
+        },
+      },
+      '/oauth2': {
+        target: 'http://54.116.176.242:8080',
+        changeOrigin: false,
+      },
+      '/login/oauth2': {
+        target: 'http://54.116.176.242:8080',
+        changeOrigin: false,
       },
     },
   },

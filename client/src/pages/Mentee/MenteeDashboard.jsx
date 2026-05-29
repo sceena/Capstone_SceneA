@@ -78,7 +78,7 @@ const Header = ({ userName, accessToken }) => {
           안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
         </span>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-          {[{ label:"멘토 탐색", to:"/mentor/search" }, { label:"예약 확인", to:"#" }, { label:"MyPage", to:"/mentee/mypage" }]
+          {[{ label:"대시보드", to:"/dashboard/mentee" }, { label:"멘토 탐색", to:"/mentor/search" }, { label:"MyPage", to:"/mentee/mypage" }]
             .map((item, i) => (
             <Link key={i} to={item.to} style={{
               fontSize:14, fontWeight: item.label==="MyPage" ? 700 : 400,
@@ -196,21 +196,47 @@ const DashCard = ({ title, sub, children, style }) => (
 
 /* ── 다가오는 세션 아이템 ── */
 const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
-  const dotColor = status==="confirmed" ? C.teal : status==="pending" ? "#F59E0B" : C.border;
+  const [mon, day] = (date || "").split(".").map(Number);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(new Date().getFullYear(), (mon||1)-1, day||1);
+  const diff = Math.ceil((target - today) / 86400000);
+  const dday = diff === 0 ? "D-DAY" : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
+  const ddayColor = diff === 0 ? "#EF4444" : diff > 0 ? C.navy : C.textMuted;
+  const boxColor = status==="confirmed" ? C.teal : status==="pending" ? "#F59E0B" : C.navyMid;
   return (
     <div style={{
-      display:"flex", gap:16, alignItems:"flex-start",
+      display:"flex", gap:14, alignItems:"center",
       padding:"12px 0", borderBottom:`1px solid ${C.border}`,
     }}>
-      <div style={{ flexShrink:0, width:72, textAlign:"right" }}>
-        <p style={{ fontSize:12, color:C.textMuted }}>{date}</p>
-        <p style={{ fontSize:12, color:C.textMuted }}>{time}</p>
+      <div style={{
+        flexShrink:0, width:54, borderRadius:10,
+        background:boxColor, overflow:"hidden",
+        display:"flex", flexDirection:"column", alignItems:"center",
+      }}>
+        <div style={{ width:"100%", background:"rgba(0,0,0,0.18)", padding:"2px 0", textAlign:"center" }}>
+          <span style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.9)", letterSpacing:"0.05em" }}>
+            {mon ? `${mon}월` : ""}
+          </span>
+        </div>
+        <div style={{ padding:"4px 0 2px", textAlign:"center" }}>
+          <span style={{ fontSize:20, fontWeight:800, color:"white", lineHeight:1 }}>{day || "-"}</span>
+        </div>
+        <div style={{ padding:"2px 0 4px", textAlign:"center" }}>
+          <span style={{ fontSize:9, color:"rgba(255,255,255,0.8)", fontWeight:500 }}>{time}</span>
+        </div>
       </div>
-      <div style={{ display:"flex", alignItems:"flex-start", gap:10, flex:1 }}>
-        <div style={{ width:8, height:8, borderRadius:"50%", background:dotColor, flexShrink:0, marginTop:4 }}/>
-        <div>
-          <p style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:2 }}>{title}</p>
-          <p style={{ fontSize:12, color:C.textMuted }}>{mentor} · {type}</p>
+      <div style={{ flex:1, minWidth:0 }}>
+        <p style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{title}</p>
+        <p style={{ fontSize:12, color:C.textMuted }}>{mentor} · {type}</p>
+      </div>
+      <div style={{ flexShrink:0, textAlign:"right" }}>
+        <div style={{ fontSize:14, fontWeight:800, color:ddayColor, letterSpacing:"-0.02em", marginBottom:4 }}>{dday}</div>
+        <div style={{
+          fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:99,
+          background: status==="confirmed" ? C.tealLight : "#FEF3C7",
+          color: status==="confirmed" ? C.teal : "#92400E",
+        }}>
+          {status==="confirmed" ? "확정" : status==="pending" ? "대기중" : "미확정"}
         </div>
       </div>
     </div>
@@ -537,20 +563,6 @@ export default function MenteeDashboard() {
           <DashCard title="다가오는 면접 세션">
             <div>
               {upcoming.map((u, i) => <UpcomingItem key={i} {...u}/>)}
-            </div>
-
-            {/* 범례 */}
-            <div style={{ display:"flex", gap:16, marginTop:16, flexWrap:"wrap" }}>
-              {[
-                { color:C.teal,    label:"확정" },
-                { color:"#F59E0B", label:"대기 중" },
-                { color:C.border,  label:"미확정" },
-              ].map((leg, i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <div style={{ width:7, height:7, borderRadius:"50%", background:leg.color }}/>
-                  <span style={{ fontSize:11, color:C.textMuted }}>{leg.label}</span>
-                </div>
-              ))}
             </div>
 
             {/* 멘토 신청 바로가기 */}

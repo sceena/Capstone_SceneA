@@ -1,0 +1,41 @@
+package com.backend.domain.interviewAnswer.service;
+
+import com.backend.domain.interviewAnswer.dto.request.SttCallbackRequest;
+import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
+import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
+import com.backend.global.exception.CustomException;
+import com.backend.global.exception.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+@Slf4j
+public class SttCallbackService {
+
+    private final InterviewAnswerRepository answerRepository;
+
+    public void handleCallback(SttCallbackRequest request) {
+        InterviewAnswer answer = answerRepository.findById(request.answerId())
+                .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
+
+        if ("COMPLETED".equals(request.status())) {
+            answer.completeStt(
+                    request.text(),
+                    request.model(),
+                    request.durationSec(),
+                    request.audioQualityStatus(),
+                    request.audioQualityMessage()
+            );
+            log.info("STT completed for answerId={}", request.answerId());
+        } else if ("FAILED".equals(request.status())) {
+            answer.failStt(request.errorMessage());
+            log.warn("STT failed for answerId={}: {}", request.answerId(), request.errorMessage());
+        } else {
+            log.warn("Unknown STT callback status={} for answerId={}", request.status(), request.answerId());
+        }
+    }
+}

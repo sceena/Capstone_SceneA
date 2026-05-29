@@ -38,9 +38,8 @@ const Header = ({ userName, accessToken }) => {
     <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
       <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
-        <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-          {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"/mentee/mypage",bold:true}].map((x,i)=>(
+          {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentee/mypage",bold:true}].map((x,i)=>(
             <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
               onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
           ))}
@@ -326,9 +325,10 @@ const DUMMY_HISTORY = [
 ];
 
 /* ── 프로필 수정 모달 ── */
-function EditProfileModal({ onClose, userEmail, onImageChange }) {
+function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
   const [tab, setTab] = useState("name");
   const [name, setName] = useState("");
+  const [bio, setBio] = useState(initialBio || "");
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -374,6 +374,8 @@ function EditProfileModal({ onClose, userEmail, onImageChange }) {
     if (tab === "name") {
       if (!name.trim()) { setError("이름을 입력해주세요."); return; }
       data.name = name.trim();
+    } else if (tab === "bio") {
+      data.bio = bio.trim();
     } else {
       if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; }
       if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
@@ -405,11 +407,11 @@ function EditProfileModal({ onClose, userEmail, onImageChange }) {
         ) : (
           <>
             <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 22 }}>
-              {[{ k: "name", l: "이름 변경" }, { k: "password", l: "비밀번호 변경" }, { k: "image", l: "이미지 변경" }].map(t => (
+              {[{ k: "name", l: "이름" }, { k: "bio", l: "한줄 소개" }, { k: "password", l: "비밀번호" }, { k: "image", l: "이미지" }].map(t => (
                 <button key={t.k} onClick={() => { setTab(t.k); setError(""); }} style={{
                   flex: 1, padding: "10px 0", background: "transparent", border: "none",
                   borderBottom: `2.5px solid ${tab === t.k ? C.navy : "transparent"}`,
-                  fontSize: 13, fontWeight: tab === t.k ? 700 : 400,
+                  fontSize: 12, fontWeight: tab === t.k ? 700 : 400,
                   color: tab === t.k ? C.navy : C.textMuted, cursor: "pointer", fontFamily: "inherit", marginBottom: -1,
                 }}>{t.l}</button>
               ))}
@@ -421,6 +423,22 @@ function EditProfileModal({ onClose, userEmail, onImageChange }) {
                   style={inputStyle()}
                   onFocus={e => e.target.style.borderColor = C.navy}
                   onBlur={e => e.target.style.borderColor = C.border} />
+              </div>
+            )}
+            {tab === "bio" && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 7 }}>
+                  한줄 소개 <span style={{ color: bio.length > 100 ? C.red : C.textMuted }}>({bio.length}/100)</span>
+                </label>
+                <textarea
+                  value={bio}
+                  onChange={e => setBio(e.target.value.slice(0, 100))}
+                  placeholder="나를 간단히 소개해주세요 (최대 100자)"
+                  rows={3}
+                  style={{ ...inputStyle(), resize: "none", lineHeight: 1.6 }}
+                  onFocus={e => e.target.style.borderColor = C.navy}
+                  onBlur={e => e.target.style.borderColor = C.border}
+                />
               </div>
             )}
             {tab === "password" && (
@@ -623,7 +641,10 @@ export default function MenteeMyPage() {
                   <div style={{ width: 68, height: 68, borderRadius: "50%", background: av.color, margin: "0 auto 10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>{av.animal}</div>
                 ); })()}
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 2 }}>{displayName}</p>
-                <p style={{ fontSize: 12, color: C.textSub }}>백엔드 개발자 지망 · 신입</p>
+                <p style={{ fontSize: 12, color: C.textSub }}>멘티</p>
+                {profile?.bio && (
+                  <p style={{ fontSize: 12, color: C.textSub, marginTop: 6, lineHeight: 1.6, padding: "0 4px" }}>{profile.bio}</p>
+                )}
               </div>
 
               <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
@@ -846,7 +867,7 @@ export default function MenteeMyPage() {
 
       </main>
 
-      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} userEmail={user?.email} onImageChange={(img) => setProfileImage(img)} />}
+      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} userEmail={user?.email} onImageChange={(img) => setProfileImage(img)} initialBio={profile?.bio || ""} />}
     </>
   );
 }

@@ -32,20 +32,18 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* ── Meta 아이콘 ── */
-const MetaIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 36 36" fill="none">
-    <path d="M3 18.5C3 11.596 9.096 6 18 6s15 5.596 15 12.5c0 4.2-2.04 7.94-5.25 10.36V25.5h-3v4.04A14.85 14.85 0 0 1 18 31C9.096 31 3 25.404 3 18.5z" fill="none"/>
-    <path d="M2 18.5C2 10.492 9.163 4 18 4s16 6.492 16 14.5c0 4.59-2.2 8.68-5.6 11.36l-.4.31V23.5h-3v4.57A13.9 13.9 0 0 1 18 29C9.163 29 2 22.508 2 18.5z" fill="none"/>
-    <path d="M18 2C8.059 2 0 9.164 0 18s8.059 16 18 16 18-7.164 18-16S27.941 2 18 2zm0 2c7.732 0 14 6.268 14 14s-6.268 14-14 14S4 25.732 4 18 10.268 4 18 4z" fill="none"/>
-    <text x="50%" y="56%" dominantBaseline="middle" textAnchor="middle" fontSize="22" fontWeight="700" fill="#0082FB" fontFamily="sans-serif">M</text>
+/* ── 카카오 아이콘 ── */
+const KakaoIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <path d="M12 3C6.477 3 2 6.477 2 10.8c0 2.7 1.676 5.086 4.228 6.535l-1.08 3.97a.3.3 0 0 0 .46.326l4.37-2.9A12.4 12.4 0 0 0 12 18.6c5.523 0 10-3.477 10-7.8S17.523 3 12 3z" fill="#3C1E1E"/>
   </svg>
 );
 
-/* ── Apple 아이콘 ── */
-const AppleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 814 1000" fill={C.text}>
-    <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 405.8 15.4 269.4 15.4 229.6c0-127.1 52.2-194.3 154.9-196.7 47.6-1.3 93 36.8 122.5 36.8 29.5 0 84.9-47.3 153.5-47.3 20 0 126.1 2.6 194.9 94.4zm-215.5-39.8c-32.9 0-67.4-22.6-90.5-58.6-23.1-36-39.3-85-39.3-130.3 0-6.4.6-12.8 1.3-17.9 39.3 1.3 85.7 27.6 113.3 66.8 26.3 37.1 43.7 87.7 43.7 134.2 0 5.8-.6 11.6-1.3 17.9-9.1.6-18.2 1.3-27.2-11.9l-.0-.2z"/>
+/* ── 네이버 아이콘 ── */
+const NaverIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <rect width="24" height="24" rx="4" fill="#03C75A"/>
+    <path d="M13.6 12.7L10 7H7v10h3.4v-5.7L14 17h3V7h-3.4z" fill="white"/>
   </svg>
 );
 
@@ -109,6 +107,12 @@ export default function Login() {
   /* 이메일 포커스 상태 */
   const [emailFocused, setEmailFocused]   = useState(false);
   const [pwFocused,    setPwFocused]      = useState(false);
+  const [oauthTarget, setOauthTarget]     = useState(null); // "google"|"kakao"|"naver"
+
+  const handleOAuthRole = (role) => {
+    document.cookie = `oauth_role=${role}; path=/; max-age=300`;
+    window.location.href = `/oauth2/authorization/${oauthTarget}`;
+  };
 
   const parseTokenRole = (token) => {
     try {
@@ -468,15 +472,59 @@ export default function Login() {
               </div>
 
               {/* 소셜 버튼 3개 */}
-              <div style={{ display:"flex", gap:10 }}>
-                <button type="button" className="social-btn">
+              <div style={{ display:"flex", gap:8 }}>
+                <button
+                  type="button"
+                  className="social-btn"
+                  onClick={() => setOauthTarget("google")}
+                >
                   <GoogleIcon/> <span>Google</span>
                 </button>
-                <button type="button" className="social-btn">
-                  <MetaIcon/> <span>Meta</span>
+                <button
+                  type="button"
+                  className="social-btn"
+                  onClick={() => setOauthTarget("kakao")}
+                  style={{
+                    flex: 1,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    gap: 8, padding: "12px 0",
+                    background: "#FEE500",
+                    border: "1px solid #FEE500",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                    fontFamily: "'Noto Sans KR', sans-serif",
+                    fontSize: 13, fontWeight: 500,
+                    color: "#3C1E1E",
+                    transition: "background 0.18s, transform 0.15s",
+                    whiteSpace: "nowrap",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "#F5DB00"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "#FEE500"; e.currentTarget.style.transform = "translateY(0)"; }}
+                >
+                  <KakaoIcon/> <span>카카오</span>
                 </button>
-                <button type="button" className="social-btn">
-                  <AppleIcon/> <span>Apple</span>
+                <button
+                  type="button"
+                  className="social-btn"
+                  onClick={() => setOauthTarget("naver")}
+                  style={{
+                    flex: 1,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    gap: 8, padding: "12px 0",
+                    background: "#03C75A",
+                    border: "1px solid #03C75A",
+                    borderRadius: 12,
+                    cursor: "pointer",
+                    fontFamily: "'Noto Sans KR', sans-serif",
+                    fontSize: 13, fontWeight: 500,
+                    color: "#FFFFFF",
+                    transition: "background 0.18s, transform 0.15s",
+                    whiteSpace: "nowrap",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "#02B350"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "#03C75A"; e.currentTarget.style.transform = "translateY(0)"; }}
+                >
+                  <NaverIcon/> <span>네이버</span>
                 </button>
               </div>
 
@@ -526,6 +574,77 @@ export default function Login() {
 
       {/* 스피너 키프레임 */}
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+
+      {/* 소셜 로그인 역할 선택 팝업 */}
+      {oauthTarget && (
+        <div
+          onClick={() => setOauthTarget(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 2000,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: C.white, borderRadius: 18,
+              padding: "36px 40px", width: 360,
+              boxShadow: "0 8px 40px rgba(13,34,68,0.18)",
+              fontFamily: "'Noto Sans KR', sans-serif",
+            }}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8, letterSpacing: "-0.02em" }}>
+              역할을 선택해주세요
+            </h3>
+            <p style={{ fontSize: 13, color: C.textSub, marginBottom: 28, lineHeight: 1.6 }}>
+              처음 소셜 로그인 시 역할이 지정됩니다.<br/>
+              기존 계정은 자동으로 연결됩니다.
+            </p>
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                onClick={() => handleOAuthRole("MENTEE")}
+                style={{
+                  flex: 1, padding: "16px 0",
+                  borderRadius: 12, border: `2px solid ${C.border}`,
+                  background: C.white, cursor: "pointer",
+                  fontFamily: "inherit", transition: "border-color 0.18s, background 0.18s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.navy; e.currentTarget.style.background = "#F0F4F9"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.white; }}
+              >
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🎯</div>
+                <p style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>멘티</p>
+                <p style={{ fontSize: 11, color: C.textMuted }}>면접 준비하기</p>
+              </button>
+              <button
+                onClick={() => handleOAuthRole("MENTOR")}
+                style={{
+                  flex: 1, padding: "16px 0",
+                  borderRadius: 12, border: `2px solid ${C.border}`,
+                  background: C.white, cursor: "pointer",
+                  fontFamily: "inherit", transition: "border-color 0.18s, background 0.18s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.navy; e.currentTarget.style.background = "#F0F4F9"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.white; }}
+              >
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🏆</div>
+                <p style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>멘토</p>
+                <p style={{ fontSize: 11, color: C.textMuted }}>면접 코칭하기</p>
+              </button>
+            </div>
+            <button
+              onClick={() => setOauthTarget(null)}
+              style={{
+                marginTop: 18, width: "100%", padding: "10px 0",
+                borderRadius: 8, border: "none", background: "transparent",
+                color: C.textMuted, fontSize: 13, cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >취소</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

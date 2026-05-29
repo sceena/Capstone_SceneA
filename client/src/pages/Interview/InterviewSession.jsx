@@ -117,7 +117,6 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── 컨트롤 상태 ── */
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
-  const [screenShare, setScreenShare] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [ending, setEnding] = useState(false);
 
@@ -479,7 +478,11 @@ export default function InterviewSession({ role = "mentee" }) {
       if (isMentor) await updateSessionStatus(id, "completed");
     } catch {}
     await new Promise(r => setTimeout(r, 800));
-    navigate(`/report/ai/${id}`, { state: { role: isMentor ? "mentor" : "mentee" } });
+    if (isMentor) {
+      navigate(`/report/ai/${id}`, { state: { role: "mentor" } });
+    } else {
+      navigate(`/report/generating/${id}`);
+    }
   };
 
   /* ── 답변 상태 / 녹음 ── */
@@ -734,8 +737,6 @@ export default function InterviewSession({ role = "mentee" }) {
               {[
                 { icon: <MicIcon on={micOn} />, label: micOn ? "마이크" : "음소거", active: micOn, click: handleMicToggle },
                 { icon: <CamIcon on={camOn} />, label: camOn ? "카메라" : "카메라 끔", active: camOn, click: handleCamToggle },
-                { icon: <ShareIcon />, label: "화면 공유", active: !screenShare, click: () => setScreenShare(v => !v) },
-                { icon: <RecordIcon on={recording} />, label: "녹화", active: !recording, click: () => setRecording(v => !v), pink: true },
                 { icon: <ChatIcon />, label: "채팅", active: !chatOpen, click: () => setChatOpen(v => !v) },
               ].map((btn, i) => (
                 <button key={i} className={btn.active ? "ctrl-btn" : "ctrl-btn-off"} onClick={btn.click} style={{
@@ -904,18 +905,6 @@ const CamIcon = ({ on }) => (
     <rect x="1" y="4" width="11" height="9" rx="1.5" fill={on ? "white" : "rgba(255,255,255,0.5)"} />
     <path d="M12 7l5-2.5v8L12 10V7z" fill={on ? "white" : "rgba(255,255,255,0.5)"} />
     {!on && <line x1="2" y1="2" x2="16" y2="16" stroke="white" strokeWidth="1.6" strokeLinecap="round" />}
-  </svg>
-);
-const ShareIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="1" y="5" width="16" height="10" rx="1.5" stroke="white" strokeWidth="1.5" />
-    <path d="M9 1v7M6 4l3-3 3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const RecordIcon = ({ on }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="9" cy="9" r="7" stroke={on ? "rgba(255,150,150,0.8)" : "rgba(255,255,255,0.5)"} strokeWidth="1.5" />
-    <circle cx="9" cy="9" r="4" fill={on ? "#EF4444" : "rgba(255,255,255,0.5)"} />
   </svg>
 );
 const ChatIcon = () => (

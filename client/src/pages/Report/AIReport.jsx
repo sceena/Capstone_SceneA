@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import mockAiReport from "./mockAiReport";
 
@@ -97,6 +97,90 @@ function formatReplayTime(replay = {}) {
   const start = replay.start_time.split("T").pop()?.slice(0, 8);
   const end = replay.end_time.split("T").pop()?.slice(0, 8);
   return start && end ? `${start} - ${end}` : "다시듣기";
+}
+
+// ─── Audio Player ────────────────────────────────────────────────
+function AudioPlayer({ sessionId, questionId }) {
+  const [state, setState] = useState("idle"); // idle | loading | playing | paused | error
+  const audioRef = useRef(null);
+  const blobUrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
+
+  const handleClick = async () => {
+    if (state === "loading") return;
+    if (state === "playing") { audioRef.current?.pause(); setState("paused"); return; }
+    if (state === "paused" && audioRef.current) { audioRef.current.play(); setState("playing"); return; }
+
+    setState("loading");
+    try {
+      const answers = await requestJson(`/api/sessions/${sessionId}/questions/${questionId}/answers`);
+      if (!answers?.length) throw new Error("no answer");
+      const answerId = answers[0].id;
+
+      const token = (() => {
+        try { const u = JSON.parse(localStorage.getItem("scena_auth")); return u?.accessToken || u?.token || u?.access_token; } catch { return null; }
+      })();
+      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/questions/${questionId}/answers/${answerId}/audio`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("audio fetch failed");
+
+      const blob = await res.blob();
+      blobUrlRef.current = URL.createObjectURL(blob);
+      const audio = new Audio(blobUrlRef.current);
+      audioRef.current = audio;
+      audio.onended = () => setState("idle");
+      audio.onerror = () => setState("error");
+      await audio.play();
+      setState("playing");
+    } catch {
+      setState("error");
+    }
+  };
+
+  const cfg = {
+    idle:    { label: "답변 듣기",    icon: "play",    color: GREEN },
+    loading: { label: "불러오는 중…", icon: "spin",    color: GREEN },
+    playing: { label: "일시정지",     icon: "pause",   color: GREEN },
+    paused:  { label: "이어 듣기",    icon: "play",    color: GREEN },
+    error:   { label: "오디오 없음",  icon: "none",    color: "#bbb" },
+  }[state];
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={state === "loading" || state === "error"}
+      style={{
+        fontSize: 12, color: cfg.color,
+        border: `1px solid ${cfg.color}`,
+        background: state === "playing" ? "#E8F5EE" : "transparent",
+        borderRadius: 99, padding: "5px 12px",
+        cursor: state === "loading" || state === "error" ? "default" : "pointer",
+        display: "flex", alignItems: "center", gap: 6, transition: "background 0.15s",
+        fontFamily: "inherit",
+      }}
+    >
+      {state === "loading" ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+      ) : state === "pause" || state === "idle" || state === "paused" ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill={state === "playing" ? GREEN : "none"} stroke={cfg.color} strokeWidth="2">
+          {state === "playing"
+            ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>
+            : <polygon points="5 3 19 12 5 21 5 3"/>
+          }
+        </svg>
+      ) : null}
+      {cfg.label}
+    </button>
+  );
 }
 
 // ─── Loading Screen ──────────────────────────────────────────────
@@ -367,6 +451,7 @@ function MenteeReport({ sessionId, report }) {
     strengths: item.strengths || [],
     improvements: item.improvements || [],
     replay: item.replay,
+    questionId: item.question_id,
   }));
   const metaBadges = report?.__mock
     ? ["1차 AI 리포트", "분석 완료", "개발 mock"]
@@ -455,10 +540,7 @@ function MenteeReport({ sessionId, report }) {
               )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
-                <button style={{ fontSize: 12, color: GREEN, border: `1px solid ${GREEN}`, background: "transparent", borderRadius: 99, padding: "5px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  {qa.time}
-                </button>
+                <AudioPlayer sessionId={sessionId} questionId={qa.questionId} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
                 <div style={{ background: "#F0FDF4", borderRadius: 10, padding: 14 }}>

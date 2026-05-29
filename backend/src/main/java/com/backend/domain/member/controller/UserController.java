@@ -1,6 +1,7 @@
 package com.backend.domain.member.controller;
 
 import com.backend.domain.member.dto.request.UserProfileUpdateRequest;
+import com.backend.domain.member.dto.response.MentorListResponse;
 import com.backend.domain.member.dto.response.MySessionHistoryResponse;
 import com.backend.domain.member.dto.response.UserProfileResponse;
 import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
@@ -31,6 +32,19 @@ import org.springframework.web.multipart.MultipartFile;
 public class UserController {
 
     private final UserService userService;
+
+    @Operation(summary = "멘토 목록 조회", description = "keyword로 멘토를 검색한다. 미입력 시 전체 반환. page/size로 페이징.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음 또는 만료")
+    })
+    @GetMapping("/mentors")
+    public ResponseEntity<MentorListResponse.PageResponse> getMentors(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return ResponseEntity.ok(userService.getMentors(keyword, PageRequest.of(page, size)));
+    }
 
     @Operation(summary = "내 프로필 조회", description = "로그인한 사용자의 프로필 정보를 조회한다.")
     @ApiResponses({

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import useAuthStore from "../../store/authStore";
 
 /* ============================================================
    멘토 정보 등록  (pages/mentor/InfoRegister.jsx)
@@ -34,17 +35,16 @@ const LogoIcon = ({ size=26, color=C.white }) => (
 );
 
 /* ── 헤더 ── */
-const Header = ({ userName="박지훈" }) => (
+const Header = ({ userName }) => (
   <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
     <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
       <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
         안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
       </span>
-      <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
-      <div style={{ display:"flex", gap:32 }}>
-        {["멘토 탐색","예약 확인","MyPage"].map((l,i)=>(
-          <Link key={i} to="#" style={{ fontSize:14, fontWeight:l==="MyPage"?700:400, color:C.white, textDecoration:"none", opacity:0.85 }}
-            onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0.85}>{l}</Link>
+      <div style={{ display:"flex", alignItems:"center", gap:24 }}>
+        {[{l:"대시보드",to:"/dashboard/mentor"},{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentor/mypage"}].map((x,i)=>(
+          <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.l==="MyPage"?700:400, color:C.white, textDecoration:"none", opacity:0.85 }}
+            onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0.85}>{x.l}</Link>
         ))}
       </div>
     </nav>
@@ -432,6 +432,8 @@ const Step4 = ({ d1, d2, d3 }) => {
 /* ══════════════ 메인 컴포넌트 ══════════════ */
 export default function MentorInfoRegister() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -466,7 +468,7 @@ export default function MentorInfoRegister() {
         }
       `}</style>
 
-      <Header/>
+      <Header userName={userName}/>
 
       {/* 페이지 타이틀 */}
       <div style={{ background:C.white, borderBottom:`1px solid ${C.border}`, padding:"14px 5%" }}>

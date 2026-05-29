@@ -1,6 +1,7 @@
 package com.backend.domain.member.controller;
 
 import com.backend.domain.member.dto.request.UserProfileUpdateRequest;
+import com.backend.domain.member.dto.response.MentorListResponse;
 import com.backend.domain.member.dto.response.MySessionHistoryResponse;
 import com.backend.domain.member.dto.response.SessionHistoryItemResponse;
 import com.backend.domain.member.dto.response.UserProfileResponse;
@@ -45,6 +46,70 @@ class UserControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    @Test
+    void 멘토_목록_조회_키워드없이_성공_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(
+                List.of(
+                        new MentorListResponse(10L, "박지훈", "지훈멘토", "네이버 백엔드 6년차", null,
+                                List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill"))),
+                        new MentorListResponse(11L, "이수연", "수연멘토", null, null, List.of())
+                ), 2L, 1
+        );
+        given(userService.getMentors(any(), any())).willReturn(response);
+
+        mockMvc.perform(get("/api/users/mentors")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].id").value(10))
+                .andExpect(jsonPath("$.content[0].name").value("박지훈"))
+                .andExpect(jsonPath("$.content[0].bio").value("네이버 백엔드 6년차"))
+                .andExpect(jsonPath("$.content[0].tags[0].name").value("Spring"))
+                .andExpect(jsonPath("$.content[1].name").value("이수연"))
+                .andExpect(jsonPath("$.total_elements").value(2))
+                .andExpect(jsonPath("$.total_pages").value(1));
+    }
+
+    @Test
+    void 멘토_목록_조회_키워드로_검색_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(
+                List.of(new MentorListResponse(10L, "박지훈", "지훈멘토", "Spring 전문", null,
+                        List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill")))),
+                1L, 1
+        );
+        given(userService.getMentors(any(), any())).willReturn(response);
+
+        mockMvc.perform(get("/api/users/mentors")
+                        .param("keyword", "Spring")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].tags[0].name").value("Spring"))
+                .andExpect(jsonPath("$.total_elements").value(1));
+    }
+
+    @Test
+    void 멘토_목록_조회_결과없으면_빈_페이지_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(List.of(), 0L, 0);
+        given(userService.getMentors(any(), any())).willReturn(response);
+
+        mockMvc.perform(get("/api/users/mentors")
+                        .param("keyword", "없는키워드")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.total_elements").value(0));
+    }
+
+    @Test
+    void 멘토_목록_조회_인증없이_401() throws Exception {
+        mockMvc.perform(get("/api/users/mentors"))
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test
     void 내_프로필_조회_성공_200() throws Exception {

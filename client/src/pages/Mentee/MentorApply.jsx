@@ -20,10 +20,9 @@ const LogoIcon=({size=26,color=C.white})=>(
 const Header=()=>(
   <header style={{background:C.navy,padding:"0 5%",position:"sticky",top:0,zIndex:100}}>
     <nav style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
-      <span style={{fontSize:15,fontWeight:600,color:C.white}}>안녕하세요 <span style={{color:"rgba(255,255,255,0.75)"}}>김민준</span>님</span>
-      <Link to="/" style={{textDecoration:"none"}}><LogoIcon size={28}/></Link>
+      <span style={{fontSize:15,fontWeight:600,color:C.white}}>안녕하세요님</span>
       <div style={{display:"flex",gap:32}}>
-        {[{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"#"}].map((x,i)=>(
+        {[{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentee/mypage"}].map((x,i)=>(
           <Link key={i} to={x.to} style={{fontSize:14,fontWeight:x.l==="MyPage"?700:400,color:C.white,textDecoration:"none",opacity:0.85}}
             onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=0.85}>{x.l}</Link>
         ))}

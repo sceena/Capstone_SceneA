@@ -7,6 +7,7 @@ import com.backend.domain.ai.dto.request.AiCompanyContext;
 import com.backend.domain.ai.dto.request.AiInterviewAnswerRequest;
 import com.backend.domain.ai.dto.request.AiReportRequest;
 import com.backend.domain.ai.dto.response.AiReportResponse;
+import com.backend.domain.answerEvaluation.service.AnswerEvaluationService;
 import com.backend.domain.analysisReport.dto.request.MentorFeedbackRequest;
 import com.backend.domain.analysisReport.dto.response.FitGapResponse;
 import com.backend.domain.analysisReport.dto.response.JobSkillInfo;
@@ -64,6 +65,7 @@ public class ReportService {
     private final ResumeRepository resumeRepository;
     private final ResumeSkillRepository resumeSkillRepository;
     private final AiReportClient aiReportClient;
+    private final AnswerEvaluationService answerEvaluationService;
     private final ObjectMapper objectMapper;
 
     public ReportResponse getReport(Long memberId, Long sessionId) {
@@ -102,6 +104,7 @@ public class ReportService {
                 extractWorstMoment(aiResponse),
                 rawAiResponseJson
         );
+        answerEvaluationService.saveAiDrafts(session, aiResponse.questionReports());
 
         return ReportResponse.from(reportRepository.save(report), aiResponse);
     }

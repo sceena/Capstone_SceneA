@@ -67,8 +67,11 @@ export default function ReportWaitingPage() {
         <h2 style={{ fontSize: 22, fontWeight: 700, color: NAVY, margin: "0 0 10px" }}>
           최종 리포트 준비 중
         </h2>
-        <p style={{ fontSize: 14, color: "#666", margin: 0 }}>
+        <p style={{ fontSize: 14, color: "#666", margin: "0 0 10px" }}>
           멘토가 피드백을 완료하면 리포트가 자동 전달됩니다
+        </p>
+        <p style={{ fontSize: 13, color: GREEN, fontWeight: 600, margin: 0 }}>
+          ⏱ 멘토의 최종 코멘트는 세션 종료 후 60분 이내에 전달됩니다
         </p>
       </div>
 

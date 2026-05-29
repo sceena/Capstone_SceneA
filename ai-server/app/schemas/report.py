@@ -96,6 +96,7 @@ class Replay(BaseModel):
 
 class QuestionReport(BaseModel):
     question_id: int
+    answer_id: int | None = None
     question: str
     answer: str
     score: float
@@ -103,6 +104,8 @@ class QuestionReport(BaseModel):
     strengths: list[str]
     improvements: list[str]
     evaluation_source: str
+    ai_model_name: str
+    prompt_version: str
     replay: Replay
 
 

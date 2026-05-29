@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { getSessionReport, saveMentorScore, saveMentorFeedback } from "../../api/sessions";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { getSessionReport, saveMentorAnswerEvaluation, saveMentorFeedback, saveMentorScore } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
@@ -79,7 +79,7 @@ function StarPicker({ value, onChange }) {
 }
 
 function QuestionCard({ qna, feedbacks, onChange }) {
-  const fb = feedbacks[qna.id] || { score: qna.aiScore, comment: "" };
+  const fb = feedbacks[qna.id] || { score: qna.aiScore, reasoning: "", strengths: "", improvements: "", comment: "" };
   return (
     <div style={{ background: "white", borderRadius: 14, border: "1px solid #E0DDD8", overflow: "hidden", marginBottom: 16 }}>
       <div style={{ background: "#F8F7F4", padding: "14px 20px", borderBottom: "1px solid #E0DDD8" }}>
@@ -103,15 +103,15 @@ function QuestionCard({ qna, feedbacks, onChange }) {
           </p>
           <StarPicker value={fb.score} onChange={(v) => onChange(qna.id, "score", v)} />
         </div>
-        <div>
+        <div style={{ marginBottom: 12 }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 8 }}>
-            이 질문에 대한 코멘트
-            <span style={{ fontSize: 11, fontWeight: 400, color: "#999", marginLeft: 6 }}>선택</span>
+            평가 근거
+            <span style={{ fontSize: 11, fontWeight: 400, color: "#999", marginLeft: 6 }}>DPO chosen reasoning</span>
           </p>
           <textarea
-            value={fb.comment}
-            onChange={(e) => onChange(qna.id, "comment", e.target.value)}
-            placeholder="해당 답변의 강점, 개선점을 구체적으로 작성해주세요."
+            value={fb.reasoning}
+            onChange={(e) => onChange(qna.id, "reasoning", e.target.value)}
+            placeholder="AI 평가를 현직자 관점에서 어떻게 수정했는지 근거를 작성해주세요."
             style={{
               width: "100%", borderRadius: 8, border: "1px solid #D1D5DB",
               padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333",
@@ -121,6 +121,26 @@ function QuestionCard({ qna, feedbacks, onChange }) {
             onFocus={(e) => (e.target.style.borderColor = GREEN)}
             onBlur={(e) => (e.target.style.borderColor = "#D1D5DB")}
           />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 8 }}>좋은 점</p>
+            <textarea
+              value={fb.strengths}
+              onChange={(e) => onChange(qna.id, "strengths", e.target.value)}
+              placeholder="한 줄에 하나씩 작성"
+              style={{ width: "100%", minHeight: 72, borderRadius: 8, border: "1px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 8 }}>개선할 점</p>
+            <textarea
+              value={fb.improvements}
+              onChange={(e) => onChange(qna.id, "improvements", e.target.value)}
+              placeholder="한 줄에 하나씩 작성"
+              style={{ width: "100%", minHeight: 72, borderRadius: 8, border: "1px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -148,7 +168,27 @@ export default function MentorFeedbackPage() {
   useEffect(() => {
     getSessionReport(sessionId)
       .then(data => {
-        if (data?.mentees?.length) setMenteeList(data.mentees);
+        if (data?.mentees?.length) {
+          setMenteeList(data.mentees);
+          return;
+        }
+        const questionReports = data?.ai_report?.question_reports || [];
+        if (questionReports.length) {
+          setMenteeList([{
+            menteeId: `session-${sessionId}`,
+            menteeName: "면접 참여자",
+            menteeTrack: data?.report_status === "final" ? "최종 리포트" : "1차 AI 리포트",
+            qnas: questionReports.map((report, index) => ({
+              id: report.answer_id || report.question_id || `q-${index}`,
+              questionId: report.question_id,
+              answerId: report.answer_id,
+              question: `Q${index + 1} · ${report.question}`,
+              aiScore: Math.max(1, Math.min(5, Number(report.score || 0) / 2)),
+              aiComment: report.reasoning || "",
+              transcript: report.answer || "",
+            })),
+          }]);
+        }
       })
       .catch(() => {});
   }, [sessionId]);
@@ -158,7 +198,15 @@ export default function MentorFeedbackPage() {
     const init = {};
     menteeList.forEach(m => {
       const fb = {};
-      m.qnas.forEach(q => { fb[q.id] = { score: q.aiScore, comment: "" }; });
+      m.qnas.forEach(q => {
+        fb[q.id] = {
+          score: q.aiScore,
+          reasoning: q.aiComment || "",
+          strengths: "",
+          improvements: "",
+          comment: "",
+        };
+      });
       init[m.menteeId] = { feedbacks: fb, totalFeedback: "", mentorScore: 4.0 };
     });
     setAllFeedbacks(init);
@@ -193,7 +241,7 @@ export default function MentorFeedbackPage() {
     if (field === "score") {
       const qna = currentMentee?.qnas.find(q => q.id === qId);
       if (qna?.answerId) {
-        saveMentorScore(sessionId, qId, qna.answerId, value).catch(() => {});
+        saveMentorScore(sessionId, qna.questionId || qId, qna.answerId, value).catch(() => {});
       }
     }
   };
@@ -227,6 +275,17 @@ export default function MentorFeedbackPage() {
     }
     setIsSending(true);
     try {
+      await Promise.all(currentMentee.qnas
+        .filter((qna) => qna.answerId)
+        .map((qna) => {
+          const fb = currentFbData.feedbacks[qna.id] || {};
+          return saveMentorAnswerEvaluation(sessionId, qna.answerId, {
+            reasoning: fb.reasoning || fb.comment || "멘토가 점수와 피드백을 검토했습니다.",
+            score: Number(fb.score || qna.aiScore || 0) * 2,
+            strengths: splitLines(fb.strengths),
+            improvements: splitLines(fb.improvements),
+          });
+        }));
       await saveMentorFeedback(sessionId, currentFbData.totalFeedback);
     } catch {}
     const newSent = new Set([...sentMentees, currentMentee.menteeId]);
@@ -236,6 +295,11 @@ export default function MentorFeedbackPage() {
     const nextIdx = menteeList.findIndex((m, i) => i > currentMenteeIdx && !newSent.has(m.menteeId));
     if (nextIdx !== -1) setCurrentMenteeIdx(nextIdx);
   };
+
+  const splitLines = (text) => (text || "")
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const allSent = menteeList.length > 0 && menteeList.every(m => sentMentees.has(m.menteeId));
 
@@ -258,10 +322,24 @@ export default function MentorFeedbackPage() {
         display: "flex", alignItems: "center", justifyContent: "space-between",
         position: "sticky", top: 0, zIndex: 50,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN }} />
-          <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>멘토 최종 코멘트 작성</span>
+        {/* 좌측: 로고 + 페이지명 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <Link to="/dashboard/mentor" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: GREEN, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M6 12L2 8l4-4M10 4l4 4-4 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <span style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, fontWeight: 500 }}>대시보드</span>
+          </Link>
+          <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>/</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN }} />
+            <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>멘토 최종 코멘트 작성</span>
+          </div>
         </div>
+
+        {/* 우측: 타이머 + 진행 상황 */}
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {/* Countdown */}
           <div style={{
@@ -346,8 +424,8 @@ export default function MentorFeedbackPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>1</div>
             <div>
-              <p style={{ fontWeight: 700, fontSize: 15, color: "#111" }}>질문별 멘토 별점 & 코멘트</p>
-              <p style={{ fontSize: 12, color: "#888" }}>AI 별점을 멘토 별점으로 덮어쓰고, 구체적 피드백을 남겨주세요</p>
+              <p style={{ fontWeight: 700, fontSize: 15, color: "#111" }}>질문별 멘토 평가 수정</p>
+              <p style={{ fontSize: 12, color: "#888" }}>AI 초안은 보존하고, 멘토의 점수·근거·좋은 점·개선점을 DPO용 수정본으로 저장합니다</p>
             </div>
             <div style={{ marginLeft: "auto", background: "#F8F7F4", borderRadius: 99, padding: "4px 14px" }}>
               <span style={{ fontSize: 12, color: "#888" }}>Q 평균 </span>

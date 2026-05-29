@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMentors } from "../../api/users";
@@ -101,48 +101,23 @@ export default function MentorSearch() {
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
-  const [mentors, setMentors]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState("");
-  const [search, setSearch]     = useState("");
-  const [focused, setFocused]   = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [mentors, setMentors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
+  const [search, setSearch]   = useState("");
+  const [focused, setFocused] = useState(false);
 
-  useEffect(() => {
-    getMentors()
-      .then(data => {
-        setMentors(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("멘토 목록을 불러오지 못했어요.");
-        setLoading(false);
-      });
-  }, []);
+  const fetchMentors = (kw = "") => {
+    setLoading(true);
+    setError("");
+    getMentors({ keyword: kw })
+      .then(data => { setMentors(data); setLoading(false); })
+      .catch(() => { setError("멘토 목록을 불러오지 못했어요."); setLoading(false); });
+  };
 
-  const categories = useMemo(() => {
-    const cats = new Set();
-    mentors.forEach(m => m.tags?.forEach(t => { if (t.category) cats.add(t.category); }));
-    return [...cats];
-  }, [mentors]);
+  useEffect(() => { fetchMentors(); }, []);
 
-  const filtered = useMemo(() => {
-    return mentors.filter(m => {
-      if (categoryFilter) {
-        const hasCategory = m.tags?.some(t => t.category === categoryFilter);
-        if (!hasCategory) return false;
-      }
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          m.name?.toLowerCase().includes(q) ||
-          m.bio?.toLowerCase().includes(q) ||
-          m.tags?.some(t => t.name.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
-  }, [mentors, search, categoryFilter]);
+  const handleSearch = () => fetchMentors(search);
 
   return (
     <>
@@ -163,8 +138,8 @@ export default function MentorSearch() {
           <p style={{ fontSize:13, color:C.textMuted }}>나에게 맞는 멘토를 찾아 면접을 준비해보세요</p>
         </div>
 
-        {/* 검색 + 필터 */}
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28, flexWrap:"wrap" }}>
+        {/* 검색 */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:28 }}>
           <div style={{ position:"relative" }}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }}>
               <circle cx="6" cy="6" r="4.5" stroke={C.textMuted} strokeWidth="1.4"/>
@@ -174,6 +149,7 @@ export default function MentorSearch() {
               placeholder="이름, 태그, 소개 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleSearch()}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               style={{
@@ -185,33 +161,26 @@ export default function MentorSearch() {
               }}
             />
           </div>
-
-          {categories.length > 0 && (
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              <button onClick={() => setCategoryFilter("")} style={{
-                padding:"9px 16px", borderRadius:999, fontSize:13, fontWeight:500,
-                background:!categoryFilter?C.navy:C.white,
-                color:!categoryFilter?C.white:C.textSub,
-                border:`1px solid ${!categoryFilter?C.navy:C.border}`,
-                cursor:"pointer", fontFamily:"inherit",
-              }}>전체</button>
-              {categories.map(cat => (
-                <button key={cat} onClick={() => setCategoryFilter(cat)} style={{
-                  padding:"9px 16px", borderRadius:999, fontSize:13, fontWeight:500,
-                  background:categoryFilter===cat?C.navy:C.white,
-                  color:categoryFilter===cat?C.white:C.textSub,
-                  border:`1px solid ${categoryFilter===cat?C.navy:C.border}`,
-                  cursor:"pointer", fontFamily:"inherit",
-                }}>{cat}</button>
-              ))}
-            </div>
+          <button onClick={handleSearch} style={{
+            padding:"11px 22px", borderRadius:999,
+            background:C.navy, color:C.white, border:"none",
+            fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+          }}>검색</button>
+          {search && (
+            <button onClick={() => { setSearch(""); fetchMentors(""); }} style={{
+              padding:"11px 16px", borderRadius:999,
+              background:"transparent", color:C.textMuted,
+              border:`1px solid ${C.border}`, fontSize:13,
+              cursor:"pointer", fontFamily:"inherit",
+            }}>전체보기</button>
           )}
+
         </div>
 
         {/* 결과 수 */}
         {!loading && !error && (
           <p style={{ fontSize:15, color:C.textSub, marginBottom:20 }}>
-            <span style={{ fontWeight:700, color:C.text }}>{filtered.length}명</span>의 멘토를 찾았어요
+            <span style={{ fontWeight:700, color:C.text }}>{mentors.length}명</span>의 멘토를 찾았어요
           </p>
         )}
 
@@ -241,25 +210,25 @@ export default function MentorSearch() {
         )}
 
         {/* 그리드 */}
-        {!loading && !error && filtered.length > 0 && (
+        {!loading && !error && mentors.length > 0 && (
           <div className="mgrid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:18 }}>
-            {filtered.map(m => (
+            {mentors.map(m => (
               <MentorCard key={m.id} m={m} onClick={() => navigate(`/mentor/apply/${m.id}`)}/>
             ))}
           </div>
         )}
 
         {/* 빈 상태 */}
-        {!loading && !error && filtered.length === 0 && (
+        {!loading && !error && mentors.length === 0 && (
           <div style={{ textAlign:"center", padding:"80px 0" }}>
             <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>
-              {mentors.length === 0 ? "아직 등록된 멘토가 없어요" : "조건에 맞는 멘토가 없어요"}
+              {search ? "검색 결과가 없어요" : "아직 등록된 멘토가 없어요"}
             </p>
             <p style={{ fontSize:13, color:C.textMuted, marginBottom:20 }}>
-              {mentors.length === 0 ? "멘토로 회원가입하면 여기에 표시돼요" : "검색어나 필터를 변경해보세요"}
+              {search ? "다른 검색어로 시도해보세요" : "멘토로 회원가입하면 여기에 표시돼요"}
             </p>
-            {mentors.length > 0 && (
-              <button onClick={() => { setSearch(""); setCategoryFilter(""); }} style={{
+            {search && (
+              <button onClick={() => { setSearch(""); fetchMentors(""); }} style={{
                 padding:"10px 24px", background:C.navy, color:C.white,
                 border:"none", borderRadius:999, fontSize:13, fontWeight:600,
                 cursor:"pointer", fontFamily:"inherit",

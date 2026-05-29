@@ -56,8 +56,9 @@ const Header = ({ userName, accessToken }) => {
   );
 };
 
-const MentorCard = ({ m, onClick }) => {
-  const av = getAvatar(m.email);
+const MentorCard = ({ m, onClick, isMentor }) => {
+  const av = getAvatar(m.name);
+  const imageUrl = m.profile_image_url || m.profileImageUrl;
   return (
     <div onClick={onClick} style={{
       background:C.white, borderRadius:16, padding:"24px 20px",
@@ -68,8 +69,8 @@ const MentorCard = ({ m, onClick }) => {
       onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="none"; }}
     >
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", textAlign:"center", marginBottom:14 }}>
-        {m.profileImageUrl ? (
-          <img src={m.profileImageUrl} alt={m.name} style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:`2px solid ${C.border}` }}/>
+        {imageUrl ? (
+          <img src={imageUrl} alt={m.name} style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:`2px solid ${C.border}` }}/>
         ) : (
           <div style={{ width:64, height:64, borderRadius:"50%", background:av.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, marginBottom:10 }}>{av.animal}</div>
         )}
@@ -85,13 +86,22 @@ const MentorCard = ({ m, onClick }) => {
         </div>
       )}
 
-      <button style={{
-        width:"100%", padding:"10px 0",
-        background:C.navy, color:C.white,
-        border:"none", borderRadius:10,
-        fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-        marginTop: m.tags?.length > 0 ? 0 : 8,
-      }}>신청하기</button>
+      {isMentor ? (
+        <div style={{
+          width:"100%", padding:"10px 0", borderRadius:10,
+          background:C.bg, border:`1px solid ${C.border}`,
+          fontSize:13, fontWeight:500, color:C.textMuted,
+          textAlign:"center", marginTop: m.tags?.length > 0 ? 0 : 8,
+        }}>멘토는 신청할 수 없어요</div>
+      ) : (
+        <button style={{
+          width:"100%", padding:"10px 0",
+          background:C.navy, color:C.white,
+          border:"none", borderRadius:10,
+          fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+          marginTop: m.tags?.length > 0 ? 0 : 8,
+        }}>신청하기</button>
+      )}
     </div>
   );
 };
@@ -209,11 +219,40 @@ export default function MentorSearch() {
           </div>
         )}
 
+        {/* 멘토 사용자에게 등록 유도 카드 */}
+        {!loading && !error && user?.role === "mentor" && (
+          <div style={{
+            background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navyMid} 100%)`,
+            borderRadius:16, padding:"28px 32px", marginBottom:18,
+            display:"flex", alignItems:"center", justifyContent:"space-between", gap:20,
+          }}>
+            <div>
+              <p style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.5)", letterSpacing:"0.1em", marginBottom:6 }}>MENTOR</p>
+              <p style={{ fontSize:18, fontWeight:700, color:C.white, marginBottom:6 }}>멘토 프로필을 등록해보세요!</p>
+              <p style={{ fontSize:13, color:"rgba(255,255,255,0.65)", lineHeight:1.6 }}>
+                가능 시간과 태그를 등록하면 멘티들이 나를 찾을 수 있어요
+              </p>
+            </div>
+            <button onClick={() => navigate("/mentor/register")} style={{
+              padding:"13px 28px", background:C.white, color:C.navy,
+              border:"none", borderRadius:10,
+              fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+              flexShrink:0, transition:"transform 0.15s",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}
+            >지금 등록하기</button>
+          </div>
+        )}
+
         {/* 그리드 */}
         {!loading && !error && mentors.length > 0 && (
           <div className="mgrid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:18 }}>
             {mentors.map(m => (
-              <MentorCard key={m.id} m={m} onClick={() => navigate(`/mentor/apply/${m.id}`)}/>
+              <MentorCard key={m.id} m={m}
+                isMentor={user?.role === "mentor"}
+                onClick={() => user?.role !== "mentor" && navigate(`/mentor/apply/${m.id}`, { state: { mentor: m } })}
+              />
             ))}
           </div>
         )}

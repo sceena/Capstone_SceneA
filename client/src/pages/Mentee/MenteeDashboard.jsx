@@ -301,13 +301,13 @@ export default function MenteeDashboard() {
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
-  const [sessions, setSessions] = useState(DUMMY_SESSIONS);
+  const [sessions, setSessions] = useState([]);
   const [unreadFinals, setUnreadFinals] = useState([]);
 
   useEffect(() => {
     getMySessions()
-      .then(data => { if (data?.length) setSessions(data); })
-      .catch(() => {});
+      .then(data => { setSessions(data || []); })
+      .catch(() => { setSessions([]); });
   }, []);
 
   useEffect(() => {

@@ -373,10 +373,10 @@ export default function MentorDashboard() {
 
   const [allSessions, setAllSessions] = useState([]);
   useEffect(() => {
-    getMySessions().then(data => { if (data?.length) setAllSessions(data); }).catch(() => {});
+    getMySessions().then(data => { setAllSessions(data || []); }).catch(() => { setAllSessions([]); });
   }, []);
 
-  const rawSessions = allSessions.length > 0 ? allSessions : DUMMY_SESSIONS;
+  const rawSessions = allSessions;
 
   /* API 응답에서 UI 데이터 파생 — 면접 세션만 (멘토링은 면접 종료 후 자동 진입) */
   const sessions = rawSessions
@@ -390,7 +390,7 @@ export default function MentorDashboard() {
       time: s.scheduledAt?.slice(11, 16) ?? "",
     }));
 
-  const [requests, setRequests] = useState(DUMMY_REQUESTS);
+  const [requests, setRequests] = useState([]);
   useEffect(() => {
     const pending = allSessions.filter(s => s.status === "pending");
     if (pending.length > 0) {

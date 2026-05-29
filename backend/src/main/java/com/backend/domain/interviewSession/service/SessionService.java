@@ -32,8 +32,17 @@ public class SessionService {
 
     @Transactional
     public SessionCreateResponse createSession(Long mentorId, SessionCreateRequest request) {
-        Member mentor = memberRepository.findById(mentorId)
+        Member requester = memberRepository.findById(mentorId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        Member mentor = requester;
+        if (request.mentorId() != null && requester.getRole() == Role.MENTEE) {
+            mentor = memberRepository.findById(request.mentorId())
+                    .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+            if (mentor.getRole() != Role.MENTOR) {
+                throw new CustomException(ErrorCode.INVALID_REQUEST);
+            }
+        }
 
         InterviewSession session = InterviewSession.builder()
                 .mentor(mentor)
@@ -41,7 +50,18 @@ public class SessionService {
                 .scheduledAt(java.time.LocalDateTime.now())
                 .build();
 
-        return SessionCreateResponse.from(sessionRepository.save(session));
+        InterviewSession savedSession = sessionRepository.save(session);
+
+        if (requester.getRole() == Role.MENTEE) {
+            SessionParticipant participant = SessionParticipant.builder()
+                    .interviewSession(savedSession)
+                    .member(requester)
+                    .answerStatus(AnswerStatus.WAITING)
+                    .build();
+            participantRepository.save(participant);
+        }
+
+        return SessionCreateResponse.from(savedSession);
     }
 
     public SessionDetailResponse getSession(Long memberId, Long sessionId) {

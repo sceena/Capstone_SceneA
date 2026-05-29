@@ -1,11 +1,13 @@
 package com.backend.domain.interviewQuestion.controller;
 
+import com.backend.domain.ai.dto.response.AiSessionQuestionGenerationResponse;
 import com.backend.domain.interviewQuestion.dto.request.QuestionCreateRequest;
 import com.backend.domain.interviewQuestion.dto.request.QuestionUpdateRequest;
 import com.backend.domain.interviewQuestion.dto.response.QuestionCreateResponse;
 import com.backend.domain.interviewQuestion.dto.response.QuestionDetailResponse;
 import com.backend.domain.interviewQuestion.dto.response.QuestionUpdateResponse;
 import com.backend.domain.interviewQuestion.service.QuestionService;
+import com.backend.domain.interviewQuestion.service.RecommendedQuestionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -15,7 +17,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -27,6 +36,7 @@ import java.util.List;
 public class QuestionController {
 
     private final QuestionService questionService;
+    private final RecommendedQuestionService recommendedQuestionService;
 
     @Operation(summary = "면접 질문 생성", description = "AI가 생성한 질문을 세션에 저장한다.")
     @ApiResponses({
@@ -42,6 +52,20 @@ public class QuestionController {
             @RequestBody QuestionCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(questionService.createQuestions(mentorId, id, request));
+    }
+
+    @Operation(summary = "AI 추천 질문 생성", description = "지원자 제출 서류를 기반으로 공통 질문과 지원자별 개인 질문을 생성한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "추천 질문 생성 성공"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "세션 또는 지원자 서류 없음"),
+            @ApiResponse(responseCode = "502", description = "AI 서버 호출 실패")
+    })
+    @PostMapping("/recommendations")
+    public ResponseEntity<AiSessionQuestionGenerationResponse> generateRecommendedQuestions(
+            @AuthenticationPrincipal Long mentorId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(recommendedQuestionService.generateRecommendedQuestions(mentorId, id));
     }
 
     @Operation(summary = "세션 질문 목록 조회", description = "특정 세션의 전체 질문 목록을 조회한다.")

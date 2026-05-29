@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation, useParams } from "react-router-dom";
 import { requestReservation } from "../../api/reservations";
 import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 import useAuthStore from "../../store/authStore";
@@ -49,6 +49,21 @@ const MENTOR={
   maxCapacity:4,
 };
 
+const RESUME_DRAFT_KEY = "scena_resume_draft";
+
+const getStoredResumeContent = () => {
+  try {
+    const draft = JSON.parse(localStorage.getItem(RESUME_DRAFT_KEY));
+    if (!Array.isArray(draft)) return "";
+    return draft
+      .filter(item => item?.content?.trim())
+      .map(item => `[${item.title || "자기소개서"}]\n${item.content.trim()}`)
+      .join("\n\n");
+  } catch {
+    return "";
+  }
+};
+
 export default function MentorApply(){
   const navigate=useNavigate();
   const { state: navState } = useLocation();
@@ -71,7 +86,14 @@ export default function MentorApply(){
     try {
       const selectedSlot = mentor.availableDates[selDateIdx];
       const jobPosting = navState?.jobPosting;
-      const resumeContent = navState?.resumeContent;
+      const resumeContent = navState?.resumeContent || getStoredResumeContent();
+
+      if (!resumeContent.trim()) {
+        setLoading(false);
+        alert("면접 신청 전에 자소서를 먼저 등록해 주세요.");
+        navigate("/mentee/resume");
+        return;
+      }
 
       let sessionId = null;
       let jobPostingId = null;
@@ -96,7 +118,7 @@ export default function MentorApply(){
       }
 
       if (sessionId && resumeContent) {
-        try { await saveResume(sessionId, resumeContent); } catch {}
+        await saveResume(sessionId, resumeContent);
       }
 
       await requestReservation({

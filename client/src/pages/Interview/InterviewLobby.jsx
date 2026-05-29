@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   createQuestions,
@@ -93,20 +93,22 @@ export default function InterviewRobby({ role = "mentee" }) {
     video.play().catch(() => {});
   }, [stream]);
 
-  /* 카메라 초기화 - selectedDeviceId 변경 시마다 재실행 */
-  useEffect(() => {
+  const startCameraPreview = useCallback((deviceId = selectedDeviceId) => {
     const supportError = mediaSupportError();
     if (supportError) {
       setCamStatus("denied");
       setCamError(supportError);
-      return;
+      return () => {};
     }
 
     let cancelled = false;
     setCamStatus("loading");
     setCamError("");
 
-    openAudioVideoStream(selectedDeviceId)
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+
+    openAudioVideoStream(deviceId)
       .then(s => {
         if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = s;
@@ -120,7 +122,7 @@ export default function InterviewRobby({ role = "mentee" }) {
         const actualDeviceId = getStreamVideoDeviceId(s);
         if (actualDeviceId) {
           localStorage.setItem('preferredCameraId', actualDeviceId);
-          if (actualDeviceId !== selectedDeviceId) setSelectedDeviceId(actualDeviceId);
+          if (actualDeviceId !== deviceId) setSelectedDeviceId(actualDeviceId);
         }
         /* 권한 허용 후 카메라 목록 레이블 갱신 */
         getVideoInputDevices().then(cams => {
@@ -131,7 +133,7 @@ export default function InterviewRobby({ role = "mentee" }) {
         if (!cancelled) {
           setCamStatus("denied");
           setCamError(describeMediaError(error));
-          if (selectedDeviceId) localStorage.removeItem('preferredCameraId');
+          if (deviceId) localStorage.removeItem('preferredCameraId');
         }
       });
     return () => {
@@ -140,6 +142,9 @@ export default function InterviewRobby({ role = "mentee" }) {
       streamRef.current = null;
     };
   }, [selectedDeviceId]);
+
+  /* 카메라 초기화 - selectedDeviceId 변경 시마다 재실행 */
+  useEffect(() => startCameraPreview(selectedDeviceId), [selectedDeviceId, startCameraPreview]);
 
   /* 마이크 트랙 활성/비활성 */
   useEffect(() => {
@@ -419,6 +424,26 @@ export default function InterviewRobby({ role = "mentee" }) {
                   <p style={{ fontSize:12, color:"rgba(255,255,255,0.35)" }}>
                     {camStatus==="denied" ? (camError || "카메라 권한이 거부됐어요") : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
                   </p>
+                  {camStatus==="denied" && (
+                    <button
+                      type="button"
+                      onClick={() => startCameraPreview("")}
+                      style={{
+                        marginTop: 12,
+                        padding: "8px 14px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.24)",
+                        background: "rgba(255,255,255,0.12)",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      카메라 권한 다시 요청
+                    </button>
+                  )}
                 </div>
               )}
 

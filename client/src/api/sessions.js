@@ -252,6 +252,22 @@ export async function uploadAnswerAudio(sessionId, questionId, audioBlob, { answ
 }
 
 /**
+ * POST /api/sessions/{id}/questions/audio
+ * 멘토가 실제로 말한 질문 오디오를 업로드한다. 업로드 후 질문 STT가 비동기로 진행된다.
+ */
+export async function uploadQuestionAudio(sessionId, audioBlob) {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "question.webm");
+  const res = await fetch(`/api/sessions/${sessionId}/questions/audio`, {
+    method: "POST",
+    headers: authHeadersNoBody(),
+    body: formData,
+  });
+  if (!res.ok) throw new Error("질문 오디오 업로드 실패");
+  return res.json();
+}
+
+/**
  * GET /api/sessions/{id}/questions/{questionId}/answers
  * 특정 질문의 답변 목록 조회 (그룹 면접 시 전체 멘티 답변 포함)
  */

@@ -410,7 +410,7 @@ export default function ReportGeneratingPage() {
   })();
 
   const statusText = statusSummary
-    ? `${statusSummary.completed_count}/${statusSummary.total_count}개 STT 완료`
+    ? `답변 ${statusSummary.completed_count}/${statusSummary.total_count}개 STT 완료`
     : "답변 상태 확인 중";
 
   return (
@@ -488,6 +488,11 @@ export default function ReportGeneratingPage() {
                     </div>
                   ))}
                 </div>
+                {(statusSummary.question_pending_count > 0 || statusSummary.question_processing_count > 0 || statusSummary.question_failed_count > 0) && (
+                  <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.5, margin: "8px 0 0" }}>
+                    질문 STT 대기 {statusSummary.question_pending_count} · 진행 {statusSummary.question_processing_count} · 실패 {statusSummary.question_failed_count}
+                  </p>
+                )}
               </div>
             )}
             {error && (

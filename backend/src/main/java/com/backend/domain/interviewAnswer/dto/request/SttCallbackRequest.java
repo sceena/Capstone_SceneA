@@ -7,6 +7,7 @@ import java.util.List;
 
 public record SttCallbackRequest(
         @JsonProperty("answer_id") Long answerId,
+        @JsonProperty("question_id") Long questionId,
         String status,
         String text,
         String model,

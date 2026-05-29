@@ -9,6 +9,7 @@ public record QuestionCreateResponse(
         Long id,
         @JsonProperty("session_id") Long sessionId,
         String content,
+        @JsonProperty("stt_status") String sttStatus,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
     public static QuestionCreateResponse from(InterviewQuestion question) {
@@ -16,6 +17,7 @@ public record QuestionCreateResponse(
                 question.getId(),
                 question.getInterviewSession().getId(),
                 question.getContent(),
+                question.getSttStatus() == null ? null : question.getSttStatus().name(),
                 question.getCreateDate()
         );
     }

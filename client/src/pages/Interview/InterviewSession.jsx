@@ -4,6 +4,11 @@ import { io } from "socket.io-client";
 import { Device } from "mediasoup-client";
 import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, getQuestions } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
+import {
+  describeMediaError,
+  getStreamVideoDeviceId,
+  openInterviewStream,
+} from "../../utils/mediaDevices";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 
@@ -338,17 +343,18 @@ export default function InterviewSession({ role = "mentee" }) {
       let localStream = localStreamRef.current;
       if (!localStream) {
         const preferredCameraId = localStorage.getItem('preferredCameraId');
-        const videoConstraint = preferredCameraId ? { deviceId: { exact: preferredCameraId } } : true;
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true });
-        } catch {
-          try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            setMediaError("카메라를 사용할 수 없습니다. 마이크만 연결됩니다.");
-          } catch {
-            setMediaError("카메라/마이크에 접근할 수 없습니다.");
-            localStream = new MediaStream();
-          }
+        const media = await openInterviewStream(preferredCameraId);
+        localStream = media.stream;
+        const actualDeviceId = getStreamVideoDeviceId(localStream);
+        if (actualDeviceId) {
+          localStorage.setItem('preferredCameraId', actualDeviceId);
+        } else if (preferredCameraId) {
+          localStorage.removeItem('preferredCameraId');
+        }
+        if (!media.videoAvailable) {
+          setMediaError(`${describeMediaError(media.error)} 마이크만 연결됩니다.`);
+        } else {
+          setMediaError(null);
         }
         if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
         localStreamRef.current = localStream;

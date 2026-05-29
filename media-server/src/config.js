@@ -1,6 +1,22 @@
 require('dotenv').config();
 const os = require('os');
 
+function getLocalIPv4() {
+  const interfaces = os.networkInterfaces();
+  for (const details of Object.values(interfaces)) {
+    for (const item of details || []) {
+      if (item.family === 'IPv4' && !item.internal) return item.address;
+    }
+  }
+  return '127.0.0.1';
+}
+
+const localIPv4 = process.env.LOCAL_IP || getLocalIPv4();
+const frontendOrigins = (process.env.FRONTEND_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const config = {
   server: {
     port: process.env.PORT || 4000,
@@ -10,7 +26,8 @@ const config = {
       'http://localhost:5173',
       // 같은 네트워크 기기에서 접근 시 아래에 PC 로컬 IP 추가
       // 예: 'http://192.168.0.5:5173'
-      ...(process.env.LOCAL_IP ? [`http://${process.env.LOCAL_IP}:5173`] : []),
+      `http://${localIPv4}:5173`,
+      ...frontendOrigins,
     ],
   },
   mediasoup: {
@@ -50,7 +67,7 @@ const config = {
       listenIps: [
         {
           ip: '0.0.0.0',
-          announcedIp: process.env.ANNOUNCED_IP || '127.0.0.1',
+          announcedIp: process.env.ANNOUNCED_IP || localIPv4,
         },
       ],
       enableUdp: true,

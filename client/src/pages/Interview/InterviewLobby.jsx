@@ -8,6 +8,13 @@ import {
   joinSession,
   updateSessionStatus,
 } from "../../api/sessions";
+import {
+  describeMediaError,
+  getStreamVideoDeviceId,
+  getVideoInputDevices,
+  mediaSupportError,
+  openAudioVideoStream,
+} from "../../utils/mediaDevices";
 
 /* ============================================================
    면접 준비 화면  (pages/interview/InterviewReady.jsx)
@@ -27,6 +34,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [stream, setStream] = useState(null);
   const streamRef = useRef(null);
   const [camStatus, setCamStatus] = useState("idle"); // idle | loading | ok | denied
+  const [camError, setCamError] = useState("");
   const [entering, setEntering] = useState(false);
   const [checklist, setChecklist] = useState([false, false, false]);
   const [sessionData, setSessionData] = useState(null);
@@ -59,13 +67,21 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   /* 사용 가능한 카메라 목록 로드 */
   useEffect(() => {
-    navigator.mediaDevices?.enumerateDevices().then(devices => {
-      const cams = devices.filter(d => d.kind === "videoinput");
+    const supportError = mediaSupportError();
+    if (supportError) {
+      setCamStatus("denied");
+      setCamError(supportError);
+      return;
+    }
+
+    getVideoInputDevices().then(cams => {
       setVideoDevices(cams);
       if (cams.length > 0 && !selectedDeviceId) {
-        setSelectedDeviceId(cams[0].deviceId);
+        setSelectedDeviceId(localStorage.getItem('preferredCameraId') || cams[0].deviceId);
       }
-    }).catch(() => {});
+    }).catch(error => {
+      setCamError(describeMediaError(error));
+    });
   }, []);
 
   /* stream 준비되면 video에 연결 (ref가 아직 없을 때 대비) */
@@ -79,15 +95,18 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   /* 카메라 초기화 - selectedDeviceId 변경 시마다 재실행 */
   useEffect(() => {
-    if (!navigator.mediaDevices || !selectedDeviceId) return;
+    const supportError = mediaSupportError();
+    if (supportError) {
+      setCamStatus("denied");
+      setCamError(supportError);
+      return;
+    }
+
     let cancelled = false;
     setCamStatus("loading");
+    setCamError("");
 
-    const videoConstraint = selectedDeviceId
-      ? { deviceId: { exact: selectedDeviceId } }
-      : true;
-
-    navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true })
+    openAudioVideoStream(selectedDeviceId)
       .then(s => {
         if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = s;
@@ -98,15 +117,22 @@ export default function InterviewRobby({ role = "mentee" }) {
         }
         setStream(s);
         setCamStatus("ok");
-        localStorage.setItem('preferredCameraId', selectedDeviceId);
+        const actualDeviceId = getStreamVideoDeviceId(s);
+        if (actualDeviceId) {
+          localStorage.setItem('preferredCameraId', actualDeviceId);
+          if (actualDeviceId !== selectedDeviceId) setSelectedDeviceId(actualDeviceId);
+        }
         /* 권한 허용 후 카메라 목록 레이블 갱신 */
-        navigator.mediaDevices.enumerateDevices().then(devices => {
-          const cams = devices.filter(d => d.kind === "videoinput");
+        getVideoInputDevices().then(cams => {
           setVideoDevices(cams);
         }).catch(() => {});
       })
-      .catch(() => {
-        if (!cancelled) setCamStatus("denied");
+      .catch(error => {
+        if (!cancelled) {
+          setCamStatus("denied");
+          setCamError(describeMediaError(error));
+          if (selectedDeviceId) localStorage.removeItem('preferredCameraId');
+        }
       });
     return () => {
       cancelled = true;
@@ -391,7 +417,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                     }
                   </div>
                   <p style={{ fontSize:12, color:"rgba(255,255,255,0.35)" }}>
-                    {camStatus==="denied" ? "카메라 권한이 거부됐어요" : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
+                    {camStatus==="denied" ? (camError || "카메라 권한이 거부됐어요") : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
                   </p>
                 </div>
               )}

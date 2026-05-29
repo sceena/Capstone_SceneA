@@ -14,6 +14,9 @@ export default defineConfig({
       '/api': {
         target: 'http://54.116.176.242:8080',
         changeOrigin: true,
+        headers: {
+          Origin: 'http://localhost:5173',
+        },
       },
       '/oauth2': {
         target: 'http://54.116.176.242:8080',

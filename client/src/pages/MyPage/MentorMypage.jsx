@@ -501,16 +501,6 @@ export default function MentorMyPage() {
           {/* ── 메인 콘텐츠 ── */}
           <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:20 }}>
 
-            {/* 스탯 4개 */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
-              <StatCard label="총 세션" value={`${totalSessions}회`} sub="누적"/>
-              <StatCard label="이번 달 세션" value={`${thisMonth}회`} sub="전월 대비 +2" subColor={C.teal}/>
-              <StatCard label="평균 평점" value="4.9/5" sub="리뷰 38건"/>
-              <StatCard label="대기 중 요청" value={`${requests.length}건`}
-                sub={requests.length > 0 ? "수락 기한 확인 필요" : "대기 중 없음"}
-                subColor={requests.length > 0 ? C.orange : C.textMuted}
-              />
-            </div>
 
             {/* 수익 카드 */}
             <div style={{ background:C.white, borderRadius:16, padding:"20px 24px", border:`1px solid ${C.border}` }}>

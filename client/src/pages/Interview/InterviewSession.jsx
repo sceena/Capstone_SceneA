@@ -5,7 +5,7 @@ import { Device } from "mediasoup-client";
 import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, getQuestions } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
 
-const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
+const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || undefined;
 
 /* ── 통합 비디오 타일 ── */
 function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false, micOff = false }) {

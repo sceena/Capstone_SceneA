@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
-import { getMySessions } from "../../api/sessions";
+import { getMySessions, createSession } from "../../api/sessions";
 import { respondReservation } from "../../api/reservations";
 
 /* ============================================================
@@ -372,11 +372,26 @@ export default function MentorDashboard() {
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [allSessions, setAllSessions] = useState([]);
+  const [newSessionId, setNewSessionId] = useState(null);
+  const [creating, setCreating] = useState(false);
+
   useEffect(() => {
     getMySessions().then(data => { if (data?.length) setAllSessions(data); }).catch(() => {});
   }, []);
 
-  const rawSessions = allSessions.length > 0 ? allSessions : DUMMY_SESSIONS;
+  const handleCreateSession = async () => {
+    setCreating(true);
+    try {
+      const session = await createSession({ job_category: "면접" });
+      setNewSessionId(session.id ?? session.session_id);
+      getMySessions().then(data => setAllSessions(data || [])).catch(() => {});
+    } catch {
+      alert("세션 생성에 실패했습니다.");
+    }
+    setCreating(false);
+  };
+
+  const rawSessions = allSessions;
 
   /* API 응답에서 UI 데이터 파생 — 면접 세션만 (멘토링은 면접 종료 후 자동 진입) */
   const sessions = rawSessions
@@ -511,12 +526,37 @@ export default function MentorDashboard() {
                 onEnter={() => navigate(`/interview/ready-mentor/${s.id}`)}
               />
             ))}
-            {sessions.length === 0 && (
-              <div style={{ textAlign:"center", padding:"32px 0", color:C.textMuted, fontSize:14 }}>
+            {newSessionId && (
+              <div style={{
+                background:"#E8F5EE", border:"1.5px solid #1D9E75",
+                borderRadius:12, padding:"18px 24px", marginBottom:12,
+                display:"flex", alignItems:"center", justifyContent:"space-between", gap:16,
+              }}>
+                <div>
+                  <p style={{ fontSize:13, color:C.teal, fontWeight:700, marginBottom:4 }}>✓ 세션이 생성됐어요!</p>
+                  <p style={{ fontSize:13, color:C.textSub }}>멘티에게 아래 세션 ID를 알려주세요</p>
+                  <p style={{ fontSize:28, fontWeight:900, color:C.navy, letterSpacing:2 }}>{newSessionId}</p>
+                </div>
+                <button onClick={() => navigate(`/interview/ready-mentor/${newSessionId}`)} style={{
+                  padding:"12px 20px", background:C.navy, color:C.white,
+                  border:"none", borderRadius:10, fontSize:13, fontWeight:700,
+                  cursor:"pointer", fontFamily:"inherit", flexShrink:0,
+                }}>입장하기</button>
+              </div>
+            )}
+            {sessions.length === 0 && !newSessionId && (
+              <div style={{ textAlign:"center", padding:"32px 0" }}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.4" style={{ display:"block", margin:"0 auto 12px" }}>
                   <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
                 </svg>
-                예정된 면접 일정이 없습니다
+                <p style={{ color:C.textMuted, fontSize:14, marginBottom:16 }}>예정된 면접 일정이 없습니다</p>
+                <button onClick={handleCreateSession} disabled={creating} style={{
+                  padding:"12px 28px", background:C.navy, color:C.white,
+                  border:"none", borderRadius:10, fontSize:14, fontWeight:700,
+                  cursor:"pointer", fontFamily:"inherit",
+                }}>
+                  {creating ? "생성 중..." : "새 세션 만들기"}
+                </button>
               </div>
             )}
           </div>

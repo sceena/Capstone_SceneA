@@ -1,4 +1,4 @@
-name: Deploy Backend
+name: Deploy
 
 on:
   push:
@@ -7,14 +7,37 @@ on:
     paths:
       - 'backend/**'
       - 'media-server/**'
+      - 'client/**'
       - '.github/**'
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/carpoolink-backend
   MEDIA_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/carpoolink-media-server
+  CLIENT_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/carpoolink-client
 
 jobs:
+  # ── 변경된 경로 감지 ──────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      client: ${{ steps.filter.outputs.client }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'media-server/**'
+            client:
+              - 'client/**'
+
+  # ── 백엔드 테스트 (backend 변경 시에만) ──────────────────────
   test:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,8 +67,10 @@ jobs:
           cd backend
           ./gradlew test
 
+  # ── 태그 & 릴리즈 (항상 실행, test가 성공하거나 스킵된 경우) ──
   tag-and-release:
-    needs: test
+    needs: [changes, test]
+    if: always() && needs.changes.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -71,8 +96,10 @@ jobs:
           name: Release ${{ steps.tag.outputs.new_tag }}
           generate_release_notes: true
 
+  # ── 백엔드 + 미디어서버 빌드 & 푸시 (backend 변경 시에만) ────
   build-and-push:
-    needs: tag-and-release
+    needs: [tag-and-release, changes]
+    if: needs.changes.outputs.backend == 'true' && needs.tag-and-release.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -130,62 +157,151 @@ jobs:
             ${{ env.MEDIA_IMAGE_NAME }}:${{ needs.tag-and-release.outputs.new_tag }}
             ${{ env.MEDIA_IMAGE_NAME }}:latest
 
+  # ── 프론트엔드 빌드 & 푸시 (client 변경 시에만) ──────────────
+  build-and-push-client:
+    needs: [tag-and-release, changes]
+    if: needs.changes.outputs.client == 'true' && needs.tag-and-release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push client image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client
+          push: true
+          build-args: |
+            VITE_MEDIA_SERVER_URL=http://${{ secrets.EC2_HOST }}:4000
+          tags: |
+            ${{ env.CLIENT_IMAGE_NAME }}:${{ needs.tag-and-release.outputs.new_tag }}
+            ${{ env.CLIENT_IMAGE_NAME }}:latest
+
+  # ── EC2 배포 ──────────────────────────────────────────────────
   deploy:
-    needs: build-and-push
+    needs: [build-and-push, build-and-push-client, changes]
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      (needs.build-and-push.result == 'success' || needs.build-and-push-client.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to EC2 (carpoolink-backend)
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GITHUB_ACTOR,GITHUB_TOKEN,IMAGE_NAME,MEDIA_IMAGE_NAME,CLIENT_IMAGE_NAME
           script: |
             set -e
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # ── backend ──────────────────────────────────────
-            docker pull ${{ env.IMAGE_NAME }}:latest
+            # ── 헬스체크 & 롤백 함수 ─────────────────────────────
+            # 사용법: deploy_with_rollback <컨테이너명> <헬스체크URL> <docker run 커맨드>
+            deploy_with_rollback() {
+              local NAME=$1
+              local HEALTH_URL=$2
+              shift 2
+              local RUN_CMD="$@"
 
-            docker stop carpoolink-backend || true
-            docker rm carpoolink-backend || true
+              # 이전 이미지 ID 저장
+              PREV_IMAGE=$(docker inspect --format='{{.Image}}' "$NAME" 2>/dev/null || echo "")
 
-            docker run -d \
-              --name carpoolink-backend \
-              --restart unless-stopped \
-              -p 8080:8080 \
-              -e "DB_URL=${{ secrets.DB_URL }}" \
-              -e "DB_USERNAME=${{ secrets.DB_USERNAME }}" \
-              -e "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
-              -e "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
-              -e "AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}" \
-              -e "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" \
-              -e "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" \
-              -e "AWS_REGION=${{ secrets.AWS_REGION }}" \
-              -e "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
-              -e "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-              -e "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" \
-              -e "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" \
-              -e "NAVER_CLIENT_ID=${{ secrets.NAVER_CLIENT_ID }}" \
-              -e "NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }}" \
-              -e "OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}" \
-              ${{ env.IMAGE_NAME }}:latest
+              # 새 컨테이너 실행
+              eval "$RUN_CMD"
 
-            # ── media-server ──────────────────────────────────
-            docker pull ${{ env.MEDIA_IMAGE_NAME }}:latest
+              # 헬스체크 (5초 간격, 최대 30초)
+              echo "헬스체크: $NAME ($HEALTH_URL)"
+              for i in $(seq 1 6); do
+                sleep 5
+                if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
+                  echo "✓ $NAME 배포 성공"
+                  return 0
+                fi
+                echo "  대기 중... ($i/6)"
+              done
 
-            docker stop carpoolink-media-server || true
-            docker rm carpoolink-media-server || true
+              # 실패 → 롤백
+              echo "✗ 헬스체크 실패 — $NAME 롤백 시작"
+              docker stop "$NAME" || true
+              docker rm "$NAME" || true
+              if [ -n "$PREV_IMAGE" ]; then
+                eval "$(echo "$RUN_CMD" | sed "s|:latest|@${PREV_IMAGE}|")"
+                echo "✓ $NAME 이전 버전으로 롤백 완료"
+              else
+                echo "이전 이미지 없음 — 롤백 불가"
+              fi
+              exit 1
+            }
 
-            docker run -d \
-              --name carpoolink-media-server \
-              --network host \
-              --restart unless-stopped \
-              -e "PORT=4000" \
-              -e "SPRING_BOOT_URL=http://localhost:8080" \
-              -e "ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}" \
-              -e "RTC_MIN_PORT=10000" \
-              -e "RTC_MAX_PORT=10100" \
-              ${{ env.MEDIA_IMAGE_NAME }}:latest
+            # ── backend ──────────────────────────────────────────
+            if [ "${{ needs.build-and-push.result }}" = "success" ]; then
+              docker pull ${{ env.IMAGE_NAME }}:latest
+              docker stop carpoolink-backend || true
+              docker rm carpoolink-backend || true
+
+              deploy_with_rollback "carpoolink-backend" "http://localhost:8080/health" \
+                docker run -d \
+                  --name carpoolink-backend \
+                  --restart unless-stopped \
+                  -p 8080:8080 \
+                  -e "DB_URL=${{ secrets.DB_URL }}" \
+                  -e "DB_USERNAME=${{ secrets.DB_USERNAME }}" \
+                  -e "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
+                  -e "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
+                  -e "AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}" \
+                  -e "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" \
+                  -e "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" \
+                  -e "AWS_REGION=${{ secrets.AWS_REGION }}" \
+                  -e "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+                  -e "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+                  -e "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" \
+                  -e "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" \
+                  -e "NAVER_CLIENT_ID=${{ secrets.NAVER_CLIENT_ID }}" \
+                  -e "NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }}" \
+                  -e "OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}" \
+                  ${{ env.IMAGE_NAME }}:latest
+
+              # media-server는 WebSocket 기반이라 헬스체크 없이 배포
+              docker pull ${{ env.MEDIA_IMAGE_NAME }}:latest
+              docker stop carpoolink-media-server || true
+              docker rm carpoolink-media-server || true
+              docker run -d \
+                --name carpoolink-media-server \
+                --network host \
+                --restart unless-stopped \
+                -e "PORT=4000" \
+                -e "SPRING_BOOT_URL=http://localhost:8080" \
+                -e "ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}" \
+                -e "RTC_MIN_PORT=10000" \
+                -e "RTC_MAX_PORT=10100" \
+                ${{ env.MEDIA_IMAGE_NAME }}:latest
+            fi
+
+            # ── client ───────────────────────────────────────────
+            if [ "${{ needs.build-and-push-client.result }}" = "success" ]; then
+              docker pull ${{ env.CLIENT_IMAGE_NAME }}:latest
+              docker stop carpoolink-client || true
+              docker rm carpoolink-client || true
+
+              deploy_with_rollback "carpoolink-client" "http://localhost:80" \
+                docker run -d \
+                  --name carpoolink-client \
+                  --network host \
+                  --restart unless-stopped \
+                  ${{ env.CLIENT_IMAGE_NAME }}:latest
+            fi
 
             docker image prune -f

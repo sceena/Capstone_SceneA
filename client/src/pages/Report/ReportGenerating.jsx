@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { generateSessionReport, getSessionReport, getSessionSttStatus } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
@@ -20,22 +21,12 @@ const PIECES = [
 ];
 
 const ANALYSIS_STEPS = [
-  "음성 데이터 분석 중...",
+  "답변 음성 STT 변환 확인 중...",
   "WPM · 침묵 구간 측정 중...",
   "STAR 구조화 지표 분류 중...",
   "Fit-Gap 역량 교차 분석 중...",
   "AI 인사이트 생성 중...",
 ];
-
-function getAuthHeaders() {
-  const raw = localStorage.getItem("scena_auth");
-  if (!raw) return {};
-  try {
-    const user = JSON.parse(raw);
-    const token = user?.accessToken || user?.token || user?.access_token;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch { return {}; }
-}
 
 /* ── 테트리스 유틸 ── */
 function createGrid() {
@@ -345,6 +336,10 @@ export default function ReportGeneratingPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const [stepIdx, setStepIdx] = useState(0);
+  const [statusSummary, setStatusSummary] = useState(null);
+  const [phase, setPhase] = useState("waiting_stt");
+  const [error, setError] = useState("");
+  const generatingRef = useRef(false);
 
   const goToReport = useCallback(() => {
     navigate(`/report/ai/${sessionId}`, { state: { role: "mentee" } });
@@ -356,25 +351,67 @@ export default function ReportGeneratingPage() {
     return () => clearInterval(id);
   }, []);
 
-  // 리포트 완료 폴링 (30초마다)
+  // STT 완료 대기 -> 리포트 생성 -> 완료 시 리포트 화면 이동
   useEffect(() => {
     if (!sessionId) return;
-    const poll = setInterval(async () => {
+
+    let cancelled = false;
+
+    const poll = async () => {
+      if (generatingRef.current || cancelled) return;
       try {
-        const res = await fetch(`/api/sessions/${sessionId}/report`, {
-          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.ai_report || data?.report_status === "completed") {
-            clearInterval(poll);
-            goToReport();
-          }
+        const existingReport = await getSessionReport(sessionId).catch(() => null);
+        if (cancelled) return;
+        if (existingReport?.ai_report) {
+          goToReport();
+          return;
         }
-      } catch {}
-    }, 30000);
-    return () => clearInterval(poll);
+
+        const summary = await getSessionSttStatus(sessionId);
+        if (cancelled) return;
+        setStatusSummary(summary);
+        setError("");
+
+        if (!summary.total_count) {
+          setPhase("waiting_answers");
+          return;
+        }
+
+        if (!summary.ready) {
+          setPhase("waiting_stt");
+          return;
+        }
+
+        generatingRef.current = true;
+        setPhase("generating_report");
+        await generateSessionReport(sessionId);
+        if (!cancelled) goToReport();
+      } catch (err) {
+        if (!cancelled) {
+          setError("리포트 생성 준비 중 문제가 발생했습니다. 잠시 후 다시 확인합니다.");
+          generatingRef.current = false;
+        }
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [sessionId, goToReport]);
+
+  const progressLabel = (() => {
+    if (phase === "waiting_answers") return "저장된 답변을 확인하는 중";
+    if (phase === "waiting_stt") return "답변 음성 변환 대기 중";
+    if (phase === "generating_report") return "AI 리포트 생성 중";
+    return "분석 중";
+  })();
+
+  const statusText = statusSummary
+    ? `${statusSummary.completed_count}/${statusSummary.total_count}개 STT 완료`
+    : "답변 상태 확인 중";
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", display: "flex", flexDirection: "column" }}>
@@ -395,11 +432,11 @@ export default function ReportGeneratingPage() {
         </div>
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: 13, fontWeight: 700, color: "white" }}>AI 면접 리포트 생성 중</p>
-          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>분석 완료 시 자동으로 이동합니다 — 테트리스로 기다려보세요!</p>
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>STT 완료 후 자동으로 리포트를 생성합니다 — 테트리스로 기다려보세요!</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#E24B4A", animation: "pulse 1.2s ease-in-out infinite" }} />
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: 600 }}>분석 중</span>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: 600 }}>{progressLabel}</span>
         </div>
       </div>
 
@@ -412,8 +449,8 @@ export default function ReportGeneratingPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
               <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid #E8E0D0", borderTopColor: GREEN, animation: "spin 1s linear infinite", flexShrink: 0 }} />
               <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>AI 분석 중</p>
-                <p style={{ fontSize: 11, color: "#9E9B95" }}>잠시만 기다려주세요</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{progressLabel}</p>
+                <p style={{ fontSize: 11, color: "#9E9B95" }}>{statusText}</p>
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
@@ -435,6 +472,27 @@ export default function ReportGeneratingPage() {
                 </div>
               ))}
             </div>
+            {statusSummary && (
+              <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, background: "#F8F7F4", border: "1px solid #E8E0D0" }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: NAVY, margin: "0 0 6px" }}>STT 상태</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {[
+                    ["완료", statusSummary.completed_count, GREEN],
+                    ["진행", statusSummary.processing_count, "#2563EB"],
+                    ["대기", statusSummary.pending_count, "#F59E0B"],
+                    ["실패", statusSummary.failed_count, "#E24B4A"],
+                  ].map(([label, value, color]) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                      <span style={{ color: "#777" }}>{label}</span>
+                      <span style={{ color, fontWeight: 800 }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {error && (
+              <p style={{ margin: "12px 0 0", fontSize: 11, color: "#E24B4A", lineHeight: 1.6 }}>{error}</p>
+            )}
           </div>
 
           <button

@@ -161,6 +161,31 @@ export async function getSessionReport(sessionId) {
 }
 
 /**
+ * POST /api/sessions/{id}/report/generate
+ * 세션 답변/STT 텍스트를 기반으로 AI 리포트를 생성한다.
+ */
+export async function generateSessionReport(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/report/generate`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("리포트 생성 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/answers/stt-status
+ * 리포트 생성 전 답변 STT 완료 여부를 확인한다.
+ */
+export async function getSessionSttStatus(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/answers/stt-status`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("STT 상태 조회 실패");
+  return res.json();
+}
+
+/**
  * GET /api/sessions/{id}/report/fit-gap
  * 채용공고 역량 vs 자소서 역량 비교 결과 조회
  */

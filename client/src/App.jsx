@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import Login from './pages/Auth/Login'
 import Register from './pages/Auth/Register'
+import OAuthCallback from './pages/Auth/OAuthCallback'
 import MentorDashboard from './pages/Mentor/MentorDashboard'
 import MenteeDashboard from './pages/Mentee/MenteeDashboard'
 import MentorInfoRegister from './pages/Mentor/MentorRegister'
@@ -39,6 +40,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/auth/login" element={<Login />} />
       <Route path="/auth/register" element={<Register />} />
+      <Route path="/oauth-callback" element={<OAuthCallback />} />
 
       {/* 멘토 전용 */}
       <Route path="/dashboard/mentor"        element={<ProtectedRoute role="mentor" element={<MentorDashboard />} />} />

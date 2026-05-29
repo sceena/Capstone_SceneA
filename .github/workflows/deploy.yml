@@ -162,6 +162,13 @@ jobs:
               -e "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" \
               -e "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" \
               -e "AWS_REGION=${{ secrets.AWS_REGION }}" \
+              -e "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+              -e "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              -e "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" \
+              -e "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" \
+              -e "NAVER_CLIENT_ID=${{ secrets.NAVER_CLIENT_ID }}" \
+              -e "NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }}" \
+              -e "OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}" \
               ${{ env.IMAGE_NAME }}:latest
 
             # ── media-server ──────────────────────────────────

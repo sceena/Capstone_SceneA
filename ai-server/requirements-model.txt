@@ -5,4 +5,3 @@ peft
 torch
 transformers
 faster-whisper
-boto3

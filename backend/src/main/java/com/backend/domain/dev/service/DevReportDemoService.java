@@ -2,6 +2,7 @@ package com.backend.domain.dev.service;
 
 import com.backend.domain.dev.dto.DevReportDemoResponse;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
+import com.backend.domain.interviewAnswer.entity.AudioQualityStatus;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
 import com.backend.domain.interviewQuestion.entity.InterviewQuestion;
 import com.backend.domain.interviewQuestion.repository.InterviewQuestionRepository;
@@ -131,6 +132,12 @@ public class DevReportDemoService {
                 .answerEnd(end)
                 .build());
 
-        answer.updateSttText(sttText);
+        answer.completeStt(
+                sttText,
+                "dev-seed",
+                (float) durationSec,
+                AudioQualityStatus.OK,
+                null
+        );
     }
 }

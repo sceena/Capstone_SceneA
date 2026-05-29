@@ -36,6 +36,7 @@ public enum ErrorCode {
 
     // 답변
     ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 답변입니다."),
+    STT_NOT_COMPLETED(HttpStatus.BAD_REQUEST, "STT 변환이 완료되지 않은 답변이 있습니다."),
 
     // 채용공고 / 자소서
     JOB_POSTING_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 채용공고입니다."),

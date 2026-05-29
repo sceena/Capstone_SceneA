@@ -1,7 +1,5 @@
 package com.backend.domain.interviewAnswer.service;
 
-import com.backend.domain.ai.client.AiSttJobClient;
-import com.backend.domain.ai.dto.request.AiSttJobRequest;
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
@@ -25,6 +23,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -49,13 +49,10 @@ public class AnswerService {
     private final SessionParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
-    private final AiSttJobClient aiSttJobClient;
+    private final SttTranscriptionService sttTranscriptionService;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
-
-    @Value("${app.callback-base-url}")
-    private String callbackBaseUrl;
 
     @Transactional
     public AnswerUploadResponse uploadAnswer(Long memberId, Long sessionId, Long questionId,
@@ -91,7 +88,7 @@ public class AnswerService {
                     .build());
         }
 
-        submitSttJob(answer);
+        submitSttTranscription(answer);
 
         return AnswerUploadResponse.from(answer, sessionId);
     }
@@ -172,14 +169,19 @@ public class AnswerService {
         }
     }
 
-    private void submitSttJob(InterviewAnswer answer) {
-        try {
-            String callbackUrl = callbackBaseUrl + "/api/internal/stt/callback";
-            aiSttJobClient.submitJob(new AiSttJobRequest(answer.getId(), answer.getAudioUrl(), callbackUrl));
-            log.info("STT job submitted for answerId={}", answer.getId());
-        } catch (RuntimeException e) {
-            log.warn("Failed to submit STT job for answerId={}; sttStatus remains PENDING", answer.getId(), e);
+    private void submitSttTranscription(InterviewAnswer answer) {
+        Long answerId = answer.getId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sttTranscriptionService.transcribeAnswer(answerId);
+                }
+            });
+        } else {
+            sttTranscriptionService.transcribeAnswer(answerId);
         }
+        log.info("STT transcription scheduled for answerId={}", answerId);
     }
 
     private InterviewSession findSession(Long sessionId) {

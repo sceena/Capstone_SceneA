@@ -26,16 +26,16 @@ ai.server.base-url=http://localhost:8000
 
 ## STT
 
-Answer audio STT uses faster-whisper. The legacy multipart endpoint is still
-available through `POST /api/stt`, and backend-integrated async processing uses
-`POST /api/stt/jobs`.
+Answer audio STT uses faster-whisper through `POST /api/stt`.
+The backend keeps async behavior by reading the saved audio from its own storage
+and sending the audio file as multipart form data. The AI server does not need
+S3 credentials, bucket names, or backend callback URLs.
 
 ```bash
 pip install -r requirements-model.txt
 export WHISPER_MODEL_SIZE=medium
 export WHISPER_DEVICE=cpu
 export WHISPER_COMPUTE_TYPE=int8
-export STT_WORKER_COUNT=1
 ```
 
 `ffmpeg` and `ffprobe` must be installed on the AI server because uploaded
@@ -48,27 +48,18 @@ export WHISPER_DEVICE=cuda
 export WHISPER_COMPUTE_TYPE=float16
 ```
 
-Async STT job request:
+STT request:
 
 ```http
-POST /api/stt/jobs
+POST /api/stt
 ```
+
+Form field: `audio`
+
+The AI server checks basic audio quality, runs `faster-whisper`, and returns:
 
 ```json
 {
-  "answer_id": 123,
-  "audio_key": "answers/session-1/question-3.webm",
-  "callback_url": "http://localhost:8080/api/internal/stt/callback"
-}
-```
-
-The AI server downloads the audio from S3, checks basic audio quality, runs
-`faster-whisper-medium`, and posts the result to the callback URL:
-
-```json
-{
-  "answer_id": 123,
-  "status": "COMPLETED",
   "text": "답변 내용...",
   "model": "faster-whisper-medium",
   "language": "ko",
@@ -83,16 +74,6 @@ The AI server downloads the audio from S3, checks basic audio quality, runs
     }
   ]
 }
-```
-
-For S3 job processing, set the same bucket/credential environment values used by
-the backend:
-
-```bash
-export AWS_S3_BUCKET=your-bucket
-export AWS_ACCESS_KEY_ID=your-access-key
-export AWS_SECRET_ACCESS_KEY=your-secret-key
-export AWS_REGION=ap-northeast-2
 ```
 
 ## Endpoint

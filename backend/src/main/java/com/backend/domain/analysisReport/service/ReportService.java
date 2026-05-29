@@ -17,6 +17,7 @@ import com.backend.domain.analysisReport.dto.response.ResumeSkillInfo;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
+import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
 import com.backend.domain.interviewQuestion.entity.InterviewQuestion;
 import com.backend.domain.interviewQuestion.repository.InterviewQuestionRepository;
@@ -40,6 +41,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.util.List;
@@ -231,6 +233,10 @@ public class ReportService {
     }
 
     private AiInterviewAnswerRequest toAiAnswerRequest(InterviewQuestion question, InterviewAnswer answer) {
+        if (answer.getSttStatus() != SttStatus.COMPLETED || !StringUtils.hasText(answer.getSttText())) {
+            throw new CustomException(ErrorCode.STT_NOT_COMPLETED);
+        }
+
         return new AiInterviewAnswerRequest(
                 question.getId(),
                 question.getContent(),

@@ -5,6 +5,7 @@ import com.backend.domain.interviewSession.entity.SessionParticipant;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
 import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
 import com.backend.domain.member.dto.request.UserProfileUpdateRequest;
+import com.backend.domain.member.dto.response.MentorListResponse;
 import com.backend.domain.member.dto.response.MySessionHistoryResponse;
 import com.backend.domain.member.dto.response.UserProfileResponse;
 import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
@@ -27,6 +28,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.Mockito;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -72,6 +75,81 @@ class UserServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Test
+    void 멘토_목록_조회_키워드없이_전체반환() {
+        Member mentor1 = Member.builder()
+                .email("m1@test.com").password("enc").name("박지훈").nickname("지훈멘토").role(Role.MENTOR).build();
+        Member mentor2 = Member.builder()
+                .email("m2@test.com").password("enc").name("이수연").nickname("수연멘토").role(Role.MENTOR).build();
+        ReflectionTestUtils.setField(mentor1, "id", 1L);
+        ReflectionTestUtils.setField(mentor2, "id", 2L);
+        Tag tag = Tag.builder().name("Spring").category("job_skill").build();
+        MemberTag memberTag = MemberTag.builder().member(mentor1).tag(tag).build();
+        PageRequest pageable = PageRequest.of(0, 12);
+        Page<Member> mentorPage = new PageImpl<>(List.of(mentor1, mentor2), pageable, 2);
+
+        given(memberRepository.findMentors(Role.MENTOR, null, pageable)).willReturn(mentorPage);
+        given(memberTagRepository.findAllByMember(mentor1)).willReturn(List.of(memberTag));
+        given(memberTagRepository.findAllByMember(mentor2)).willReturn(List.of());
+
+        MentorListResponse.PageResponse result = userService.getMentors(null, pageable);
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.totalElements()).isEqualTo(2);
+        assertThat(result.totalPages()).isEqualTo(1);
+        assertThat(result.content().get(0).name()).isEqualTo("박지훈");
+        assertThat(result.content().get(0).tags()).hasSize(1);
+        assertThat(result.content().get(0).tags().get(0).name()).isEqualTo("Spring");
+        assertThat(result.content().get(1).name()).isEqualTo("이수연");
+        assertThat(result.content().get(1).tags()).isEmpty();
+    }
+
+    @Test
+    void 멘토_목록_조회_키워드로_필터링() {
+        Member mentor = Member.builder()
+                .email("m1@test.com").password("enc").name("박지훈").nickname("지훈멘토").role(Role.MENTOR).build();
+        ReflectionTestUtils.setField(mentor, "id", 1L);
+        Tag tag = Tag.builder().name("Spring").category("job_skill").build();
+        MemberTag memberTag = MemberTag.builder().member(mentor).tag(tag).build();
+        PageRequest pageable = PageRequest.of(0, 12);
+        Page<Member> mentorPage = new PageImpl<>(List.of(mentor), pageable, 1);
+
+        given(memberRepository.findMentors(Role.MENTOR, "Spring", pageable)).willReturn(mentorPage);
+        given(memberTagRepository.findAllByMember(mentor)).willReturn(List.of(memberTag));
+
+        MentorListResponse.PageResponse result = userService.getMentors("Spring", pageable);
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.totalElements()).isEqualTo(1);
+        assertThat(result.content().get(0).name()).isEqualTo("박지훈");
+    }
+
+    @Test
+    void 멘토_목록_조회_결과없으면_빈_페이지() {
+        PageRequest pageable = PageRequest.of(0, 12);
+        given(memberRepository.findMentors(Role.MENTOR, "없는키워드", pageable))
+                .willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        MentorListResponse.PageResponse result = userService.getMentors("없는키워드", pageable);
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isZero();
+        assertThat(result.totalPages()).isZero();
+    }
+
+    @Test
+    void 멘토_목록_조회_2페이지_요청() {
+        PageRequest pageable = PageRequest.of(1, 12);
+        given(memberRepository.findMentors(Role.MENTOR, null, pageable))
+                .willReturn(new PageImpl<>(List.of(), pageable, 13));
+
+        MentorListResponse.PageResponse result = userService.getMentors(null, pageable);
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isEqualTo(13);
+        assertThat(result.totalPages()).isEqualTo(2);
+    }
 
     @Test
     void 내_프로필_조회_성공() {

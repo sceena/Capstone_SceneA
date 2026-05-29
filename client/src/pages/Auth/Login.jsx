@@ -167,16 +167,10 @@ export default function Login() {
       setAuthUser({ role, email, name, accessToken: access_token, refreshToken: refresh_token });
       navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
     } catch {
-      /* 네트워크 에러(백엔드 미연결) 시 데모 진행 — 역할 선택 필요 */
-      setError("서버에 연결할 수 없습니다. 데모 모드로 접속하려면 역할을 선택하세요.");
+      setError("서버에 연결할 수 없습니다. 백엔드를 실행한 뒤 다시 로그인해 주세요.");
       setLoading(false);
     }
     setLoading(false);
-  };
-
-  const handleDemo = (role) => {
-    setAuthUser({ role, email: email || "demo@scena.com", accessToken: null, refreshToken: null });
-    navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
   };
 
   return (
@@ -442,20 +436,6 @@ export default function Login() {
               {error && (
                 <div style={{ fontSize:13, color:C.error, background:"#FCF0F0", border:`1px solid #F5C6C6`, borderRadius:8, padding:"10px 14px" }}>
                   <p>{error}</p>
-                  {error.includes("데모") && (
-                    <div style={{ display:"flex", gap:8, marginTop:10 }}>
-                      {["mentee","mentor"].map(r => (
-                        <button key={r} type="button" onClick={() => handleDemo(r)} style={{
-                          flex:1, padding:"8px 0", borderRadius:8,
-                          border:`1px solid ${C.error}`, background:"transparent",
-                          color:C.error, fontSize:12, fontWeight:700,
-                          cursor:"pointer", fontFamily:"inherit",
-                        }}>
-                          {r === "mentee" ? "멘티로 데모" : "멘토로 데모"}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -648,4 +628,3 @@ export default function Login() {
     </>
   );
 }
-

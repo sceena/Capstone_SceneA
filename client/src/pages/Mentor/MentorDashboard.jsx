@@ -328,40 +328,6 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
   );
 };
 
-/* ── 더미 데이터 (API 미연결 시) ── */
-const DUMMY_SESSIONS = [
-  {
-    id: "demo-1",
-    status: "scheduled",
-    title: "백엔드 개발자 모의 면접",
-    scheduledAt: "2026-05-23T19:00",
-    menteeName: "김민준",
-    sessionType: "1:1 면접",
-    kind: "interview",
-  },
-  {
-    id: "demo-m1",
-    status: "scheduled",
-    title: "OOO 멘토 개인 멘토링 진행",
-    scheduledAt: "2026-05-23T20:30",
-    menteeName: "박서연",
-    sessionType: "1:1 멘토링",
-    kind: "mentoring",
-  },
-];
-
-const DUMMY_REQUESTS = [
-  {
-    id: "req-1",
-    name: "이준석",
-    company: "카카오 백엔드 개발자 지원",
-    message: "Spring Boot + MSA 관련 기술 면접 준비 중입니다. 실무 경험 기반의 피드백을 꼭 받고 싶습니다. 잘 부탁드립니다!",
-    avatarColor: "#1B4F7A",
-    scheduledAt: "2026-06-10T19:00",
-    sessionType: "1:1 면접",
-  },
-];
-
 /* ════════════════════════════════════════
    메인 컴포넌트
 ════════════════════════════════════════ */
@@ -373,10 +339,12 @@ export default function MentorDashboard() {
 
   const [allSessions, setAllSessions] = useState([]);
   useEffect(() => {
-    getMySessions().then(data => { if (data?.length) setAllSessions(data); }).catch(() => {});
+    getMySessions()
+      .then(data => setAllSessions(Array.isArray(data) ? data : []))
+      .catch(() => setAllSessions([]));
   }, []);
 
-  const rawSessions = allSessions.length > 0 ? allSessions : DUMMY_SESSIONS;
+  const rawSessions = allSessions;
 
   /* API 응답에서 UI 데이터 파생 — 면접 세션만 (멘토링은 면접 종료 후 자동 진입) */
   const sessions = rawSessions
@@ -390,20 +358,18 @@ export default function MentorDashboard() {
       time: s.scheduledAt?.slice(11, 16) ?? "",
     }));
 
-  const [requests, setRequests] = useState(DUMMY_REQUESTS);
+  const [requests, setRequests] = useState([]);
   useEffect(() => {
     const pending = allSessions.filter(s => s.status === "pending");
-    if (pending.length > 0) {
-      setRequests(pending.map(s => ({
-        id: s.id,
-        name: s.menteeName ?? "",
-        company: s.menteeCompany ?? "",
-        message: s.menteeMessage ?? "",
-        avatarColor: "#1B4F7A",
-        scheduledAt: s.scheduledAt ?? null,
-        sessionType: s.sessionType ?? "1:1 면접",
-      })));
-    }
+    setRequests(pending.map(s => ({
+      id: s.id,
+      name: s.menteeName ?? "",
+      company: s.menteeCompany ?? "",
+      message: s.menteeMessage ?? "",
+      avatarColor: "#1B4F7A",
+      scheduledAt: s.scheduledAt ?? null,
+      sessionType: s.sessionType ?? "1:1 면접",
+    })));
   }, [allSessions]);
 
   const upcoming = rawSessions

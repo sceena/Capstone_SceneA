@@ -38,9 +38,8 @@ const Header = ({ userName, accessToken }) => {
     <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
       <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
-        <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-          {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"/mentee/mypage",bold:true}].map((x,i)=>(
+          {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentee/mypage",bold:true}].map((x,i)=>(
             <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
               onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
           ))}

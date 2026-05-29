@@ -62,3 +62,13 @@ export async function getUserSessions() {
   const data = await res.json();
   return Array.isArray(data) ? data : (data.content ?? []);
 }
+
+/**
+ * GET /api/users/mentors
+ * 멘토 역할 사용자 목록을 조회한다.
+ */
+export async function getMentors() {
+  const res = await fetch("/api/users/mentors", { headers: authHeaders() });
+  if (!res.ok) throw new Error("멘토 목록 조회 실패");
+  return res.json();
+}

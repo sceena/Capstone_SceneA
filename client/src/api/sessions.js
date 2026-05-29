@@ -256,6 +256,9 @@ export async function uploadAnswerAudio(sessionId, questionId, audioBlob, { answ
  * 멘토가 실제로 말한 질문 오디오를 업로드한다. 업로드 후 질문 STT가 비동기로 진행된다.
  */
 export async function uploadQuestionAudio(sessionId, audioBlob) {
+  if (!/^\d+$/.test(String(sessionId ?? ""))) {
+    throw new Error("데모 세션에서는 질문 오디오를 저장할 수 없습니다. 실제 생성된 면접 세션으로 테스트해 주세요.");
+  }
   const formData = new FormData();
   formData.append("audio", audioBlob, "question.webm");
   const res = await fetch(`/api/sessions/${sessionId}/questions/audio`, {

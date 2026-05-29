@@ -562,8 +562,8 @@ export default function InterviewSession({ role = "mentee" }) {
           setQuestions(prev => [...prev, question]);
           setActiveQuestion(question);
           socketRef.current?.emit("activeQuestion", { question });
-        } catch {
-          alert("질문 오디오 저장에 실패했습니다.");
+        } catch (error) {
+          alert(error?.message || "질문 오디오 저장에 실패했습니다.");
         } finally {
           setQuestionRecordStatus("idle");
         }

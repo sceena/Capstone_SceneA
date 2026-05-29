@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useLocation, useParams } from "react-router-dom";
 import { requestReservation } from "../../api/reservations";
 import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
+import useAuthStore from "../../store/authStore";
 
 const C = {
   navy:"#0D2240",navyMid:"#1B4F7A",cream:"#F2EDE4",creamDark:"#E8E0D0",
@@ -17,12 +18,12 @@ const LogoIcon=({size=26,color=C.white})=>(
   </svg>
 );
 
-const Header=()=>(
+const Header=({ userName })=>(
   <header style={{background:C.navy,padding:"0 5%",position:"sticky",top:0,zIndex:100}}>
     <nav style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
-      <span style={{fontSize:15,fontWeight:600,color:C.white}}>안녕하세요님</span>
-      <div style={{display:"flex",gap:32}}>
-        {[{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentee/mypage"}].map((x,i)=>(
+      <span style={{fontSize:15,fontWeight:600,color:C.white}}>안녕하세요 <span style={{color:"rgba(255,255,255,0.75)"}}>{userName}</span>님</span>
+      <div style={{display:"flex",alignItems:"center",gap:24}}>
+        {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentee/mypage"}].map((x,i)=>(
           <Link key={i} to={x.to} style={{fontSize:14,fontWeight:x.l==="MyPage"?700:400,color:C.white,textDecoration:"none",opacity:0.85}}
             onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=0.85}>{x.l}</Link>
         ))}
@@ -66,8 +67,9 @@ const getStoredResumeContent = () => {
 export default function MentorApply(){
   const navigate=useNavigate();
   const { state: navState } = useLocation();
-  const { id: mentorRouteId } = useParams();
-  const mentor={ ...MENTOR, id: Number(mentorRouteId) || MENTOR.id };
+  const { user } = useAuthStore();
+  const userName = user?.name || user?.email?.split("@")[0] || "사용자";
+  const mentor=MENTOR;
   const [sessType,setSessType]=useState("1:1");
   const [participants,setParticipants]=useState(2);
   const [selDateIdx,setSelDateIdx]=useState(0);
@@ -132,7 +134,7 @@ export default function MentorApply(){
   if(submitted)return(
     <>
       <style>{`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body{font-family:'Noto Sans KR',sans-serif;background:${C.bg}}`}</style>
-      <Header/>
+      <Header userName={userName}/>
       <div style={{maxWidth:480,margin:"80px auto",textAlign:"center",padding:"0 5%"}}>
         <div style={{background:C.white,borderRadius:20,padding:"48px 40px",border:`1px solid ${C.border}`}}>
           <div style={{width:64,height:64,borderRadius:"50%",background:C.teal+"18",margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -159,7 +161,7 @@ export default function MentorApply(){
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @media(max-width:820px){.apply-layout{flex-direction:column!important}.mentor-sticky{position:static!important}}
       `}</style>
-      <Header/>
+      <Header userName={userName}/>
       <main style={{maxWidth:1100,margin:"0 auto",padding:"36px 5% 60px"}}>
 
         <button onClick={()=>navigate(-1)} style={{display:"inline-flex",alignItems:"center",gap:6,marginBottom:24,background:"transparent",border:"none",fontSize:15,color:C.textSub,cursor:"pointer",fontFamily:"inherit",padding:0,transition:"color 0.15s"}}

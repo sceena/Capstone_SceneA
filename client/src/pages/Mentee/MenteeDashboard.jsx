@@ -78,7 +78,7 @@ const Header = ({ userName, accessToken }) => {
           안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
         </span>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-          {[{ label:"멘토 탐색", to:"/mentor/search" }, { label:"MyPage", to:"/mentee/mypage" }]
+          {[{ label:"대시보드", to:"/dashboard/mentee" }, { label:"멘토 탐색", to:"/mentor/search" }, { label:"MyPage", to:"/mentee/mypage" }]
             .map((item, i) => (
             <Link key={i} to={item.to} style={{
               fontSize:14, fontWeight: item.label==="MyPage" ? 700 : 400,

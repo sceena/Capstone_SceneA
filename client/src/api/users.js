@@ -65,10 +65,13 @@ export async function getUserSessions() {
 
 /**
  * GET /api/users/mentors
- * 멘토 역할 사용자 목록을 조회한다.
+ * 멘토 목록 조회. keyword(검색어), page, size 지원.
  */
-export async function getMentors() {
-  const res = await fetch("/api/users/mentors", { headers: authHeaders() });
+export async function getMentors({ keyword = "", page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page, size });
+  if (keyword) params.set("keyword", keyword);
+  const res = await fetch(`/api/users/mentors?${params}`, { headers: authHeaders() });
   if (!res.ok) throw new Error("멘토 목록 조회 실패");
-  return res.json();
+  const data = await res.json();
+  return Array.isArray(data) ? data : (data.content ?? []);
 }

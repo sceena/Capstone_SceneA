@@ -40,9 +40,8 @@ const Header = ({ userName="박지훈" }) => (
       <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
         안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
       </span>
-      <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
       <div style={{ display:"flex", gap:32 }}>
-        {["멘토 탐색","예약 확인","MyPage"].map((l,i)=>(
+        {["MyPage"].map((l,i)=>(
           <Link key={i} to="#" style={{ fontSize:14, fontWeight:l==="MyPage"?700:400, color:C.white, textDecoration:"none", opacity:0.85 }}
             onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0.85}>{l}</Link>
         ))}

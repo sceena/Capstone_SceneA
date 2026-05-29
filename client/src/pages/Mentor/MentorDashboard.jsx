@@ -91,9 +91,6 @@ const Header = ({ userName, accessToken }) => {
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
           안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>멘토님
         </span>
-        <Link to="/" style={{ textDecoration:"none" }}>
-          <LogoIcon size={28} color={C.white}/>
-        </Link>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
           {[{ label:"멘토 탐색", to:"/mentor/search" }, { label:"MyPage", to:"/mentor/mypage" }].map(({ label, to }) => (
             <Link key={label} to={to} style={{

@@ -6,6 +6,10 @@ import useAuthStore from "../../store/authStore";
 import { getAuthUser } from "../../store/authStore";
 import { getSession, getSessionReport } from "../../api/sessions";
 import mockAiReport from "../Report/mockAiReport";
+import {
+  getStreamVideoDeviceId,
+  openInterviewStream,
+} from "../../utils/mediaDevices";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 
@@ -567,16 +571,14 @@ export default function MentoringSessionPage() {
 
     const init = async () => {
       const preferredCameraId = localStorage.getItem('preferredCameraId');
-      const videoConstraint = preferredCameraId ? { deviceId: { exact: preferredCameraId } } : true;
       let localStream;
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true });
-      } catch {
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch {
-          localStream = new MediaStream();
-        }
+      const media = await openInterviewStream(preferredCameraId);
+      localStream = media.stream;
+      const actualDeviceId = getStreamVideoDeviceId(localStream);
+      if (actualDeviceId) {
+        localStorage.setItem('preferredCameraId', actualDeviceId);
+      } else if (preferredCameraId) {
+        localStorage.removeItem('preferredCameraId');
       }
       if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
       localStreamRef.current = localStream;

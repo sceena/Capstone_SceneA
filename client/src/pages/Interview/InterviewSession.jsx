@@ -2,8 +2,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Device } from "mediasoup-client";
-import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, getQuestions } from "../../api/sessions";
+import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, uploadQuestionAudio, getQuestions } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
+import {
+  describeMediaError,
+  getStreamVideoDeviceId,
+  openInterviewStream,
+} from "../../utils/mediaDevices";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || undefined;
 
@@ -124,13 +129,17 @@ export default function InterviewSession({ role = "mentee" }) {
   const [checkedQs, setCheckedQs] = useState([]);
   const [chatMsg, setChatMsg] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
+  const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
+  const [activeQuestion, setActiveQuestion] = useState(null);
+  const questionRecorderRef = useRef(null);
+  const questionAudioChunksRef = useRef([]);
 
   /* ── 멘티 전용: 답변 상태 + 오디오 녹음 ── */
   const [answerStatus, setAnswerStatus] = useState("idle");
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const answerStartRef = useRef(null);
+  const answerQuestionRef = useRef(null);
 
   /* ── 질문 목록 ── */
   const [questions, setQuestions] = useState([]);
@@ -258,7 +267,11 @@ export default function InterviewSession({ role = "mentee" }) {
         if (isCancelled) return;
         if (res.error) { console.error("join 실패:", res.error); setConnectionState("failed"); return; }
 
-        const { rtpCapabilities, existingProducers } = res;
+        const { rtpCapabilities, existingProducers, activeQuestion: roomActiveQuestion } = res;
+        if (roomActiveQuestion) {
+          setActiveQuestion(roomActiveQuestion);
+          setQuestions(prev => prev.some(q => q.id === roomActiveQuestion.id) ? prev : [...prev, roomActiveQuestion]);
+        }
 
         /* Device 초기화 */
         const device = new Device();
@@ -338,17 +351,18 @@ export default function InterviewSession({ role = "mentee" }) {
       let localStream = localStreamRef.current;
       if (!localStream) {
         const preferredCameraId = localStorage.getItem('preferredCameraId');
-        const videoConstraint = preferredCameraId ? { deviceId: { exact: preferredCameraId } } : true;
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true });
-        } catch {
-          try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            setMediaError("카메라를 사용할 수 없습니다. 마이크만 연결됩니다.");
-          } catch {
-            setMediaError("카메라/마이크에 접근할 수 없습니다.");
-            localStream = new MediaStream();
-          }
+        const media = await openInterviewStream(preferredCameraId);
+        localStream = media.stream;
+        const actualDeviceId = getStreamVideoDeviceId(localStream);
+        if (actualDeviceId) {
+          localStorage.setItem('preferredCameraId', actualDeviceId);
+        } else if (preferredCameraId) {
+          localStorage.removeItem('preferredCameraId');
+        }
+        if (!media.videoAvailable) {
+          setMediaError(`${describeMediaError(media.error)} 마이크만 연결됩니다.`);
+        } else {
+          setMediaError(null);
         }
         if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
         localStreamRef.current = localStream;
@@ -407,6 +421,13 @@ export default function InterviewSession({ role = "mentee" }) {
         delete peersRef.current[peerId];
         delete peerAnalysersRef.current[peerId];
         setPeerIds(prev => prev.filter(p => p !== peerId));
+      });
+
+      socket.on("activeQuestion", ({ question }) => {
+        setActiveQuestion(question || null);
+        if (question) {
+          setQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);
+        }
       });
     };
 
@@ -487,6 +508,11 @@ export default function InterviewSession({ role = "mentee" }) {
 
   /* ── 답변 상태 / 녹음 ── */
   const handleAnswerStatus = async (nextStatus) => {
+    if (nextStatus === "answering" && !activeQuestion?.id) {
+      alert("멘토가 실제 질문을 확정하면 답변을 시작할 수 있습니다.");
+      return;
+    }
+
     setAnswerStatus(nextStatus);
     try {
       const user = getAuthUser();
@@ -495,6 +521,7 @@ export default function InterviewSession({ role = "mentee" }) {
 
     if (nextStatus === "answering") {
       answerStartRef.current = new Date().toISOString();
+      answerQuestionRef.current = activeQuestion;
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioChunksRef.current = [];
@@ -506,7 +533,7 @@ export default function InterviewSession({ role = "mentee" }) {
     } else if (nextStatus === "done" && mediaRecorderRef.current?.state !== "inactive") {
       const answerEnd = new Date().toISOString();
       const user = getAuthUser();
-      const questionId = questions[currentQuestionIdx]?.id;
+      const questionId = answerQuestionRef.current?.id;
       mediaRecorderRef.current.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         if (questionId) {
@@ -517,9 +544,44 @@ export default function InterviewSession({ role = "mentee" }) {
           }).catch(() => {});
         }
         mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
+        answerQuestionRef.current = null;
       };
       mediaRecorderRef.current.stop();
-      setCurrentQuestionIdx(prev => prev + 1);
+    }
+  };
+
+  const handleQuestionRecordToggle = async () => {
+    if (questionRecordStatus === "recording") {
+      setQuestionRecordStatus("uploading");
+      questionRecorderRef.current.onstop = async () => {
+        const blob = new Blob(questionAudioChunksRef.current, { type: "audio/webm" });
+        questionRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
+        questionRecorderRef.current = null;
+        try {
+          const question = await uploadQuestionAudio(id, blob);
+          setQuestions(prev => [...prev, question]);
+          setActiveQuestion(question);
+          socketRef.current?.emit("activeQuestion", { question });
+        } catch (error) {
+          alert(error?.message || "질문 오디오 저장에 실패했습니다.");
+        } finally {
+          setQuestionRecordStatus("idle");
+        }
+      };
+      questionRecorderRef.current.stop();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      questionAudioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) questionAudioChunksRef.current.push(e.data); };
+      questionRecorderRef.current = recorder;
+      recorder.start();
+      setQuestionRecordStatus("recording");
+    } catch {
+      alert("마이크 권한을 확인해주세요.");
     }
   };
 
@@ -780,20 +842,34 @@ export default function InterviewSession({ role = "mentee" }) {
 
               {/* 멘티 전용: 답변 상태 버튼 */}
               {!isMentor && (
-                <button
-                  onClick={() => handleAnswerStatus(answerStatus === "answering" ? "done" : "answering")}
-                  style={{
-                    padding: "12px 20px",
-                    background: answerStatus === "answering" ? "#1D9E75" : "#f3f4f6",
-                    color: answerStatus === "answering" ? "#fff" : "#374151",
-                    border: `1.5px solid ${answerStatus === "answering" ? "#1D9E75" : "#d1d5db"}`,
-                    borderRadius: 24,
-                    fontSize: 13, fontWeight: 700, cursor: "pointer",
-                    fontFamily: "inherit", transition: "all 0.18s",
-                  }}
-                >
-                  {answerStatus === "answering" ? "● 답변 중..." : "답변 시작"}
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{
+                    maxWidth: 240,
+                    color: activeQuestion ? "#d1fae5" : "#fecaca",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}>
+                    {activeQuestion ? `현재 질문: ${activeQuestion.content}` : "멘토 질문 대기 중"}
+                  </div>
+                  <button
+                    onClick={() => handleAnswerStatus(answerStatus === "answering" ? "done" : "answering")}
+                    disabled={!activeQuestion && answerStatus !== "answering"}
+                    style={{
+                      padding: "12px 20px",
+                      background: answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "#f3f4f6" : "#9ca3af",
+                      color: answerStatus === "answering" ? "#fff" : "#374151",
+                      border: `1.5px solid ${answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "#d1d5db" : "#9ca3af"}`,
+                      borderRadius: 24,
+                      fontSize: 13, fontWeight: 700, cursor: !activeQuestion && answerStatus !== "answering" ? "not-allowed" : "pointer",
+                      fontFamily: "inherit", transition: "all 0.18s",
+                    }}
+                  >
+                    {answerStatus === "answering" ? "● 답변 완료" : "답변 시작"}
+                  </button>
+                </div>
               )}
 
               {/* End Call */}
@@ -825,6 +901,38 @@ export default function InterviewSession({ role = "mentee" }) {
               </div>
 
               <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 20 }}>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase", marginBottom: 10 }}>실제 질문 기록</p>
+                  <button
+                    type="button"
+                    onClick={handleQuestionRecordToggle}
+                    disabled={questionRecordStatus === "uploading"}
+                    style={{
+                      width: "100%", padding: "12px 14px",
+                      borderRadius: 10, border: "none",
+                      background: questionRecordStatus === "recording" ? "#1D9E75" : questionRecordStatus === "uploading" ? "#9ca3af" : "#0D2240",
+                      color: "#fff", fontSize: 13, fontWeight: 800,
+                      cursor: questionRecordStatus === "uploading" ? "not-allowed" : "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {questionRecordStatus === "recording"
+                      ? "● 질문 완료"
+                      : questionRecordStatus === "uploading"
+                        ? "질문 저장 중..."
+                        : "질문 시작"}
+                  </button>
+                  <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.6, marginTop: 8 }}>
+                    멘토가 실제로 말한 질문 오디오가 STT로 변환되어 리포트 질문으로 저장됩니다.
+                  </p>
+                  {activeQuestion && (
+                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#E8F5EE", border: "1px solid #B7E2D4" }}>
+                      <p style={{ fontSize: 10, fontWeight: 800, color: "#11745D", marginBottom: 4 }}>현재 답변 대상 질문</p>
+                      <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.6 }}>{activeQuestion.content}</p>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase", marginBottom: 10 }}>AI 추천질문</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

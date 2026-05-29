@@ -4,6 +4,7 @@ import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
 import com.backend.domain.interviewAnswer.dto.response.MentorScoreResponse;
+import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewAnswer.service.AnswerService;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
@@ -54,7 +55,8 @@ class AnswerControllerTest {
         String token = jwtProvider.generateAccessToken(10L, "MENTEE");
         LocalDateTime now = LocalDateTime.now();
         AnswerUploadResponse response = new AnswerUploadResponse(
-                201L, 42L, 101L, 10L, now, now.plusSeconds(90), null, null, null, null, null, null, now);
+                201L, 42L, 101L, 10L, now, now.plusSeconds(90),
+                null, SttStatus.PENDING, null, null, null, null, now);
 
         MockMultipartFile audio = new MockMultipartFile("audio", "test.wav", "audio/wav", "audio".getBytes());
         given(answerService.uploadAnswer(any(), eq(42L), eq(101L), any(), any(), any(), any()))
@@ -129,8 +131,16 @@ class AnswerControllerTest {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
         LocalDateTime now = LocalDateTime.now();
         List<AnswerDetailResponse> response = List.of(
-                new AnswerDetailResponse(201L, 42L, 101L, 10L, "저는 Spring Boot로...", null, null, null, now, now.plusSeconds(90), 4.2f, null, null, now),
-                new AnswerDetailResponse(202L, 42L, 101L, 11L, null, null, null, null, now, now.plusSeconds(60), null, null, null, now)
+                new AnswerDetailResponse(
+                        201L, 42L, 101L, 10L, "저는 Spring Boot로...",
+                        SttStatus.COMPLETED, null, null,
+                        now, now.plusSeconds(90), 4.2f, null, null, now
+                ),
+                new AnswerDetailResponse(
+                        202L, 42L, 101L, 11L, null,
+                        SttStatus.PENDING, null, null,
+                        now, now.plusSeconds(60), null, null, null, now
+                )
         );
 
         given(answerService.getAnswers(any(), eq(42L), eq(101L))).willReturn(response);

@@ -2,9 +2,22 @@ import { getAuthUser } from "../store/authStore";
 
 function authHeaders() {
   const user = getAuthUser();
+  const token = user?.accessToken || user?.token || user?.access_token;
   return {
     "Content-Type": "application/json",
-    ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+function requireAuthHeaders() {
+  const user = getAuthUser();
+  const token = user?.accessToken || user?.token || user?.access_token;
+  if (!token) {
+    throw new Error("실제 로그인 토큰이 필요합니다. 데모 로그인 말고 회원가입/로그인 후 다시 시도해 주세요.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
   };
 }
 
@@ -131,7 +144,8 @@ export async function getAnswerSegments(sessionId, questionId, answerId) {
 
 function authHeadersNoBody() {
   const user = getAuthUser();
-  return user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {};
+  const token = user?.accessToken || user?.token || user?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 /**
@@ -143,6 +157,31 @@ export async function getSessionReport(sessionId) {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error("리포트 조회 실패");
+  return res.json();
+}
+
+/**
+ * POST /api/sessions/{id}/report/generate
+ * 세션 답변/STT 텍스트를 기반으로 AI 리포트를 생성한다.
+ */
+export async function generateSessionReport(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/report/generate`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("리포트 생성 실패");
+  return res.json();
+}
+
+/**
+ * GET /api/sessions/{id}/answers/stt-status
+ * 리포트 생성 전 답변 STT 완료 여부를 확인한다.
+ */
+export async function getSessionSttStatus(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/answers/stt-status`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("STT 상태 조회 실패");
   return res.json();
 }
 
@@ -174,6 +213,20 @@ export async function saveMentorFeedback(sessionId, feedback) {
 }
 
 /**
+ * PATCH /api/sessions/{sessionId}/answers/{answerId}/evaluation/mentor
+ * 질문별 AI 평가 초안에 대한 멘토 수정본을 저장한다. 향후 DPO chosen 데이터로 활용된다.
+ */
+export async function saveMentorAnswerEvaluation(sessionId, answerId, evaluation) {
+  const res = await fetch(`/api/sessions/${sessionId}/answers/${answerId}/evaluation/mentor`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(evaluation),
+  });
+  if (!res.ok) throw new Error("멘토 답변 평가 저장 실패");
+  return res.json();
+}
+
+/**
  * POST /api/sessions/{id}/questions/{questionId}/answers
  * 멘티 답변 오디오 업로드. 업로드 후 STT·AI 분석 비동기 진행.
  * @param {Blob} audioBlob
@@ -195,6 +248,25 @@ export async function uploadAnswerAudio(sessionId, questionId, audioBlob, { answ
     }
   );
   if (!res.ok) throw new Error("오디오 업로드 실패");
+  return res.json();
+}
+
+/**
+ * POST /api/sessions/{id}/questions/audio
+ * 멘토가 실제로 말한 질문 오디오를 업로드한다. 업로드 후 질문 STT가 비동기로 진행된다.
+ */
+export async function uploadQuestionAudio(sessionId, audioBlob) {
+  if (!/^\d+$/.test(String(sessionId ?? ""))) {
+    throw new Error("데모 세션에서는 질문 오디오를 저장할 수 없습니다. 실제 생성된 면접 세션으로 테스트해 주세요.");
+  }
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "question.webm");
+  const res = await fetch(`/api/sessions/${sessionId}/questions/audio`, {
+    method: "POST",
+    headers: authHeadersNoBody(),
+    body: formData,
+  });
+  if (!res.ok) throw new Error("질문 오디오 업로드 실패");
   return res.json();
 }
 
@@ -246,6 +318,29 @@ export async function createQuestions(sessionId, contents) {
  * GET /api/sessions/{id}/questions
  * 특정 세션의 전체 질문 목록을 조회한다.
  */
+export async function getRecommendedQuestions(sessionId) {
+  if (!/^\d+$/.test(String(sessionId ?? ""))) {
+    throw new Error("실제 세션에서만 AI 추천 질문을 불러올 수 있습니다. 데모 세션이 아니라 새로 생성된 세션으로 테스트해 주세요.");
+  }
+
+  const res = await fetch(`/api/sessions/${sessionId}/questions/recommendations`, {
+    method: "POST",
+    headers: requireAuthHeaders(),
+  });
+  if (!res.ok) {
+    let message = "AI 추천 질문 생성 실패";
+    try {
+      const data = await res.json();
+      message = data?.message || data?.detail || message;
+    } catch {
+      const text = await res.text().catch(() => "");
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 export async function getQuestions(sessionId) {
   const res = await fetch(`/api/sessions/${sessionId}/questions`, {
     headers: authHeaders(),

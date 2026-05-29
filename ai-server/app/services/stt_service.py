@@ -124,11 +124,13 @@ class SttService:
 
     def process_s3_job(
         self,
-        answer_id: int,
+        answer_id: int | None,
+        question_id: int | None,
         audio_key: str,
         callback_url: str,
         bucket: str | None = None,
     ) -> None:
+        id_payload = {"answer_id": answer_id} if answer_id is not None else {"question_id": question_id}
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 local_path = self._download_s3_audio(audio_key, Path(temp_dir), bucket)
@@ -136,7 +138,7 @@ class SttService:
             self._send_callback(
                 callback_url,
                 {
-                    "answer_id": answer_id,
+                    **id_payload,
                     "status": "COMPLETED",
                     "text": result.text,
                     "model": result.model,
@@ -151,7 +153,7 @@ class SttService:
             self._send_callback(
                 callback_url,
                 {
-                    "answer_id": answer_id,
+                    **id_payload,
                     "status": "FAILED",
                     "error_message": str(exc),
                 },

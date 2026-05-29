@@ -100,7 +100,7 @@ function formatReplayTime(replay = {}) {
 }
 
 // ─── Audio Player ────────────────────────────────────────────────
-function AudioPlayer({ sessionId, questionId }) {
+function AudioPlayer({ sessionId, questionId, answerId }) {
   const [state, setState] = useState("idle"); // idle | loading | playing | paused | error
   const audioRef = useRef(null);
   const blobUrlRef = useRef(null);
@@ -119,14 +119,17 @@ function AudioPlayer({ sessionId, questionId }) {
 
     setState("loading");
     try {
-      const answers = await requestJson(`/api/sessions/${sessionId}/questions/${questionId}/answers`);
-      if (!answers?.length) throw new Error("no answer");
-      const answerId = answers[0].id;
+      let resolvedAnswerId = answerId;
+      if (!resolvedAnswerId) {
+        const answers = await requestJson(`/api/sessions/${sessionId}/questions/${questionId}/answers`);
+        if (!answers?.length) throw new Error("no answer");
+        resolvedAnswerId = answers[0].id;
+      }
 
       const token = (() => {
         try { const u = JSON.parse(localStorage.getItem("scena_auth")); return u?.accessToken || u?.token || u?.access_token; } catch { return null; }
       })();
-      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/questions/${questionId}/answers/${answerId}/audio`, {
+      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/questions/${questionId}/answers/${resolvedAnswerId}/audio`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("audio fetch failed");
@@ -170,7 +173,7 @@ function AudioPlayer({ sessionId, questionId }) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
           <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
         </svg>
-      ) : state === "pause" || state === "idle" || state === "paused" ? (
+      ) : state === "playing" || state === "idle" || state === "paused" ? (
         <svg width="12" height="12" viewBox="0 0 24 24" fill={state === "playing" ? GREEN : "none"} stroke={cfg.color} strokeWidth="2">
           {state === "playing"
             ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>
@@ -452,6 +455,7 @@ function MenteeReport({ sessionId, report }) {
     improvements: item.improvements || [],
     replay: item.replay,
     questionId: item.question_id,
+    answerId: item.answer_id,
   }));
   const metaBadges = report?.__mock
     ? ["1차 AI 리포트", "분석 완료", "개발 mock"]
@@ -540,7 +544,7 @@ function MenteeReport({ sessionId, report }) {
               )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
-                <AudioPlayer sessionId={sessionId} questionId={qa.questionId} />
+                <AudioPlayer sessionId={sessionId} questionId={qa.questionId} answerId={qa.answerId} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
                 <div style={{ background: "#F0FDF4", borderRadius: 10, padding: 14 }}>

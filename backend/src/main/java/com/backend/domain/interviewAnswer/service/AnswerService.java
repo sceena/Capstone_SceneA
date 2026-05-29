@@ -6,6 +6,7 @@ import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
 import com.backend.domain.interviewAnswer.dto.response.MentorScoreResponse;
+import com.backend.domain.interviewAnswer.dto.response.SessionSttStatusResponse;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
 import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
@@ -33,8 +34,10 @@ import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -106,6 +109,51 @@ public class AnswerService {
                 .toList();
     }
 
+    public SessionSttStatusResponse getSessionSttStatus(Long memberId, Long sessionId) {
+        InterviewSession session = findSession(sessionId);
+        validateSessionAccess(memberId, session);
+
+        List<InterviewQuestion> questions = questionRepository.findAllByInterviewSessionOrderByOrderIndex(session);
+        List<InterviewAnswer> answers = questions.isEmpty()
+                ? List.of()
+                : answerRepository.findAllByInterviewQuestionIn(questions);
+
+        int completed = countByStatus(answers, SttStatus.COMPLETED);
+        int pending = countByStatus(answers, SttStatus.PENDING);
+        int processing = countByStatus(answers, SttStatus.PROCESSING);
+        int failed = countByStatus(answers, SttStatus.FAILED);
+        Set<InterviewQuestion> answeredQuestions = answers.stream()
+                .map(InterviewAnswer::getInterviewQuestion)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+        int questionPending = countQuestionByStatus(answeredQuestions, SttStatus.PENDING);
+        int questionProcessing = countQuestionByStatus(answeredQuestions, SttStatus.PROCESSING);
+        int questionFailed = countQuestionByStatus(answeredQuestions, SttStatus.FAILED);
+        boolean ready = !answers.isEmpty()
+                && pending == 0
+                && processing == 0
+                && questionPending == 0
+                && questionProcessing == 0;
+
+        return new SessionSttStatusResponse(
+                sessionId,
+                answers.size(),
+                completed,
+                pending,
+                processing,
+                failed,
+                questionPending,
+                questionProcessing,
+                questionFailed,
+                ready,
+                answers.stream()
+                        .map(SessionSttStatusResponse.AnswerSttStatus::from)
+                        .toList(),
+                answeredQuestions.stream()
+                        .map(SessionSttStatusResponse.QuestionSttStatus::from)
+                        .toList()
+        );
+    }
+
     public Resource getAudio(Long memberId, Long sessionId, Long questionId, Long answerId) {
         InterviewSession session = findSession(sessionId);
         validateSessionAccess(memberId, session);
@@ -175,11 +223,24 @@ public class AnswerService {
     private void submitSttJob(InterviewAnswer answer) {
         try {
             String callbackUrl = callbackBaseUrl + "/api/internal/stt/callback";
-            aiSttJobClient.submitJob(new AiSttJobRequest(answer.getId(), answer.getAudioUrl(), callbackUrl));
+            aiSttJobClient.submitJob(AiSttJobRequest.forAnswer(answer.getId(), answer.getAudioUrl(), callbackUrl));
+            answer.updateSttStatus(SttStatus.PROCESSING);
             log.info("STT job submitted for answerId={}", answer.getId());
         } catch (RuntimeException e) {
             log.warn("Failed to submit STT job for answerId={}; sttStatus remains PENDING", answer.getId(), e);
         }
+    }
+
+    private int countByStatus(List<InterviewAnswer> answers, SttStatus status) {
+        return (int) answers.stream()
+                .filter(answer -> answer.getSttStatus() == status)
+                .count();
+    }
+
+    private int countQuestionByStatus(Set<InterviewQuestion> questions, SttStatus status) {
+        return (int) questions.stream()
+                .filter(question -> question.getSttStatus() == status)
+                .count();
     }
 
     private InterviewSession findSession(Long sessionId) {

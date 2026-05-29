@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMentors } from "../../api/users";
 import { getAvatar } from "../../utils/avatar";
@@ -98,6 +98,7 @@ const MentorCard = ({ m, onClick }) => {
 
 export default function MentorSearch() {
   const navigate = useNavigate();
+  const { state: navState } = useLocation();
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 

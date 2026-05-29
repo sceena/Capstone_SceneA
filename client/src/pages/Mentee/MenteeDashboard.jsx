@@ -284,15 +284,6 @@ const HistoryItem = ({ date, title, mentor, score, tag, tagColor, onView }) => (
   </div>
 );
 
-/* ── 더미 세션 데이터 (API 미연결 시 표시용) ── */
-const DUMMY_SESSIONS = [
-  { id:"demo-1", status:"scheduled", title:"백엔드 개발자 모의 면접", scheduledAt:"2026-05-15T19:00", mentorName:"박지훈", sessionType:"1:1" },
-  { id:"demo-2", status:"scheduled", title:"Spring Boot 기술 면접 대비", scheduledAt:"2026-05-20T20:00", mentorName:"이수연", sessionType:"1:1" },
-  { id:"demo-3", status:"completed", title:"카카오 서버 개발 면접 대비", scheduledAt:"2026-04-02T19:00", mentorName:"박지훈", aiScore:"87", tag:"최종 리포트" },
-  { id:"demo-4", status:"completed", title:"네이버 백엔드 코딩 인터뷰", scheduledAt:"2026-03-15T18:00", mentorName:"한기욱", aiScore:"72", tag:"AI 리포트" },
-  { id:"demo-5", status:"completed", title:"토스 iOS 직무 인성 면접", scheduledAt:"2026-02-20T17:00", mentorName:"정민서", aiScore:"64", tag:"AI 리포트" },
-];
-
 /* ════════════════════════════════════════
    메인 컴포넌트
 ════════════════════════════════════════ */
@@ -301,7 +292,7 @@ export default function MenteeDashboard() {
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
-  const [sessions, setSessions] = useState(DUMMY_SESSIONS);
+  const [sessions, setSessions] = useState([]);
   const [unreadFinals, setUnreadFinals] = useState([]);
   const [joinId, setJoinId] = useState("");
   const [joining, setJoining] = useState(false);
@@ -320,8 +311,8 @@ export default function MenteeDashboard() {
 
   useEffect(() => {
     getMySessions()
-      .then(data => { if (data?.length) setSessions(data); })
-      .catch(() => {});
+      .then(data => setSessions(Array.isArray(data) ? data : []))
+      .catch(() => setSessions([]));
   }, []);
 
   useEffect(() => {

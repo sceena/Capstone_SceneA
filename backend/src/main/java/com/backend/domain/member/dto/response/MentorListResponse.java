@@ -1,10 +1,12 @@
 package com.backend.domain.member.dto.response;
 
 import com.backend.domain.member.entity.Member;
+import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.tag.entity.MemberTag;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.data.domain.Page;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public record MentorListResponse(
@@ -13,9 +15,17 @@ public record MentorListResponse(
         String nickname,
         String bio,
         @JsonProperty("profile_image_url") String profileImageUrl,
-        List<TagInfo> tags
+        List<TagInfo> tags,
+        List<AvailabilityInfo> availabilities
 ) {
     public record TagInfo(Long id, String name, String category) {}
+
+    public record AvailabilityInfo(
+            Long id,
+            @JsonProperty("start_time") String startTime,
+            @JsonProperty("end_time") String endTime,
+            @JsonProperty("is_booked") boolean isBooked
+    ) {}
 
     public record PageResponse(
             List<MentorListResponse> content,
@@ -27,9 +37,18 @@ public record MentorListResponse(
         }
     }
 
-    public static MentorListResponse of(Member member, List<MemberTag> memberTags) {
+    public static MentorListResponse of(Member member, List<MemberTag> memberTags, List<MentorAvailability> availabilities) {
         List<TagInfo> tags = memberTags.stream()
                 .map(mt -> new TagInfo(mt.getTag().getId(), mt.getTag().getName(), mt.getTag().getCategory()))
+                .toList();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+        List<AvailabilityInfo> availabilityInfos = availabilities.stream()
+                .map(a -> new AvailabilityInfo(
+                        a.getId(),
+                        a.getStartTime().format(formatter),
+                        a.getEndTime().format(formatter),
+                        a.isBooked()
+                ))
                 .toList();
         return new MentorListResponse(
                 member.getId(),
@@ -37,7 +56,8 @@ public record MentorListResponse(
                 member.getNickname(),
                 member.getBio(),
                 member.getProfileImageUrl(),
-                tags
+                tags,
+                availabilityInfos
         );
     }
 }

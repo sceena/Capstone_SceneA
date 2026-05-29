@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { requestReservation } from "../../api/reservations";
 import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
@@ -32,21 +32,15 @@ const Header=({ userName })=>(
   </header>
 );
 
-const MENTOR={
-  id:1,name:"박지훈",company:"네이버",job:"백엔드 개발",years:6,
-  tags:["기술 면접","JAVA/Spring","대규모 보안 처리 경험"],
-  avatarColor:"#1B4F7A",
-  philosophy:'"단순한 정답 공유가 아닌, 현업에서 통하는 사고방식을 길러드립니다. AI 리포트의 수치를 토대로 논리적 결함을 함께 찾아봐요."',
-  career:["현) 네이버 서치 CIC / 시니어 백엔드 엔지니어 (6년차)","전) 카카오페이 결제 시스템 개발팀","전) 쿠팡 정산 플랫폼 파트"],
-  techStack:"백엔드 개발 (Java, Spring Boot, MSA, MySQL)",
-  focusItems:["기술 면접: CS 기초 및 프로젝트 Deep-Dive (꼬리 질문 대비)","인성 면접: STAR 기법을 활용한 경험 구조화","AI 리포트 피드백: 발화 습관 교정 및 답변 논리성 보완"],
-  point:50,
-  availableDates:[
-    {date:"4월 2일 목요일",times:["18:00","19:00","20:00","21:00"]},
-    {date:"4월 5일 일요일",times:["14:00","15:00","19:00","20:00"]},
-    {date:"4월 7일 화요일",times:["19:00","20:00","21:00"]},
-  ],
-  maxCapacity:4,
+const groupAvailabilityByDate = (availabilities) => {
+  if (!availabilities) return {};
+  const grouped = {};
+  for (const avail of availabilities) {
+    const date = new Date(avail.start_time).toLocaleDateString('ko-KR');
+    if (!grouped[date]) grouped[date] = [];
+    grouped[date].push(avail);
+  }
+  return grouped;
 };
 
 export default function MentorApply(){
@@ -54,22 +48,32 @@ export default function MentorApply(){
   const { state: navState } = useLocation();
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
-  const mentor=MENTOR;
+  const mentor=navState?.mentor;
   const [sessType,setSessType]=useState("1:1");
   const [participants,setParticipants]=useState(2);
-  const [selDateIdx,setSelDateIdx]=useState(0);
-  const [selTime,setSelTime]=useState("");
+  const [selDate,setSelDate]=useState("");
+  const [selAvailabilityId,setSelAvailabilityId]=useState(null);
   const [loading,setLoading]=useState(false);
   const [submitted,setSubmitted]=useState(false);
 
+  const groupedAvailabilities = groupAvailabilityByDate(mentor?.availabilities);
+  const availableDates = Object.keys(groupedAvailabilities).sort();
+  const currentDate = selDate || availableDates[0] || "";
+  const currentTimeSlots = groupedAvailabilities[currentDate] || [];
   const totalPoint=sessType==="그룹"?Math.round(mentor.point*participants*0.7):mentor.point;
-  const canSubmit=selTime!=="";
+  const canSubmit=selAvailabilityId!==null;
+  const selectedAvailability = mentor?.availabilities?.find(a => a.id === selAvailabilityId);
+
+  useEffect(() => {
+    if (!selDate && availableDates.length > 0) {
+      setSelDate(availableDates[0]);
+    }
+  }, [availableDates, selDate]);
 
   const handleSubmit=async()=>{
     if(!canSubmit)return;
     setLoading(true);
     try {
-      const selectedSlot = mentor.availableDates[selDateIdx];
       const jobPosting = navState?.jobPosting;
       const resumeContent = navState?.resumeContent;
 
@@ -101,7 +105,7 @@ export default function MentorApply(){
 
       await requestReservation({
         mentor_id: mentor.id,
-        availability_id: selectedSlot.availabilityId ?? 1,
+        availability_id: selAvailabilityId,
         job_posting_id: jobPostingId ?? null,
       });
     } catch {}
@@ -120,7 +124,7 @@ export default function MentorApply(){
           </div>
           <h2 style={{fontSize:26,fontWeight:700,color:C.text,marginBottom:10}}>신청이 완료됐어요!</h2>
           <p style={{fontSize:16,color:C.textSub,lineHeight:1.7,marginBottom:8}}><strong style={{color:C.navy}}>{mentor.name} 멘토</strong>님의 승인을 기다리고 있어요.</p>
-          <p style={{fontSize:14,color:C.textMuted,marginBottom:32}}>{mentor.availableDates[selDateIdx].date} · {selTime} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
+          <p style={{fontSize:14,color:C.textMuted,marginBottom:32}}>{selectedAvailability ? new Date(selectedAvailability.start_time).toLocaleString('ko-KR') : '-'} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
           <div style={{display:"flex",gap:10}}>
             <button onClick={()=>navigate("/mentor/search")} style={{flex:1,padding:"14px",background:C.white,color:C.text,border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:15,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>다른 멘토 보기</button>
             <button onClick={()=>navigate("/dashboard/mentee")} style={{flex:1,padding:"14px",background:C.navy,color:C.white,border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>대시보드로 이동</button>
@@ -220,17 +224,17 @@ export default function MentorApply(){
 
               {/* 02 일시 선택 */}
               <div style={{padding:"24px 32px 20px",borderBottom:`1px solid ${C.border}`}}>
-                <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:14}}>02 일시 선택 ({mentor.availableDates[selDateIdx].date})</p>
-                <div style={{display:"flex",gap:8,marginBottom:16}}>
-                  {mentor.availableDates.map((d,i)=>(
-                    <button key={i} type="button" onClick={()=>{setSelDateIdx(i);setSelTime("");}} style={{
+                <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:14}}>02 일시 선택</p>
+                <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+                  {availableDates.map((date)=>(
+                    <button key={date} type="button" onClick={()=>{setSelDate(date);setSelAvailabilityId(null);}} style={{
                       padding:"10px 18px",
-                      background:selDateIdx===i?C.navy:C.bg,
-                      color:selDateIdx===i?C.white:C.textSub,
-                      border:`1px solid ${selDateIdx===i?C.navy:C.border}`,
+                      background:currentDate===date?C.navy:C.bg,
+                      color:currentDate===date?C.white:C.textSub,
+                      border:`1px solid ${currentDate===date?C.navy:C.border}`,
                       borderRadius:8,cursor:"pointer",
-                      fontSize:14,fontWeight:selDateIdx===i?700:400,fontFamily:"inherit",transition:"all 0.15s",
-                    }}>{d.date}</button>
+                      fontSize:14,fontWeight:currentDate===date?700:400,fontFamily:"inherit",transition:"all 0.15s",
+                    }}>{date}</button>
                   ))}
                 </div>
               </div>
@@ -238,16 +242,17 @@ export default function MentorApply(){
               {/* 시간 선택 */}
               <div style={{padding:"20px 32px 24px",borderBottom:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-                  {mentor.availableDates[selDateIdx].times.map(t=>(
-                    <button key={t} type="button" onClick={()=>setSelTime(t)} style={{
+                  {currentTimeSlots.map(slot=>(
+                    <button key={slot.id} type="button" onClick={()=>setSelAvailabilityId(slot.id)} style={{
                       padding:"14px 0",flex:"1 0 calc(25% - 8px)",minWidth:72,
-                      background:selTime===t?"#111":C.white,
-                      color:selTime===t?C.white:C.text,
-                      border:`1.5px solid ${selTime===t?"#111":C.border}`,
-                      borderRadius:10,cursor:"pointer",
-                      fontSize:16,fontWeight:selTime===t?700:400,fontFamily:"inherit",
+                      background:selAvailabilityId===slot.id?"#111":C.white,
+                      color:selAvailabilityId===slot.id?C.white:C.text,
+                      border:`1.5px solid ${selAvailabilityId===slot.id?"#111":C.border}`,
+                      borderRadius:10,cursor:slot.is_booked?"not-allowed":"pointer",
+                      fontSize:16,fontWeight:selAvailabilityId===slot.id?700:400,fontFamily:"inherit",
                       transition:"all 0.18s",
-                    }}>{t}</button>
+                      opacity:slot.is_booked?0.5:1,
+                    }} disabled={slot.is_booked}>{new Date(slot.start_time).toLocaleTimeString('ko-KR',{hour:"2-digit",minute:"2-digit"})}</button>
                   ))}
                 </div>
               </div>
@@ -258,9 +263,9 @@ export default function MentorApply(){
                   <span style={{fontSize:16,color:C.textSub}}>최종 차감 포인트</span>
                   <span style={{fontSize:32,fontWeight:700,color:C.navy,letterSpacing:"-0.03em"}}>{totalPoint} <span style={{fontSize:18}}>P</span></span>
                 </div>
-                {selTime&&(
+                {selAvailabilityId&&selectedAvailability&&(
                   <div style={{background:C.teal+"14",border:`1px solid ${C.teal}40`,borderRadius:10,padding:"12px 16px",marginBottom:14}}>
-                    <p style={{fontSize:15,color:C.teal,fontWeight:600}}>✓ {mentor.availableDates[selDateIdx].date} · {selTime} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
+                    <p style={{fontSize:15,color:C.teal,fontWeight:600}}>✓ {new Date(selectedAvailability.start_time).toLocaleString('ko-KR')} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
                   </div>
                 )}
                 <button onClick={canSubmit?handleSubmit:undefined} disabled={!canSubmit||loading} style={{
@@ -278,10 +283,10 @@ export default function MentorApply(){
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" style={{animation:"spin 0.8s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                         신청 중...
                       </span>
-                    :selTime?"신청 정보 입력하기":"시간을 선택해주세요"
+                    :selAvailabilityId?"신청 정보 입력하기":"시간을 선택해주세요"
                   }
                 </button>
-                {!canSubmit&&<p style={{fontSize:13,color:C.textMuted,textAlign:"center",marginTop:10}}>날짜와 시간을 선택하면 신청할 수 있어요</p>}
+                {!canSubmit&&<p style={{fontSize:13,color:C.textMuted,textAlign:"center",marginTop:10}}>일시를 선택하면 신청할 수 있어요</p>}
               </div>
             </div>
           </div>

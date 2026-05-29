@@ -147,6 +147,37 @@ function QuestionCard({ qna, feedbacks, onChange }) {
   );
 }
 
+function buildMenteesFromQuestionReports(questionReports, sessionId, reportStatus) {
+  const groups = new Map();
+
+  questionReports.forEach((report, index) => {
+    const menteeId = report.mentee_id || `session-${sessionId}`;
+    const menteeName = report.mentee_name || "면접 참여자";
+    if (!groups.has(menteeId)) {
+      groups.set(menteeId, {
+        menteeId,
+        menteeName,
+        menteeTrack: reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
+        qnas: [],
+      });
+    }
+
+    groups.get(menteeId).qnas.push({
+      id: report.answer_id || `${report.question_id}-${menteeId}-${index}`,
+      questionId: report.question_id,
+      answerId: report.answer_id,
+      question: `Q${index + 1} · ${report.question}`,
+      aiScore: Math.max(1, Math.min(5, Number(report.score || 0) / 2)),
+      aiComment: report.reasoning || "",
+      transcript: report.answer || "",
+      strengths: report.strengths || [],
+      improvements: report.improvements || [],
+    });
+  });
+
+  return Array.from(groups.values());
+}
+
 export default function MentorFeedbackPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
@@ -174,20 +205,7 @@ export default function MentorFeedbackPage() {
         }
         const questionReports = data?.ai_report?.question_reports || [];
         if (questionReports.length) {
-          setMenteeList([{
-            menteeId: `session-${sessionId}`,
-            menteeName: "면접 참여자",
-            menteeTrack: data?.report_status === "final" ? "최종 리포트" : "1차 AI 리포트",
-            qnas: questionReports.map((report, index) => ({
-              id: report.answer_id || report.question_id || `q-${index}`,
-              questionId: report.question_id,
-              answerId: report.answer_id,
-              question: `Q${index + 1} · ${report.question}`,
-              aiScore: Math.max(1, Math.min(5, Number(report.score || 0) / 2)),
-              aiComment: report.reasoning || "",
-              transcript: report.answer || "",
-            })),
-          }]);
+          setMenteeList(buildMenteesFromQuestionReports(questionReports, sessionId, data?.report_status));
         }
       })
       .catch(() => {});
@@ -202,8 +220,8 @@ export default function MentorFeedbackPage() {
         fb[q.id] = {
           score: q.aiScore,
           reasoning: q.aiComment || "",
-          strengths: "",
-          improvements: "",
+          strengths: (q.strengths || []).join("\n"),
+          improvements: (q.improvements || []).join("\n"),
           comment: "",
         };
       });

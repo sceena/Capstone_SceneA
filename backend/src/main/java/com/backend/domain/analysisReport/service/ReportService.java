@@ -235,6 +235,8 @@ public class ReportService {
                 question.getId(),
                 question.getContent(),
                 answer.getId(),
+                answer.getMember().getId(),
+                answer.getMember().getName(),
                 answer.getSttText(),
                 answer.getAudioUrl(),
                 answer.getAnswerStart().toString(),

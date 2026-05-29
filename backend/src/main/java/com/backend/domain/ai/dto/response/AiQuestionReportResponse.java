@@ -7,6 +7,8 @@ import java.util.List;
 public record AiQuestionReportResponse(
         @JsonProperty("question_id") Long questionId,
         @JsonProperty("answer_id") Long answerId,
+        @JsonProperty("mentee_id") Long menteeId,
+        @JsonProperty("mentee_name") String menteeName,
         String question,
         String answer,
         Float score,

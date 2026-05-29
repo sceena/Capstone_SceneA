@@ -67,6 +67,8 @@ class AnswerEvaluator:
             report=QuestionReport(
                 question_id=answer.question_id,
                 answer_id=answer.answer_id,
+                mentee_id=answer.mentee_id,
+                mentee_name=answer.mentee_name,
                 question=answer.question,
                 answer=answer_text,
                 score=score,
@@ -136,6 +138,8 @@ class AnswerEvaluator:
             report=QuestionReport(
                 question_id=answer.question_id,
                 answer_id=answer.answer_id,
+                mentee_id=answer.mentee_id,
+                mentee_name=answer.mentee_name,
                 question=answer.question,
                 answer=answer_text,
                 score=score,

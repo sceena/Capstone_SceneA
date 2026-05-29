@@ -9,5 +9,5 @@ public class BackendApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(BackendApplication.class, args);
 	}
-	//test 커밋용2
+	// 재배포용 수정 ㅇㅇ
 }

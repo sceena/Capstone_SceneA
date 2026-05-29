@@ -49,7 +49,7 @@ const Header = ({ userName, accessToken }) => {
       <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
         <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님</span>
         <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-          {[{l:"대시보드",to:"/dashboard/mentor"},{l:"MyPage",to:"/mentor/mypage",bold:true}].map((x,i)=>(
+          {[{l:"대시보드",to:"/dashboard/mentor"},{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentor/mypage",bold:true}].map((x,i)=>(
             <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
               onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
           ))}

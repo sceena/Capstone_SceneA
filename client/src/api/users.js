@@ -75,3 +75,17 @@ export async function getMentors({ keyword = "", page = 0, size = 20 } = {}) {
   const data = await res.json();
   return Array.isArray(data) ? data : (data.content ?? []);
 }
+
+/**
+ * POST /api/availability
+ * 멘토가 가용시간 슬롯 하나를 등록한다.
+ */
+export async function saveMentorAvailability({ start_time, end_time }) {
+  const res = await fetch("/api/availability", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ start_time, end_time }),
+  });
+  if (!res.ok) throw new Error("가용시간 등록 실패");
+  return res.json();
+}

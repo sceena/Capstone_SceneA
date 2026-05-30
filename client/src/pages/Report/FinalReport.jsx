@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getFitGapAnalysis } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
@@ -38,20 +37,6 @@ function Tag({ children, bg, color }) {
   );
 }
 
-function FitGapBar({ label, pct }) {
-  const color = pct >= 70 ? GREEN : pct >= 45 ? "#F59E0B" : "#E24B4A";
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
-        <span style={{ color: "#333" }}>{label}</span>
-        <span style={{ fontWeight: 700, color }}>{pct}%</span>
-      </div>
-      <div style={{ background: "#E8E5DF", borderRadius: 99, height: 7, overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: 7, borderRadius: 99, background: color, transition: "width 1.2s ease" }} />
-      </div>
-    </div>
-  );
-}
 
 function FitGapList({ title, items = [], tone }) {
   const isMatched = tone === "matched";
@@ -76,6 +61,72 @@ function FitGapList({ title, items = [], tone }) {
   );
 }
 
+function AudioPlayer({ sessionId, questionId }) {
+  const [state, setState] = useState("idle");
+  const audioRef = useRef(null);
+  const blobUrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
+
+  const handleClick = async () => {
+    if (state === "loading") return;
+    if (state === "playing") { audioRef.current?.pause(); setState("paused"); return; }
+    if (state === "paused" && audioRef.current) { audioRef.current.play(); setState("playing"); return; }
+    setState("loading");
+    try {
+      const raw = localStorage.getItem("scena_auth");
+      const user = raw ? JSON.parse(raw) : null;
+      const token = user?.accessToken || user?.token || user?.access_token;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const answersRes = await fetch(`${API_BASE}/api/sessions/${sessionId}/questions/${questionId}/answers`, { headers });
+      if (!answersRes.ok) throw new Error("no answers");
+      const answers = await answersRes.json();
+      if (!answers?.length) throw new Error("empty");
+      const answerId = answers[0].id;
+
+      const audioRes = await fetch(`${API_BASE}/api/sessions/${sessionId}/questions/${questionId}/answers/${answerId}/audio`, { headers });
+      if (!audioRes.ok) throw new Error("no audio");
+      const blob = await audioRes.blob();
+      blobUrlRef.current = URL.createObjectURL(blob);
+      const audio = new Audio(blobUrlRef.current);
+      audioRef.current = audio;
+      audio.onended = () => setState("idle");
+      audio.onerror = () => setState("error");
+      await audio.play();
+      setState("playing");
+    } catch {
+      setState("error");
+    }
+  };
+
+  const label = { idle: "▶ 답변 듣기", loading: "로딩 중...", playing: "⏸ 일시정지", paused: "▶ 이어 듣기", error: "오디오 없음" }[state];
+  const disabled = state === "loading" || state === "error";
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={disabled}
+      style={{
+        display: "flex", alignItems: "center", gap: 6, fontSize: 12,
+        color: state === "error" ? "#bbb" : GREEN,
+        border: `1px solid ${state === "error" ? "#bbb" : GREEN}`,
+        background: state === "playing" ? "#E8F5EE" : "transparent",
+        borderRadius: 99, padding: "5px 12px",
+        cursor: disabled ? "default" : "pointer",
+        fontFamily: "inherit", transition: "background 0.15s",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function exportToPDF(session, reportData) {
   const el = document.getElementById("final-report-content");
   const bodyHtml = el ? el.innerHTML : "<p>리포트 내용을 불러올 수 없습니다.</p>";
@@ -96,7 +147,6 @@ export default function FinalReportPage() {
 
   const [notified, setNotified] = useState(false);
   const [showMentorComment, setShowMentorComment] = useState(false);
-  const [fitGap, setFitGap] = useState(null);
   const [aiData, setAiData] = useState(null);
   // 멘티 경로: sessionId만 있을 때 세션 상세 별도 fetch
   const [sessionMeta, setSessionMeta] = useState(null);
@@ -119,12 +169,6 @@ export default function FinalReportPage() {
       localStorage.setItem(VIEWED_KEY, JSON.stringify([...viewed, sid]));
     }
   }, [role, sessionId]);
-
-  // Fit-Gap 프로그레스바
-  useEffect(() => {
-    if (!sessionId) return;
-    getFitGapAnalysis(sessionId).then(setFitGap).catch(() => {});
-  }, [sessionId]);
 
   // 전체 AI 리포트
   useEffect(() => {
@@ -206,7 +250,6 @@ export default function FinalReportPage() {
   const bestReport = questionReports.find((r) => r.question_id === best?.question_id);
   const worstReport = questionReports.find((r) => r.question_id === worst?.question_id);
   const fitGapAi = aiReport?.fit_gap;
-  const FIT_GAP_BARS = fitGap?.skills?.map((s) => [s.label, s.pct]) ?? [];
 
   const toQNum = (qId) => {
     const idx = questionReports.findIndex((r) => r.question_id === qId);
@@ -369,22 +412,7 @@ export default function FinalReportPage() {
           </div>
         )}
 
-        {FIT_GAP_BARS.length > 0 && (
-          <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: 22, marginBottom: 28 }}>
-            <p style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>채용 공고 요구 역량 대비 자소서 & 답변 커버리지</p>
-            {FIT_GAP_BARS.map(([l, p]) => <FitGapBar key={l} label={l} pct={p} />)}
-            <div style={{ display: "flex", gap: 16, marginTop: 14 }}>
-              {[["충분히 커버", GREEN], ["보완 필요", "#F59E0B"], ["갭 발생", "#E24B4A"]].map(([l, c]) => (
-                <div key={l} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#666" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 99, background: c }} />
-                  {l}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!fitGapAi && FIT_GAP_BARS.length === 0 && !loading && (
+        {!fitGapAi && !loading && (
           <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: 22, marginBottom: 28 }}>
             <p style={{ fontSize: 12, color: "#999" }}>Fit-Gap 분석 데이터를 불러오는 중입니다...</p>
           </div>
@@ -451,9 +479,7 @@ export default function FinalReportPage() {
                     </div>
                   </div>
                 </div>
-                <button style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: GREEN, border: `1px solid ${GREEN}`, background: "transparent", borderRadius: 99, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}>
-                  ▶ 답변 듣기
-                </button>
+                <AudioPlayer sessionId={sessionId} questionId={qna.id} />
               </div>
 
               {fb.comment && (

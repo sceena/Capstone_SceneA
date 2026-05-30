@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
+import { updateMyProfile, saveMentorAvailability } from "../../api/users";
 
 /* ============================================================
    멘토 정보 등록  (pages/mentor/InfoRegister.jsx)
@@ -450,9 +451,52 @@ export default function MentorInfoRegister() {
 
   const handleSubmit = async () => {
     setLoading(true);
-    await new Promise(r=>setTimeout(r,1000));
-    setLoading(false);
-    navigate("/dashboard/mentor");
+    try {
+      const typeNameMap = { tech:"기술 면접", culture:"인성 면접", portfolio:"포트폴리오", mock:"모의 면접" };
+      const tags = [
+        ...d1.techStack.map(t => ({ name: t, category: "기술스택" })),
+        ...d2.types.map(t => ({ name: typeNameMap[t] || t, category: "코칭유형" })),
+        ...d2.focusItems.map(t => ({ name: t, category: "집중항목" })),
+      ];
+
+      const bio = d1.bio?.trim() || null;
+      const hasTags = tags.length > 0;
+
+      if (bio || hasTags) {
+        await updateMyProfile(
+          { bio, tags: hasTags ? tags : null },
+          null
+        );
+      }
+
+      if (d3.slots.length > 0) {
+        const durationMinutes = parseInt(d3.duration) || 60;
+        const dayMap = { MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6, SUN: 0 };
+        const toLocalISO = d => {
+          const p = n => String(n).padStart(2, "0");
+          return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
+        };
+        for (const slotKey of d3.slots) {
+          const [day, time] = slotKey.split("-");
+          const [hour, min] = time.split(":").map(Number);
+          const now = new Date();
+          const diff = (dayMap[day] - now.getDay() + 7) % 7 || 7;
+          const start = new Date(now);
+          start.setDate(now.getDate() + diff);
+          start.setHours(hour, min, 0, 0);
+          const end = new Date(start);
+          end.setMinutes(end.getMinutes() + durationMinutes);
+          await saveMentorAvailability({ start_time: toLocalISO(start), end_time: toLocalISO(end) });
+        }
+      }
+
+      navigate("/dashboard/mentor");
+    } catch (err) {
+      console.error("멘토 등록 실패:", err);
+      alert("등록 중 오류가 발생했어요. 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

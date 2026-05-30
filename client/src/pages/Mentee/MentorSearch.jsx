@@ -57,7 +57,7 @@ const Header = ({ userName, accessToken }) => {
 };
 
 const MentorCard = ({ m, onClick }) => {
-  const av = getAvatar(m.email);
+  const av = getAvatar(String(m.id ?? ""));
   return (
     <div onClick={onClick} style={{
       background:C.white, borderRadius:16, padding:"24px 20px",
@@ -68,8 +68,8 @@ const MentorCard = ({ m, onClick }) => {
       onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="none"; }}
     >
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", textAlign:"center", marginBottom:14 }}>
-        {m.profileImageUrl ? (
-          <img src={m.profileImageUrl} alt={m.name} style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:`2px solid ${C.border}` }}/>
+        {m.profile_image_url ? (
+          <img src={m.profile_image_url} alt={m.name} style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:`2px solid ${C.border}` }}/>
         ) : (
           <div style={{ width:64, height:64, borderRadius:"50%", background:av.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, marginBottom:10 }}>{av.animal}</div>
         )}

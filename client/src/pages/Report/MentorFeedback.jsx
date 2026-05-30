@@ -1,49 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { getSessionReport, saveMentorAnswerEvaluation, saveMentorFeedback, saveMentorScore } from "../../api/sessions";
+import { getSession, getSessionReport, saveMentorAnswerEvaluation, saveMentorFeedback, saveMentorScore } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
 
-const MOCK_SESSION_INFO = {
-  sessionId: "sess-001",
-  title: "백엔드 개발자 모의 면접",
-  date: "2026.04.02 오후 7:00",
-  duration: "60분",
-  type: "그룹 세션",
+const DEFAULT_SESSION_INFO = {
+  title: "세션 로딩 중...",
+  date: "",
+  duration: "",
+  type: "",
 };
-
-const MOCK_MENTEES = [
-  {
-    menteeId: "m1",
-    menteeName: "김민준",
-    menteeTrack: "백엔드 · 신입",
-    qnas: [
-      { id: "m1-q1", question: "Q1 · 본인이 경험한 가장 큰 기술적 도전과 해결 과정을 말해주세요.", aiScore: 4.0, aiComment: "수치 기반 결과 제시 + STAR 구조 완성도 높음.", transcript: "카카오 인턴 당시 결제 서버 피크 타임 응답 지연 문제를 Redis 캐싱으로 해결, 응답 시간 340ms 달성." },
-      { id: "m1-q2", question: "Q2 · 협업 중 기술적 의견 충돌 경험이 있나요?", aiScore: 5.0, aiComment: "상황-과제-행동-결과가 모두 명확하게 서술됨.", transcript: "REST API 설계 방향 충돌 → 장단점 문서화 → 팀 합의 도출 → API 일관성 향상." },
-      { id: "m1-q3", question: "Q3 · MSA 환경에서의 서비스 간 통신 방식에 대해 설명해보세요.", aiScore: 2.0, aiComment: "만연체 + 이론 나열, R(결과) 누락. 구체적 경험 부재.", transcript: "MSA는 서비스들이 독립적으로 운영되고 REST, 메시지 큐, gRPC 방법이 있는데 저는 주로 REST를 많이 써봤고..." },
-    ],
-  },
-  {
-    menteeId: "m2",
-    menteeName: "이서연",
-    menteeTrack: "프론트엔드 · 신입",
-    qnas: [
-      { id: "m2-q1", question: "Q1 · React의 렌더링 최적화 방법에 대해 설명해보세요.", aiScore: 3.5, aiComment: "useMemo/useCallback 언급했으나 실제 활용 사례가 부족함.", transcript: "useMemo와 useCallback을 사용해 불필요한 렌더링을 방지하고, React.memo로 컴포넌트를 최적화합니다." },
-      { id: "m2-q2", question: "Q2 · 상태 관리 라이브러리 선택 기준은 무엇인가요?", aiScore: 4.5, aiComment: "Redux vs Zustand 트레이드오프를 명확하게 비교함.", transcript: "프로젝트 규모와 팀 구성에 따라 다릅니다. 소규모는 Zustand, 대규모 엔터프라이즈는 Redux Toolkit을 선호합니다." },
-    ],
-  },
-  {
-    menteeId: "m3",
-    menteeName: "박준혁",
-    menteeTrack: "풀스택 · 신입",
-    qnas: [
-      { id: "m3-q1", question: "Q1 · REST API와 GraphQL의 차이를 설명해주세요.", aiScore: 4.8, aiComment: "오버페칭/언더페칭 문제를 정확히 짚어내고 실 사용 경험을 언급함.", transcript: "REST는 고정된 엔드포인트로 오버페칭이 발생할 수 있고, GraphQL은 필요한 데이터만 요청할 수 있어 모바일 환경에서 유리합니다." },
-      { id: "m3-q2", question: "Q2 · CI/CD 파이프라인 구축 경험이 있나요?", aiScore: 3.0, aiComment: "개념은 이해하나 실제 구축 경험 미비. 도구 선택 이유 불명확.", transcript: "GitHub Actions를 사용해 자동 배포를 구현해봤습니다. Docker 컨테이너로 빌드하고 EC2에 배포했습니다." },
-    ],
-  },
-];
 
 function formatTime(secs) {
   const m = Math.floor(secs / 60).toString().padStart(2, "0");
@@ -182,8 +150,9 @@ export default function MentorFeedbackPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
 
-  const [sessionInfo] = useState(MOCK_SESSION_INFO);
-  const [menteeList, setMenteeList] = useState(MOCK_MENTEES);
+  const [sessionInfo, setSessionInfo] = useState(DEFAULT_SESSION_INFO);
+  const [menteeList, setMenteeList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
 
   // { [menteeId]: { feedbacks: {qId: {score, comment}}, totalFeedback: "", mentorScore: 4.0 } }
@@ -197,18 +166,43 @@ export default function MentorFeedbackPage() {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    getSessionReport(sessionId)
-      .then(data => {
-        if (data?.mentees?.length) {
-          setMenteeList(data.mentees);
-          return;
+    let cancelled = false;
+    const fetchData = async () => {
+      try {
+        const [sessionData, reportData] = await Promise.allSettled([
+          getSession(sessionId),
+          getSessionReport(sessionId),
+        ]);
+
+        if (cancelled) return;
+
+        if (sessionData.status === "fulfilled" && sessionData.value) {
+          const s = sessionData.value;
+          setSessionInfo({
+            title: s.title || `세션 #${sessionId}`,
+            date: s.scheduledAt ? s.scheduledAt.slice(0, 16).replace("T", " ") : "",
+            duration: s.duration || "",
+            type: s.sessionType || "1:1",
+          });
         }
-        const questionReports = data?.ai_report?.question_reports || [];
-        if (questionReports.length) {
-          setMenteeList(buildMenteesFromQuestionReports(questionReports, sessionId, data?.report_status));
+
+        if (reportData.status === "fulfilled" && reportData.value) {
+          const data = reportData.value;
+          if (data?.mentees?.length) {
+            setMenteeList(data.mentees);
+          } else {
+            const questionReports = data?.ai_report?.question_reports || [];
+            if (questionReports.length) {
+              setMenteeList(buildMenteesFromQuestionReports(questionReports, sessionId, data?.report_status));
+            }
+          }
         }
-      })
-      .catch(() => {});
+      } catch {}
+      if (!cancelled) setLoading(false);
+    };
+
+    fetchData();
+    return () => { cancelled = true; };
   }, [sessionId]);
 
   // Init per-mentee feedback state
@@ -327,6 +321,32 @@ export default function MentorFeedbackPage() {
 
   const timerColor = timeLeft < 300 ? "#EF4444" : timeLeft < 900 ? "#F59E0B" : GREEN;
   const timerUrgent = timeLeft < 300;
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR', sans-serif" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 44, height: 44, border: `3px solid ${GREEN}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
+          <p style={{ color: "#666", fontSize: 14 }}>세션 리포트를 불러오는 중...</p>
+        </div>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
+
+  if (menteeList.length === 0) {
+    return (
+      <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR', sans-serif" }}>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: NAVY, marginBottom: 8 }}>아직 리포트가 없습니다</p>
+          <p style={{ fontSize: 14, color: "#888", marginBottom: 24 }}>면접 종료 후 AI 리포트가 생성되면 피드백을 작성할 수 있습니다.</p>
+          <button onClick={() => navigate("/dashboard/mentor")} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: NAVY, color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            대시보드로 이동
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>

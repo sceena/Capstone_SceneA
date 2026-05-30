@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation, useParams } from "react-router-dom";
 import { requestReservation } from "../../api/reservations";
 import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 import useAuthStore from "../../store/authStore";
+import { getAvatar } from "../../utils/avatar";
 
 const C = {
   navy:"#0D2240",navyMid:"#1B4F7A",cream:"#F2EDE4",creamDark:"#E8E0D0",
@@ -75,7 +76,7 @@ export default function MentorApply(){
   const availableDates = Object.keys(groupedAvailabilities).sort();
   const currentDate = selDate || availableDates[0] || "";
   const currentTimeSlots = groupedAvailabilities[currentDate] || [];
-  const totalPoint=sessType==="그룹"?Math.round(mentor.point*participants*0.7):mentor.point;
+  const maxCapacity = mentor?.maxCapacity ?? 4;
   const canSubmit=selAvailabilityId!==null;
   const selectedAvailability = mentor?.availabilities?.find(a => a.id === selAvailabilityId);
 
@@ -180,28 +181,25 @@ export default function MentorApply(){
           <div style={{width:300,flexShrink:0}}>
             <div className="mentor-sticky" style={{background:C.white,borderRadius:16,padding:"24px",border:`1px solid ${C.border}`,position:"sticky",top:88}}>
               <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-                <div style={{width:52,height:52,borderRadius:"50%",background:mentor.avatarColor,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,color:C.white}}>{mentor.name[0]}</div>
+                {mentor.profile_image_url
+                  ? <img src={mentor.profile_image_url} alt={mentor.name} style={{width:52,height:52,borderRadius:"50%",objectFit:"cover",flexShrink:0,border:`1px solid ${C.border}`}}/>
+                  : <div style={{width:52,height:52,borderRadius:"50%",background:getAvatar(String(mentor.id)).color,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,color:C.white}}>{mentor.name[0]}</div>
+                }
                 <div>
                   <p style={{fontSize:18,fontWeight:700,color:C.text,marginBottom:3}}>{mentor.name} 멘토</p>
-                  <p style={{fontSize:14,color:C.textSub}}>{mentor.company} / {mentor.job} {mentor.years}년차</p>
+                  {mentor.nickname && <p style={{fontSize:14,color:C.textSub}}>{mentor.nickname}</p>}
                 </div>
               </div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:16}}>
-                {mentor.tags.map((t,i)=><span key={i} style={{fontSize:13,padding:"4px 10px",borderRadius:999,background:C.bg,color:C.textSub}}>#{t}</span>)}
-              </div>
-              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:16}}>
-                <p style={{fontSize:14,color:C.text,lineHeight:1.75,fontStyle:"italic",marginBottom:14}}>{mentor.philosophy}</p>
-                <p style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:6}}>주요 경력 (Career):</p>
-                <ul style={{paddingLeft:16,marginBottom:12}}>
-                  {mentor.career.map((c,i)=><li key={i} style={{fontSize:13,color:C.textSub,lineHeight:1.7,marginBottom:3}}>{c}</li>)}
-                </ul>
-                <p style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>전문 직무:</p>
-                <p style={{fontSize:13,color:C.textSub,marginBottom:12}}>{mentor.techStack}</p>
-                <p style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:6}}>면접 집중 코칭 항목:</p>
-                <ul style={{paddingLeft:16}}>
-                  {mentor.focusItems.map((f,i)=><li key={i} style={{fontSize:13,color:C.textSub,lineHeight:1.7,marginBottom:3}}>{f}</li>)}
-                </ul>
-              </div>
+              {mentor.tags?.length > 0 && (
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:16}}>
+                  {mentor.tags.map((t,i)=><span key={i} style={{fontSize:13,padding:"4px 10px",borderRadius:999,background:C.bg,color:C.textSub}}>#{t.name}</span>)}
+                </div>
+              )}
+              {mentor.bio && (
+                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:16}}>
+                  <p style={{fontSize:14,color:C.text,lineHeight:1.75}}>{mentor.bio}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -234,13 +232,12 @@ export default function MentorApply(){
                     <p style={{fontSize:16,fontWeight:600,color:C.text}}>참여 인원</p>
                     <p style={{fontSize:16,fontWeight:700,color:C.navy}}>{participants}명 (본인 포함)</p>
                   </div>
-                  <input type="range" min={2} max={mentor.maxCapacity} value={participants}
+                  <input type="range" min={2} max={maxCapacity} value={participants}
                     onChange={e=>setParticipants(Number(e.target.value))}
                     style={{width:"100%",accentColor:C.navy,cursor:"pointer"}}/>
                   <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
                     {[2,3,4].map(n=><span key={n} style={{fontSize:13,color:n===participants?C.navy:C.textMuted,fontWeight:n===participants?700:400}}>{n}명{n===4?"(최대)":""}</span>)}
                   </div>
-                  <p style={{fontSize:13,color:C.textMuted,marginTop:10}}>* 그룹 세션은 1인당 {Math.round(mentor.point*0.7)}P 적용</p>
                 </div>
               )}
 
@@ -281,10 +278,7 @@ export default function MentorApply(){
 
               {/* 포인트 + 신청 버튼 */}
               <div style={{padding:"24px 32px",background:C.bg}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                  <span style={{fontSize:16,color:C.textSub}}>최종 차감 포인트</span>
-                  <span style={{fontSize:32,fontWeight:700,color:C.navy,letterSpacing:"-0.03em"}}>{totalPoint} <span style={{fontSize:18}}>P</span></span>
-                </div>
+                <div style={{marginBottom:14}}>
                 {selAvailabilityId&&selectedAvailability&&(
                   <div style={{background:C.teal+"14",border:`1px solid ${C.teal}40`,borderRadius:10,padding:"12px 16px",marginBottom:14}}>
                     <p style={{fontSize:15,color:C.teal,fontWeight:600}}>✓ {new Date(selectedAvailability.start_time).toLocaleString('ko-KR')} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
@@ -309,6 +303,7 @@ export default function MentorApply(){
                   }
                 </button>
                 {!canSubmit&&<p style={{fontSize:13,color:C.textMuted,textAlign:"center",marginTop:10}}>일시를 선택하면 신청할 수 있어요</p>}
+                </div>
               </div>
             </div>
           </div>

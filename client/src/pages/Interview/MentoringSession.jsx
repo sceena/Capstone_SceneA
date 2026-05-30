@@ -4,7 +4,7 @@ import { io } from "socket.io-client";
 import { Device } from "mediasoup-client";
 import useAuthStore from "../../store/authStore";
 import { getAuthUser } from "../../store/authStore";
-import { getSession, getSessionReport } from "../../api/sessions";
+import { getSession, getSessionReport, updateSessionStatus } from "../../api/sessions";
 import mockAiReport from "../Report/mockAiReport";
 import {
   getStreamVideoDeviceId,
@@ -727,25 +727,23 @@ export default function MentoringSessionPage() {
   };
 
   // 세션 종료 처리
-  const handleEndSession = useCallback(() => {
+  const handleEndSession = useCallback(async () => {
     clearInterval(timerRef.current);
-
-    // ── API 연동 포인트 ────────────────────────────────────────────
-    // await api.endSession(session.sessionId);
-    // WebRTC 연결 해제: peerConnection.close();
-    // ──────────────────────────────────────────────────────────────
-
+    const sid = session.sessionId || sessionId;
+    try {
+      await updateSessionStatus(sid, "completed");
+    } catch {}
     if (user?.role === "mentor") {
-      navigate(`/mentor/feedback/${session.sessionId || sessionId}`);
+      navigate(`/mentor/feedback/${sid}`);
     } else {
-      navigate(`/report/mentor-review/${session.sessionId || sessionId}`, {
+      navigate(`/report/mentor-review/${sid}`, {
         state: {
           mentorName: session.mentorName || "멘토",
-          nextPath: `/report/ai-stream/${session.sessionId || sessionId}`,
+          nextPath: `/report/ai-stream/${sid}`,
         },
       });
     }
-  }, [navigate, session.sessionId, user?.role]);
+  }, [navigate, session.sessionId, session.mentorName, sessionId, user?.role]);
 
   const isMentor = user?.role === "mentor";
   const currentMentee = menteeList[currentMenteeIdx] || MOCK_MENTEES[0];

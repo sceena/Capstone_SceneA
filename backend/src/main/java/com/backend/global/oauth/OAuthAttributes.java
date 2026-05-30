@@ -9,7 +9,8 @@ public record OAuthAttributes(
         String email,
         String name,
         String nickname,
-        MemberProvider provider
+        MemberProvider provider,
+        String profileImageUrl
 ) {
     public static OAuthAttributes of(String registrationId, Map<String, Object> attributes) {
         return switch (registrationId.toLowerCase()) {
@@ -26,7 +27,8 @@ public record OAuthAttributes(
                 (String) attributes.get("email"),
                 (String) attributes.get("name"),
                 (String) attributes.get("name"),
-                MemberProvider.GOOGLE
+                MemberProvider.GOOGLE,
+                (String) attributes.get("picture")
         );
     }
 
@@ -36,10 +38,11 @@ public record OAuthAttributes(
         Map<String, Object> profile = (Map<String, Object>) kakaoAccount.get("profile");
         return new OAuthAttributes(
                 String.valueOf(attributes.get("id")),
-                (String) kakaoAccount.get("email"),
+                null,
                 (String) profile.get("nickname"),
                 (String) profile.get("nickname"),
-                MemberProvider.KAKAO
+                MemberProvider.KAKAO,
+                (String) profile.get("profile_image_url")
         );
     }
 
@@ -53,7 +56,8 @@ public record OAuthAttributes(
                 (String) response.get("email"),
                 name,
                 nickname != null ? nickname : name,
-                MemberProvider.NAVER
+                MemberProvider.NAVER,
+                (String) response.get("profile_image")
         );
     }
 }

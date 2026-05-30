@@ -34,6 +34,7 @@ public class ReservationService {
     private final InterviewSessionRepository interviewSessionRepository;
     private final SessionParticipantRepository participantRepository;
 
+    @Transactional(readOnly = true)
     public List<ReservationSummaryResponse> getMentorReservations(Long mentorId, ReservationStatus status) {
         Member mentor = memberRepository.findById(mentorId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));

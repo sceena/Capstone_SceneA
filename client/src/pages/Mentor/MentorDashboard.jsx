@@ -440,9 +440,16 @@ export default function MentorDashboard() {
       status: "confirmed",
     }));
 
+  const refreshSessions = useCallback(() => {
+    getMySessions()
+      .then(data => setAllSessions(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
   const handleAccept = async (id) => {
     try { await respondReservation({ reservationId: id, accepted: true }); } catch {}
     setRequests(r => r.filter(x => x.id !== id));
+    refreshSessions();
   };
   const handleDecline = async (id) => {
     try { await respondReservation({ reservationId: id, accepted: false }); } catch {}

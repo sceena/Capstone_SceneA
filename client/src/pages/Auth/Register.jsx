@@ -559,6 +559,11 @@ export default function Register() {
           role: roleInfo.role.toUpperCase(),
         }),
       });
+      if (res.status === 409) {
+        setErrors({ email:"이미 사용 중인 이메일입니다." });
+        setStep(1);
+        return;
+      }
       if (!res.ok) throw new Error("signup failed");
       navigate("/auth/login");
     } catch {

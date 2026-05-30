@@ -4,7 +4,6 @@ import { getMentorAvailabilities, requestReservation } from "../../api/reservati
 import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 import useAuthStore from "../../store/authStore";
 import { getAvatar } from "../../utils/avatar";
-import { getMentorAvailabilities } from "../../api/users";
 
 const C = {
   navy:"#0D2240",navyMid:"#1B4F7A",cream:"#F2EDE4",creamDark:"#E8E0D0",
@@ -114,11 +113,21 @@ const buildAvailabilityDates = (items) => {
   return Array.from(groups.values());
 };
 
+const MENTOR = {
+  id: null,
+  name: "",
+  company: "",
+  job: "",
+  years: "",
+  tags: [],
+  point: 0,
+  availabilities: [],
+};
+
 export default function MentorApply(){
   const navigate=useNavigate();
   const { id: mentorIdParam } = useParams();
   const { state: navState } = useLocation();
-  const { id: mentorId } = useParams();
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const mentorFromState = navState?.mentor ?? {};
@@ -407,7 +416,6 @@ export default function MentorApply(){
               </div>
             </div>
           </div>
-        </div>
       </main>
     </>
   );

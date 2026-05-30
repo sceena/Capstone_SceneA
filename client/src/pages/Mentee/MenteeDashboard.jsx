@@ -195,7 +195,7 @@ const DashCard = ({ title, sub, children, style }) => (
 );
 
 /* ── 다가오는 세션 아이템 ── */
-const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
+const UpcomingItem = ({ date, time, title, mentor, type, status, onEnter }) => {
   const [mon, day] = (date || "").split(".").map(Number);
   const today = new Date(); today.setHours(0,0,0,0);
   const target = new Date(new Date().getFullYear(), (mon||1)-1, day||1);
@@ -229,15 +229,28 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
         <p style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{title}</p>
         <p style={{ fontSize:12, color:C.textMuted }}>{mentor} · {type}</p>
       </div>
-      <div style={{ flexShrink:0, textAlign:"right" }}>
-        <div style={{ fontSize:14, fontWeight:800, color:ddayColor, letterSpacing:"-0.02em", marginBottom:4 }}>{dday}</div>
-        <div style={{
-          fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:99,
-          background: status==="confirmed" ? C.tealLight : "#FEF3C7",
-          color: status==="confirmed" ? C.teal : "#92400E",
-        }}>
-          {status==="confirmed" ? "확정" : status==="pending" ? "대기중" : "미확정"}
+      <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ textAlign:"right" }}>
+          <div style={{ fontSize:14, fontWeight:800, color:ddayColor, letterSpacing:"-0.02em", marginBottom:4 }}>{dday}</div>
+          <div style={{
+            fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:99,
+            background: status==="confirmed" ? C.tealLight : "#FEF3C7",
+            color: status==="confirmed" ? C.teal : "#92400E",
+          }}>
+            {status==="confirmed" ? "확정" : status==="pending" ? "대기중" : "미확정"}
+          </div>
         </div>
+        {status === "confirmed" && onEnter && (
+          <button onClick={onEnter} style={{
+            padding:"8px 14px", background:C.navy, color:C.white,
+            border:"none", borderRadius:8, fontSize:12, fontWeight:700,
+            cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+            transition:"opacity 0.15s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.opacity="0.85"; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity="1"; }}
+          >입장하기</button>
+        )}
       </div>
     </div>
   );
@@ -309,10 +322,16 @@ export default function MenteeDashboard() {
     }
   };
 
-  useEffect(() => {
+  const loadSessions = () => {
     getMySessions()
       .then(data => setSessions(Array.isArray(data) ? data : []))
-      .catch(() => setSessions([]));
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadSessions();
+    const interval = setInterval(loadSessions, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -601,7 +620,9 @@ export default function MenteeDashboard() {
           {/* 다가오는 면접 세션 */}
           <DashCard title="다가오는 면접 세션">
             <div>
-              {upcoming.map((u, i) => <UpcomingItem key={i} {...u}/>)}
+              {upcoming.map((u, i) => (
+                <UpcomingItem key={i} {...u} onEnter={() => navigate(`/interview/ready/${u.id}`)} />
+              ))}
             </div>
 
             {/* 멘토 신청 바로가기 */}

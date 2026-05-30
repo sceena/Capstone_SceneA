@@ -7,6 +7,7 @@ import com.backend.domain.mentorAvailability.dto.request.AvailabilityCreateReque
 import com.backend.domain.mentorAvailability.dto.response.AvailabilityResponse;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
+import com.backend.domain.reservation.repository.ReservationRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,9 @@ class MentorAvailabilityServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private ReservationRepository reservationRepository;
 
     @Test
     void 가용시간_조회_성공() {

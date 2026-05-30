@@ -5,7 +5,6 @@ import { Device } from "mediasoup-client";
 import useAuthStore from "../../store/authStore";
 import { getAuthUser } from "../../store/authStore";
 import { getSession, getSessionReport, updateSessionStatus } from "../../api/sessions";
-import mockAiReport from "../Report/mockAiReport";
 import {
   getStreamVideoDeviceId,
   openInterviewStream,
@@ -17,10 +16,6 @@ const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 
-const USE_MOCK_REPORT = import.meta.env.VITE_USE_MOCK_REPORT === "false"
-  ? false
-  : import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_REPORT === "true";
-
 function scoreToStars(score) {
   return Math.max(1, Math.min(5, Math.round((Number(score) || 0) / 2)));
 }
@@ -31,55 +26,6 @@ function parseFitGapItem(item) {
   const detail = detailPart?.replace(/^근거\(([^)]+)\):\s*/, " · ")?.replace(/^부족 근거:\s*/, "") || "";
   return { requirement, detail };
 }
-
-// ─── 더미 세션 데이터 (실제 연동 시 API로 교체) ─────────────────
-const MOCK_BASE_REPORT = {
-  title: "AI 정밀 진단 리포트",
-  date: "2026.04.02",
-  totalScore: 85,
-  bestMoment: {
-    quote: "결국 벤치마킹 데이터를 정리해 팀원들을 설득했습니다.",
-    reason: "수치 기반 결과 제시 + 행동-결과 인과관계가 명확해 설득력이 높아요.",
-  },
-  worstMoment: {
-    quote: "어... 그러니까 제 생각에는 그게 좀...",
-    reason: "만연체 + 경험 없는 이론 나열. 구체적 사례로 전환 필요해요.",
-  },
-  scriptSegments: [
-    { text: "네, 저는 지난 캡스톤 프로젝트에서 팀원 간 역할 분담 문제로 갈등이 생긴 경험이 있습니다.", type: "S" },
-    { text: " 어... 그러니까 제 생각에는 그게 좀...", type: "BAD" },
-    { text: " 백엔드 팀원과 API 설계 방향에서 의견 충돌이 있었습니다.", type: "T" },
-    { text: " 저는 상대방의 입장을 먼저 들어보자는 생각으로...", type: "A" },
-  ],
-  fitGap: [
-    { label: "Java / Spring Boot", pct: 92 },
-    { label: "대규모 트래픽 경험", pct: 78 },
-    { label: "CI/CD · DevOps", pct: 51 },
-    { label: "MSA · 분산 시스템", pct: 44 },
-    { label: "데이터 파이프라인", pct: 22 },
-  ],
-  qnas: [
-    { id: "q1", question: "Q1 · 기술적 도전과 해결 과정을 말해주세요.", aiScore: 4.0, transcript: "카카오 인턴 당시 결제 서버 피크 타임 응답 지연 문제를 Redis 캐싱으로 해결, 응답 시간 340ms 달성." },
-    { id: "q2", question: "Q2 · 협업 중 의견 충돌 경험이 있나요?", aiScore: 5.0, transcript: "REST API 설계 방향 충돌 → 장단점 문서화 → 팀 합의 도출 → API 일관성 향상." },
-    { id: "q3", question: "Q3 · MSA 서비스 간 통신 방식을 설명해보세요.", aiScore: 2.0, transcript: "MSA는 서비스들이 독립적으로 운영되고 REST, 메시지 큐, gRPC 방법이 있는데 저는 주로 REST를 많이 써봤고..." },
-  ],
-};
-
-const MOCK_MENTEES = [
-  { id: "u1", name: "김민준", report: { ...MOCK_BASE_REPORT, menteeName: "김민준", totalScore: 85 } },
-  { id: "u2", name: "이서연", report: { ...MOCK_BASE_REPORT, menteeName: "이서연", totalScore: 72, bestMoment: { quote: "팀 내 갈등을 직접 나서서 조율했고, 결국 프로젝트를 기한 내 완료했습니다.", reason: "갈등 관리 역량과 책임감이 돋보여요." }, fitGap: [ { label: "Java / Spring Boot", pct: 75 }, { label: "대규모 트래픽 경험", pct: 60 }, { label: "CI/CD · DevOps", pct: 82 }, { label: "MSA · 분산 시스템", pct: 38 }, { label: "데이터 파이프라인", pct: 55 } ] } },
-  { id: "u3", name: "박준혁", report: { ...MOCK_BASE_REPORT, menteeName: "박준혁", totalScore: 91, bestMoment: { quote: "사용자 피드백을 직접 수집해 서비스 개선에 반영했고, MAU 30% 증가를 이끌었습니다.", reason: "데이터 기반 의사결정과 실행력이 탁월해요." }, fitGap: [ { label: "Java / Spring Boot", pct: 88 }, { label: "대규모 트래픽 경험", pct: 91 }, { label: "CI/CD · DevOps", pct: 70 }, { label: "MSA · 분산 시스템", pct: 65 }, { label: "데이터 파이프라인", pct: 48 } ] } },
-];
-
-const MOCK_SESSION = {
-  sessionId: "sess-001",
-  title: "그룹 면접 멘토링 세션",
-  date: "2026.04.02",
-  time: "19:00",
-  mentor: { id: "m1", name: "박지훈", role: "Moderator", avatar: null },
-  mentee: MOCK_MENTEES[0],
-  report: MOCK_MENTEES[0].report,
-};
 
 // ─── 세그먼트 색상 맵 ─────────────────────────────────────────────
 const SEGMENT_STYLE = {
@@ -280,7 +226,7 @@ function SharedReport({ report }) {
   const fitGap = aiReport?.fit_gap;
   const overallScore = aiReport?.overall_score ?? report?.total_score ?? 0;
   const scoreColor = overallScore >= 8 ? GREEN : overallScore >= 6 ? "#F59E0B" : "#E24B4A";
-  const metaBadges = report?.__mock ? ["1차 AI 리포트", "분석 완료", "개발 mock"] : ["1차 AI 리포트", "분석 완료"];
+  const metaBadges = ["1차 AI 리포트", "분석 완료"];
 
   return (
     <div style={{ flex: 1, background: "#EDEBE6", overflowY: "auto", padding: "20px 18px", scrollBehavior: "smooth" }}>
@@ -386,7 +332,7 @@ export default function MentoringSessionPage() {
   const { sessionId } = useParams(); // /session/:sessionId
   const { user } = useAuthStore(); // { role: 'mentor' | 'mentee', name: '...' }
 
-  const [session, setSession] = useState(MOCK_SESSION);
+  const [session, setSession] = useState({ mentor: { name: "" }, title: "", date: "", time: "" });
   const [reportData, setReportData] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -394,7 +340,7 @@ export default function MentoringSessionPage() {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
   /* ── 멀티 멘티 리포트 네비게이션 ── */
-  const [menteeList, setMenteeList] = useState(MOCK_MENTEES);
+  const [menteeList, setMenteeList] = useState([]);
   const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
 
   const timerRef = useRef(null);
@@ -495,11 +441,7 @@ export default function MentoringSessionPage() {
       .then(data => {
         const sessionMentees = (data.participants || []).filter(p => p.role !== 'mentor');
         if (sessionMentees.length > 0) {
-          const withReports = sessionMentees.map(m => ({
-            ...m,
-            report: { ...MOCK_BASE_REPORT, menteeName: m.name },
-          }));
-          setMenteeList(withReports);
+          setMenteeList(sessionMentees.map(m => ({ ...m, report: null })));
         }
         setSession(prev => ({ ...prev, ...data, mentor: data.mentor || prev.mentor }));
       })
@@ -508,19 +450,13 @@ export default function MentoringSessionPage() {
       .then(data => {
         if (data?.ai_report) {
           setReportData(data);
-        } else if (USE_MOCK_REPORT) {
-          setReportData({ ...mockAiReport, session_id: Number(sessionId) || mockAiReport.session_id, __mock: true });
         }
         if (data) {
           setSession(prev => ({ ...prev, report: data }));
           setMenteeList(prev => prev.map((m, i) => i === 0 ? { ...m, report: { ...data, menteeName: m.name } } : m));
         }
       })
-      .catch(() => {
-        if (USE_MOCK_REPORT) {
-          setReportData({ ...mockAiReport, session_id: Number(sessionId) || mockAiReport.session_id, __mock: true });
-        }
-      });
+      .catch(() => {});
   }, [sessionId]);
 
   // 멘티 리포트 네비게이션 (멘토만 조작, 소켓으로 전체 동기화)
@@ -746,7 +682,7 @@ export default function MentoringSessionPage() {
   }, [navigate, session.sessionId, session.mentorName, sessionId, user?.role]);
 
   const isMentor = user?.role === "mentor";
-  const currentMentee = menteeList[currentMenteeIdx] || MOCK_MENTEES[0];
+  const currentMentee = menteeList[currentMenteeIdx] || null;
   const currentReport = currentMentee?.report || session.report;
 
   const getPeerName = (peerId) => {
@@ -839,12 +775,12 @@ export default function MentoringSessionPage() {
             padding: "10px 16px",
           }}
         >
-          <Avatar name={session.mentor.name} size={36} bg={NAVY} />
+          <Avatar name={session.mentor?.name || "멘토"} size={36} bg={NAVY} />
           <div>
             <p style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>
-              {session.mentor.name}
+              {session.mentor?.name || "멘토"}
             </p>
-            <p style={{ fontSize: 11, color: "#888" }}>{session.mentor.role}</p>
+            <p style={{ fontSize: 11, color: "#888" }}>{session.mentor?.role}</p>
           </div>
           {/* 더보기 버튼 */}
           <button
@@ -968,7 +904,7 @@ export default function MentoringSessionPage() {
           </div>
 
           <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto" }}>
-            <SharedReport report={reportData || { ...mockAiReport, session_id: Number(sessionId) || 1, __mock: true }} />
+            <SharedReport report={reportData} />
           </div>
 
           {/* 캔버스 오버레이 */}

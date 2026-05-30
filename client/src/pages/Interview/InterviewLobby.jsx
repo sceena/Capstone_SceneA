@@ -7,7 +7,6 @@ import {
   getResume,
   getSession,
   joinSession,
-  saveResume,
   updateSessionStatus,
 } from "../../api/sessions";
 import {
@@ -49,6 +48,8 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [recommendSaving, setRecommendSaving] = useState(false);
   const [recommendError, setRecommendError] = useState("");
   const [resumeContent, setResumeContent] = useState("");
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const [resumeError, setResumeError] = useState("");
   const [openResumeIndex, setOpenResumeIndex] = useState(null);
 
   /* ── 오디오 레벨 분석 ── */
@@ -66,23 +67,14 @@ export default function InterviewRobby({ role = "mentee" }) {
       getQuestions(id).then(data => {
         setQuestions(normalizeQuestionList(data));
       }).catch(() => {});
-      getResume(id).then(data => {
-        setResumeContent(data?.content ?? "");
-      }).catch(() => {});
     }
-    if (role === "mentee") {
-      const raw = localStorage.getItem("scena_resume_draft");
-      try {
-        const draft = JSON.parse(raw);
-        if (Array.isArray(draft)) {
-          const content = draft
-            .filter(item => item?.content?.trim())
-            .map(item => `[${item.title || "자기소개서"}]\n${item.content.trim()}`)
-            .join("\n\n");
-          if (content) saveResume(id, content).catch(() => {});
-        }
-      } catch {}
-    }
+    getResume(id).then(data => {
+      setResumeContent(data?.content ?? "");
+      setResumeError("");
+    }).catch(() => {
+      setResumeContent("");
+      setResumeError("제출한 자소서를 불러오지 못했습니다.");
+    });
   }, [id, role]);
 
   /* 사용 가능한 카메라 목록 로드 */
@@ -210,11 +202,31 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   const parseResumeContent = (content) => {
     if (!content) return [];
-    return content.split(/\n\n+/).map(section => {
-      const match = section.match(/^\[(.+?)\]\n([\s\S]*)/);
-      if (match) return { title: match[1], content: match[2].trim() };
-      return { title: "자기소개서", content: section.trim() };
-    }).filter(item => item.content);
+    const sections = [];
+    const lines = content.split(/\r?\n/);
+    let current = null;
+
+    lines.forEach(line => {
+      const titleMatch = line.match(/^\[(.+?)\]\s*$/);
+      if (titleMatch) {
+        if (current?.content?.trim()) {
+          sections.push({ title: current.title, content: current.content.trim() });
+        }
+        current = { title: titleMatch[1].trim(), content: "" };
+        return;
+      }
+
+      if (current) {
+        current.content += `${line}\n`;
+      }
+    });
+
+    if (current?.content?.trim()) {
+      sections.push({ title: current.title, content: current.content.trim() });
+    }
+
+    if (sections.length > 0) return sections;
+    return [{ title: "자기소개서", content: content.trim() }].filter(item => item.content);
   };
 
   const normalizeQuestionList = (data) => {
@@ -705,32 +717,69 @@ export default function InterviewRobby({ role = "mentee" }) {
               </div>
             )}
 
-            {/* ── 멘티 전용: 자소서 등록 확인 ── */}
+            {/* ── 멘티 전용: 제출한 자소서 보기 ── */}
             {!isMentor && (
               <div style={{
                 background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"14px 16px",
                 border:"1px solid rgba(255,255,255,0.1)",
               }}>
                 <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:12 }}>
-                  자소서 등록 확인
+                  제출한 자소서
                 </p>
-                {sessionData?.jobPosting || sessionData?.jobPostingUrl || sessionData?.coverLetter ? (
-                  <div>
-                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                      <div style={{
-                        width:28, height:28, borderRadius:"50%",
-                        background:"rgba(29,158,117,0.2)", border:"1px solid rgba(29,158,117,0.5)",
-                        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                      }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C_teal} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <p style={{ fontSize:13, fontWeight:700, color:"#fff" }}>자기소개서 등록 완료</p>
-                        <p style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>면접 AI 분석에 반영됩니다</p>
-                      </div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+                    <div style={{
+                      width:28, height:28, borderRadius:"50%",
+                      background:"rgba(29,158,117,0.2)", border:"1px solid rgba(29,158,117,0.5)",
+                      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C_teal} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M7 3h7l4 4v14H7z"/>
+                        <path d="M14 3v5h5M10 13h6M10 17h4"/>
+                      </svg>
                     </div>
+                    <div style={{ minWidth:0 }}>
+                      <p style={{ fontSize:13, fontWeight:700, color:"#fff" }}>면접 신청 시 제출한 자기소개서</p>
+                      <p style={{ fontSize:11, color:"rgba(255,255,255,0.4)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                        {resumeError || (resumeContent ? "멘토와 AI 추천 질문 생성에 활용됩니다" : "제출한 자기소개서를 불러오는 중입니다")}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!resumeContent}
+                    onClick={() => setResumeOpen(v => !v)}
+                    style={{
+                      border:`1px solid ${resumeContent ? "rgba(29,158,117,0.7)" : "rgba(255,255,255,0.16)"}`,
+                      background: resumeContent ? "rgba(29,158,117,0.14)" : "rgba(255,255,255,0.04)",
+                      color: resumeContent ? C_teal : "rgba(255,255,255,0.35)",
+                      borderRadius:8,
+                      padding:"8px 12px",
+                      fontSize:12,
+                      fontWeight:700,
+                      cursor: resumeContent ? "pointer" : "not-allowed",
+                      whiteSpace:"nowrap",
+                      fontFamily:"inherit",
+                    }}
+                  >
+                    {resumeOpen ? "접기" : "보기"}
+                  </button>
+                </div>
+                {resumeOpen && resumeContent && (
+                  <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:10 }}>
+                    {parseResumeContent(resumeContent).map((item, i) => (
+                      <div key={`${item.title}-${i}`} style={{
+                        background:"rgba(255,255,255,0.05)",
+                        border:"1px solid rgba(255,255,255,0.08)",
+                        borderRadius:10,
+                        padding:"12px",
+                      }}>
+                        <p style={{ fontSize:11, fontWeight:800, color:C_teal, marginBottom:6 }}>{item.title}</p>
+                        <p style={{ fontSize:12, lineHeight:1.7, color:"rgba(255,255,255,0.72)", whiteSpace:"pre-wrap" }}>
+                          {item.content}
+                        </p>
+                      </div>
+                    ))}
                     {(sessionData?.jobPosting?.url || sessionData?.jobPostingUrl) && (
                       <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"8px 12px" }}>
                         <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:2 }}>채용공고 URL</p>
@@ -739,25 +788,6 @@ export default function InterviewRobby({ role = "mentee" }) {
                         </p>
                       </div>
                     )}
-                  </div>
-                ) : (
-                  <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
-                    <div style={{
-                      width:28, height:28, borderRadius:"50%",
-                      background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)",
-                      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                    }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <p style={{ fontSize:13, fontWeight:700, color:"#EF4444", marginBottom:4 }}>자기소개서 미등록</p>
-                      <p style={{ fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.6 }}>
-                        자기소개서가 없으면 AI 맞춤 질문 생성이 제한됩니다.<br/>
-                        마이페이지에서 등록 후 입장을 권장드립니다.
-                      </p>
-                    </div>
                   </div>
                 )}
               </div>

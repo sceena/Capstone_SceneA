@@ -345,8 +345,6 @@ export default function MenteeDashboard() {
     type: getSessionType(s),
     status: "confirmed",
   }));
-  const todaySession = scheduledCards[0] ?? null;
-
   const history = completedSessions.map(s => ({
     id: s.id,
     date: toDateText(getScheduledAt(s)),
@@ -537,23 +535,28 @@ export default function MenteeDashboard() {
           </div>
         </div>
 
-        {/* ── 오늘 예정된 일정 ── */}
-        <DashCard title="오늘 예정된 일정" style={{ marginBottom:24 }}>
-          {todaySession ? (
-            <SessionCard
-              title={todaySession.title}
-              date={todaySession.date}
-              mentor={todaySession.mentor}
-              type={todaySession.type}
-              time={todaySession.time}
-              onEnter={() => navigate(`/interview/ready/${todaySession.id}`)}
-            />
+        {/* ── 예정된 일정 ── */}
+        <DashCard title="예정된 일정" style={{ marginBottom:24 }}>
+          {scheduledCards.length > 0 ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {scheduledCards.map(session => (
+                <SessionCard
+                  key={session.id}
+                  title={session.title}
+                  date={session.date}
+                  mentor={session.mentor}
+                  type={session.type}
+                  time={session.time}
+                  onEnter={() => navigate(`/interview/ready/${session.id}`)}
+                />
+              ))}
+            </div>
           ) : (
             <div style={{ textAlign:"center", padding:"40px 0", color:C.textMuted, fontSize:14 }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.4" style={{ display:"block", margin:"0 auto 12px" }}>
                 <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
               </svg>
-              오늘 예정된 면접 세션이 없습니다
+              예정된 면접 세션이 없습니다
             </div>
           )}
         </DashCard>

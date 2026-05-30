@@ -66,6 +66,9 @@ class AnswerEvaluator:
         return AnswerEvaluation(
             report=QuestionReport(
                 question_id=answer.question_id,
+                answer_id=answer.answer_id,
+                mentee_id=answer.mentee_id,
+                mentee_name=answer.mentee_name,
                 question=answer.question,
                 answer=answer_text,
                 score=score,
@@ -73,6 +76,8 @@ class AnswerEvaluator:
                 strengths=strengths,
                 improvements=improvements,
                 evaluation_source="sft",
+                ai_model_name=self._sft_model_name(),
+                prompt_version="sft_eval_v1",
                 replay=Replay(
                     audio_url=answer.audio_url,
                     start_time=answer.answer_start,
@@ -132,6 +137,9 @@ class AnswerEvaluator:
         return AnswerEvaluation(
             report=QuestionReport(
                 question_id=answer.question_id,
+                answer_id=answer.answer_id,
+                mentee_id=answer.mentee_id,
+                mentee_name=answer.mentee_name,
                 question=answer.question,
                 answer=answer_text,
                 score=score,
@@ -139,6 +147,8 @@ class AnswerEvaluator:
                 strengths=strengths,
                 improvements=improvements,
                 evaluation_source="fallback",
+                ai_model_name="rule-based-fallback",
+                prompt_version="fallback_eval_v1",
                 replay=Replay(
                     audio_url=answer.audio_url,
                     start_time=answer.answer_start,
@@ -171,3 +181,10 @@ class AnswerEvaluator:
             "핵심 답변은 가능하지만 "
             f"{metrics_summary.star_structure} 상태라 더 구체적인 결과 설명이 필요합니다."
         )
+
+    def _sft_model_name(self) -> str:
+        base_model = self.model_inference.settings.base_model
+        adapter_path = self.model_inference.settings.adapter_path
+        if adapter_path:
+            return f"{base_model} + {adapter_path}"
+        return base_model

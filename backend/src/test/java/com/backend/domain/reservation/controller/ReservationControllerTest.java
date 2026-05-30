@@ -46,8 +46,8 @@ class ReservationControllerTest {
     @Test
     void 예약_신청_성공_201() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        ReservationRequest request = new ReservationRequest(3L, 7L, 12L);
-        ReservationResponse response = new ReservationResponse(55L, 3L, 7L, ReservationStatus.PENDING, LocalDateTime.now());
+        ReservationRequest request = new ReservationRequest(3L, 7L, 42L, 12L);
+        ReservationResponse response = new ReservationResponse(55L, 3L, 7L, 42L, ReservationStatus.PENDING, LocalDateTime.now());
 
         given(reservationService.createReservation(any(), any())).willReturn(response);
 
@@ -64,7 +64,7 @@ class ReservationControllerTest {
 
     @Test
     void 예약_신청_인증없이_401() throws Exception {
-        ReservationRequest request = new ReservationRequest(3L, 7L, 12L);
+        ReservationRequest request = new ReservationRequest(3L, 7L, 42L, 12L);
 
         mockMvc.perform(post("/api/reservation/request")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -75,7 +75,7 @@ class ReservationControllerTest {
     @Test
     void 예약_신청_이미예약된슬롯_409() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        ReservationRequest request = new ReservationRequest(3L, 7L, 12L);
+        ReservationRequest request = new ReservationRequest(3L, 7L, 42L, 12L);
 
         given(reservationService.createReservation(any(), any()))
                 .willThrow(new CustomException(ErrorCode.RESERVATION_SLOT_TAKEN));
@@ -91,7 +91,7 @@ class ReservationControllerTest {
     void 예약_수락_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(2L, "MENTOR");
         ReservationAcceptRequest request = new ReservationAcceptRequest(true);
-        ReservationAcceptResponse response = new ReservationAcceptResponse(55L, ReservationStatus.CONFIRMED, LocalDateTime.now());
+        ReservationAcceptResponse response = new ReservationAcceptResponse(55L, 42L, ReservationStatus.CONFIRMED, LocalDateTime.now());
 
         given(reservationService.acceptReservation(any(), eq(55L), any())).willReturn(response);
 

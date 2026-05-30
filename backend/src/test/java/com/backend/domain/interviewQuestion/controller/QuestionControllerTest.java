@@ -56,8 +56,8 @@ class QuestionControllerTest {
                 new QuestionCreateRequest.QuestionItem("가장 어려웠던 트레이드오프는 무엇이었나요?")
         ));
         List<QuestionCreateResponse> response = List.of(
-                new QuestionCreateResponse(101L, 42L, "가장 복잡한 시스템 설계 사례를 말씀해 주세요.", LocalDateTime.now()),
-                new QuestionCreateResponse(102L, 42L, "가장 어려웠던 트레이드오프는 무엇이었나요?", LocalDateTime.now())
+                new QuestionCreateResponse(101L, 42L, "가장 복잡한 시스템 설계 사례를 말씀해 주세요.", null, LocalDateTime.now()),
+                new QuestionCreateResponse(102L, 42L, "가장 어려웠던 트레이드오프는 무엇이었나요?", null, LocalDateTime.now())
         );
 
         given(questionService.createQuestions(any(), eq(42L), any())).willReturn(response);
@@ -126,8 +126,8 @@ class QuestionControllerTest {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
         LocalDateTime now = LocalDateTime.now();
         List<QuestionDetailResponse> response = List.of(
-                new QuestionDetailResponse(101L, 42L, "가장 복잡한 시스템 설계 사례를 말씀해 주세요.", now, now),
-                new QuestionDetailResponse(102L, 42L, "가장 어려웠던 트레이드오프는 무엇이었나요?", now, now)
+                new QuestionDetailResponse(101L, 42L, "가장 복잡한 시스템 설계 사례를 말씀해 주세요.", null, now, now),
+                new QuestionDetailResponse(102L, 42L, "가장 어려웠던 트레이드오프는 무엇이었나요?", null, now, now)
         );
 
         given(questionService.getQuestions(any(), eq(42L))).willReturn(response);
@@ -166,7 +166,7 @@ class QuestionControllerTest {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
         LocalDateTime now = LocalDateTime.now();
         QuestionDetailResponse response = new QuestionDetailResponse(
-                101L, 42L, "가장 복잡한 시스템 설계 사례를 말씀해 주세요.", now, now
+                101L, 42L, "가장 복잡한 시스템 설계 사례를 말씀해 주세요.", null, now, now
         );
 
         given(questionService.getQuestion(any(), eq(42L), eq(101L))).willReturn(response);

@@ -29,13 +29,13 @@ class OAuthAttributesTest {
     @Test
     void Kakao_속성_파싱_성공() {
         Map<String, Object> profile = Map.of("nickname", "길동이");
-        Map<String, Object> kakaoAccount = Map.of("email", "user@kakao.com", "profile", profile);
+        Map<String, Object> kakaoAccount = Map.of("profile", profile);
         Map<String, Object> attributes = Map.of("id", 99999L, "kakao_account", kakaoAccount);
 
         OAuthAttributes result = OAuthAttributes.of("kakao", attributes);
 
         assertThat(result.providerId()).isEqualTo("99999");
-        assertThat(result.email()).isEqualTo("user@kakao.com");
+        assertThat(result.email()).isNull();
         assertThat(result.nickname()).isEqualTo("길동이");
         assertThat(result.provider()).isEqualTo(MemberProvider.KAKAO);
     }

@@ -8,5 +8,7 @@ import java.util.List;
 
 public interface MentorAvailabilityRepository extends JpaRepository<MentorAvailability, Long> {
 
+    List<MentorAvailability> findAllByMentor(Member mentor);
+
     List<MentorAvailability> findAllByMentorAndIsBookedFalse(Member mentor);
 }

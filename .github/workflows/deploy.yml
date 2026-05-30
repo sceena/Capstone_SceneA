@@ -186,6 +186,7 @@ jobs:
               -e "ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}" \
               -e "RTC_MIN_PORT=10000" \
               -e "RTC_MAX_PORT=10100" \
+              -e "LOCAL_IP=${{ secrets.LOCAL_IP }}" \
               ${{ env.MEDIA_IMAGE_NAME }}:latest
 
             docker image prune -f

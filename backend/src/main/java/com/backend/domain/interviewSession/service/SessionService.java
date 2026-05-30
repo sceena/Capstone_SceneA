@@ -32,8 +32,17 @@ public class SessionService {
 
     @Transactional
     public SessionCreateResponse createSession(Long mentorId, SessionCreateRequest request) {
-        Member mentor = memberRepository.findById(mentorId)
+        Member requester = memberRepository.findById(mentorId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        Member mentor = requester;
+        if (request.mentorId() != null && requester.getRole() == Role.MENTEE) {
+            mentor = memberRepository.findById(request.mentorId())
+                    .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+            if (mentor.getRole() != Role.MENTOR) {
+                throw new CustomException(ErrorCode.INVALID_REQUEST);
+            }
+        }
 
         InterviewSession session = InterviewSession.builder()
                 .mentor(mentor)
@@ -41,7 +50,22 @@ public class SessionService {
                 .scheduledAt(java.time.LocalDateTime.now())
                 .build();
 
-        return SessionCreateResponse.from(sessionRepository.save(session));
+        if (requester.getRole() == Role.MENTEE) {
+            session.markPending();
+        }
+
+        InterviewSession savedSession = sessionRepository.save(session);
+
+        if (requester.getRole() == Role.MENTEE) {
+            SessionParticipant participant = SessionParticipant.builder()
+                    .interviewSession(savedSession)
+                    .member(requester)
+                    .answerStatus(AnswerStatus.WAITING)
+                    .build();
+            participantRepository.save(participant);
+        }
+
+        return SessionCreateResponse.from(savedSession);
     }
 
     public SessionDetailResponse getSession(Long memberId, Long sessionId) {
@@ -74,17 +98,21 @@ public class SessionService {
 
         if (member.getRole() == Role.MENTOR) {
             page = sessionStatus != null
-                    ? sessionRepository.findAllByMentorAndStatus(member, sessionStatus, pageable).map(SessionSummaryResponse::from)
-                    : sessionRepository.findAllByMentor(member, pageable).map(SessionSummaryResponse::from);
+                    ? sessionRepository.findAllByMentorAndStatus(member, sessionStatus, pageable).map(this::toSummary)
+                    : sessionRepository.findAllByMentor(member, pageable).map(this::toSummary);
         } else {
             page = sessionStatus != null
                     ? participantRepository.findAllByMemberAndInterviewSession_Status(member, sessionStatus, pageable)
-                        .map(p -> SessionSummaryResponse.from(p.getInterviewSession()))
+                        .map(p -> toSummary(p.getInterviewSession()))
                     : participantRepository.findAllByMember(member, pageable)
-                        .map(p -> SessionSummaryResponse.from(p.getInterviewSession()));
+                        .map(p -> toSummary(p.getInterviewSession()));
         }
 
         return SessionListResponse.from(page);
+    }
+
+    private SessionSummaryResponse toSummary(InterviewSession session) {
+        return SessionSummaryResponse.from(session, participantRepository.findAllByInterviewSession(session));
     }
 
     @Transactional

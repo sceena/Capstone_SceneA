@@ -4,6 +4,7 @@ class Room {
     this.router = router;
     // peerId -> { socket, sendTransport, recvTransports, producers, consumers }
     this.peers = new Map();
+    this.activeQuestion = null;
   }
 
   addPeer(peerId, socket) {

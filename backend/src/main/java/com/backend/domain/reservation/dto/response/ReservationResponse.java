@@ -10,6 +10,7 @@ public record ReservationResponse(
         Long id,
         @JsonProperty("mentor_id") Long mentorId,
         @JsonProperty("availability_id") Long availabilityId,
+        @JsonProperty("session_id") Long sessionId,
         ReservationStatus status,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
@@ -18,6 +19,7 @@ public record ReservationResponse(
                 reservation.getId(),
                 reservation.getMentorAvailability().getMentor().getId(),
                 reservation.getMentorAvailability().getId(),
+                reservation.getInterviewSession() != null ? reservation.getInterviewSession().getId() : null,
                 reservation.getStatus(),
                 reservation.getCreateDate()
         );

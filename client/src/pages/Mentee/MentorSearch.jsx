@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMentors } from "../../api/users";
 import { getAvatar } from "../../utils/avatar";
@@ -56,9 +56,8 @@ const Header = ({ userName, accessToken }) => {
   );
 };
 
-const MentorCard = ({ m, onClick, isMentor }) => {
-  const av = getAvatar(m.name);
-  const imageUrl = m.profile_image_url || m.profileImageUrl;
+const MentorCard = ({ m, onClick }) => {
+  const av = getAvatar(String(m.id ?? ""));
   return (
     <div onClick={onClick} style={{
       background:C.white, borderRadius:16, padding:"24px 20px",
@@ -69,8 +68,8 @@ const MentorCard = ({ m, onClick, isMentor }) => {
       onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="none"; }}
     >
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", textAlign:"center", marginBottom:14 }}>
-        {imageUrl ? (
-          <img src={imageUrl} alt={m.name} style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:`2px solid ${C.border}` }}/>
+        {m.profile_image_url ? (
+          <img src={m.profile_image_url} alt={m.name} style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:`2px solid ${C.border}` }}/>
         ) : (
           <div style={{ width:64, height:64, borderRadius:"50%", background:av.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, marginBottom:10 }}>{av.animal}</div>
         )}
@@ -108,6 +107,7 @@ const MentorCard = ({ m, onClick, isMentor }) => {
 
 export default function MentorSearch() {
   const navigate = useNavigate();
+  const { state: navState } = useLocation();
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
@@ -249,10 +249,7 @@ export default function MentorSearch() {
         {!loading && !error && mentors.length > 0 && (
           <div className="mgrid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:18 }}>
             {mentors.map(m => (
-              <MentorCard key={m.id} m={m}
-                isMentor={user?.role === "mentor"}
-                onClick={() => user?.role !== "mentor" && navigate(`/mentor/apply/${m.id}`, { state: { mentor: m } })}
-              />
+              <MentorCard key={m.id} m={m} onClick={() => navigate(`/mentor/apply/${m.id}`, { state: { mentor: m } })}/>
             ))}
           </div>
         )}

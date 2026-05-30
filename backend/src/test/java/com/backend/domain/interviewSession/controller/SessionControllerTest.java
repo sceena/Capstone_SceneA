@@ -77,10 +77,12 @@ class SessionControllerTest {
     @Test
     void 세션_단건조회_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
-        ParticipantInfo participant = new ParticipantInfo(10L, "mentee", AnswerStatus.WAITING, LocalDateTime.now());
+        ParticipantInfo participant = new ParticipantInfo(10L, "김멘티", "mentee", AnswerStatus.WAITING, LocalDateTime.now());
         SessionDetailResponse response = new SessionDetailResponse(
-                42L, "백엔드 개발", SessionStatus.SCHEDULED,
-                null, null, 1L, List.of(participant),
+                42L, "백엔드 개발 모의 면접", "백엔드 개발", "1:1 면접", SessionStatus.SCHEDULED,
+                LocalDateTime.now(), null, null, 1L, "박멘토", "김멘티",
+                "면접 준비를 함께 진행합니다.", "멘토에게 전달한 자소서와 지원 정보를 바탕으로 면접을 준비합니다.",
+                "자기소개서와 지원 정보를 기반으로 맞춤 질문을 확인할 수 있습니다.", List.of(participant),
                 LocalDateTime.now(), LocalDateTime.now()
         );
 
@@ -121,7 +123,11 @@ class SessionControllerTest {
     @Test
     void 내_세션_목록_조회_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
-        SessionSummaryResponse summary = new SessionSummaryResponse(42L, "백엔드 개발", SessionStatus.COMPLETED, 1L, LocalDateTime.now(), LocalDateTime.now());
+        SessionSummaryResponse summary = new SessionSummaryResponse(
+                42L, "백엔드 개발 모의 면접", "백엔드 개발", SessionStatus.COMPLETED,
+                1L, "박멘토", "김멘티", "1:1 면접",
+                LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now()
+        );
         SessionListResponse response = new SessionListResponse(List.of(summary), 0, 10, 1L, 1);
 
         given(sessionService.getMySessions(any(), any(), any())).willReturn(response);

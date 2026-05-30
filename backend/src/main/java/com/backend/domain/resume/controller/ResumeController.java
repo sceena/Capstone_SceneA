@@ -42,6 +42,20 @@ public class ResumeController {
                 .body(resumeService.saveResume(memberId, id, request));
     }
 
+    @Operation(summary = "자소서 조회", description = "세션에 등록된 자소서 원문을 조회한다. 멘토가 호출하면 멘티의 자소서를 반환한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 토큰 없음 또는 만료"),
+            @ApiResponse(responseCode = "403", description = "해당 세션 접근 권한 없음"),
+            @ApiResponse(responseCode = "404", description = "자소서 없음")
+    })
+    @GetMapping("/{id}/resume")
+    public ResponseEntity<ResumeSaveResponse> getResume(
+            @AuthenticationPrincipal Long memberId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(resumeService.getResume(memberId, id));
+    }
+
     @Operation(summary = "자소서 역량 조회", description = "AI가 자소서에서 추출한 역량 키워드 목록을 조회한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),

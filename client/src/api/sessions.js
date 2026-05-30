@@ -435,6 +435,18 @@ export async function saveResume(sessionId, content) {
 }
 
 /**
+ * GET /api/sessions/{id}/resume
+ * 세션에 등록된 자소서 원문을 조회한다. 멘토가 호출하면 멘티의 자소서를 반환한다.
+ */
+export async function getResume(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/resume`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("자소서 조회 실패");
+  return res.json();
+}
+
+/**
  * GET /api/sessions/{id}/resume/skills
  * AI가 자소서에서 추출한 역량 키워드 목록을 조회한다.
  */

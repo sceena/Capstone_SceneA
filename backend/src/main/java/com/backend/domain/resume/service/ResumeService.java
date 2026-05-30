@@ -51,6 +51,31 @@ public class ResumeService {
         return ResumeSaveResponse.from(resumeRepository.save(resume));
     }
 
+    public ResumeSaveResponse getResume(Long memberId, Long sessionId) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+
+        boolean isMentor = session.getMentor().getId().equals(memberId);
+
+        Member targetMember;
+        if (isMentor) {
+            List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
+            if (participants.isEmpty()) {
+                throw new CustomException(ErrorCode.RESUME_NOT_FOUND);
+            }
+            targetMember = participants.get(0).getMember();
+        } else {
+            validateSessionAccess(memberId, session);
+            targetMember = memberRepository.findById(memberId)
+                    .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        }
+
+        Resume resume = resumeRepository.findByInterviewSessionAndMember(session, targetMember)
+                .orElseThrow(() -> new CustomException(ErrorCode.RESUME_NOT_FOUND));
+
+        return ResumeSaveResponse.from(resume);
+    }
+
     public ResumeSkillsResponse getResumeSkills(Long memberId, Long sessionId) {
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));

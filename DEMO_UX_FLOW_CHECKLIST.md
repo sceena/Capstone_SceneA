@@ -19,15 +19,43 @@
 
 ## 2. 실행 환경 구성
 
+### 현재 데모 디버깅 원칙
+
+신청조차 안 되는 상황에서는 면접방/WebRTC/STT를 보기 전에 아래 순서로 끊어서 확인한다.
+
+1. 프론트가 어느 백엔드를 보고 있는지 확인한다.
+2. 로그인 토큰의 role/id와 실제 요청 payload가 맞는지 확인한다.
+3. `POST /api/sessions`가 성공해 `session_id`를 받는지 확인한다.
+4. `POST /api/sessions/{id}/resume`가 성공해 자소서가 세션에 붙는지 확인한다.
+5. `POST /api/reservation/request`에 `session_id`가 null이 아닌 실제 id로 들어가는지 확인한다.
+6. 멘토 대시보드에서 `GET /api/reservation/mentor?status=PENDING`가 성공하는지 확인한다.
+7. 멘토 수락 후 같은 `session_id`가 확정 세션으로 유지되는지 확인한다.
+
+핵심 기준:
+
+- `session_id: null`인 예약이 생기면 추천 질문/자소서 기반 준비 화면은 깨질 수 있다.
+- `POST /api/sessions`가 실패하면 예약 신청을 진행하면 안 된다.
+- `GET /api/sessions/{id}/report`의 404는 “아직 리포트 없음”일 수 있으므로 신청 실패와 분리해서 본다.
+- `POST /api/sessions`의 500은 치명적이다. 이 경우 백엔드 로그의 stacktrace를 반드시 확인한다.
+
 ### 프론트엔드
 
 - 개발 서버: `client`, Vite, 기본 포트 `5173`
 - API 프록시: `client/vite.config.js`
 - 기본 백엔드 대상: `http://54.116.176.242:8080`
 - 기본 미디어 서버 대상: `http://54.116.176.242:4000`
+- 개발 환경 명시 파일: `client/.env.development`
+  - `VITE_API_BASE_URL=http://54.116.176.242:8080`
+  - `VITE_MEDIA_SERVER_URL=http://54.116.176.242:4000`
 - 로컬 테스트 시 브라우저 접속 예:
   - 같은 PC: `http://localhost:5173`
   - 같은 네트워크 기기: `http://{PC_LAN_IP}:5173`
+
+주의:
+
+- Network 탭에는 `http://localhost:5173/api/...`로 보여도 Vite proxy가 내부적으로 배포 백엔드로 넘길 수 있다.
+- `.env.development` 또는 `vite.config.js`를 바꾼 뒤에는 `npm run dev`를 반드시 재시작한다.
+- 로컬 Spring Boot 콘솔에 H2 로그가 찍히고 있다면, 프론트가 로컬 백엔드를 보고 있는지 의심한다.
 
 ### 백엔드
 
@@ -39,6 +67,24 @@
 - 배포 확인:
   - Swagger: `http://54.116.176.242:8080/swagger-ui/index.html`
   - 백엔드 Docker 로그: `docker logs --tail=100 carpoolink-backend`
+- 로컬 백엔드 로그에서 `jdbc:h2:mem:testdb`가 보이면 로컬 H2 DB로 실행 중인 것이다.
+- 배포 백엔드와 로컬 H2는 데이터가 다르므로, 데모 검증 시 두 환경을 섞으면 안 된다.
+
+배포 백엔드 필수 엔드포인트:
+
+- `POST /api/sessions`
+- `GET /api/sessions/{id}`
+- `GET /api/sessions/me`
+- `POST /api/sessions/{id}/resume`
+- `POST /api/reservation/request`
+- `GET /api/reservation/mentor?status=PENDING`
+- `POST /api/reservation/{id}/response`
+- `POST /api/sessions/{id}/questions/recommendations`
+- `POST /api/sessions/{id}/questions/audio`
+- `POST /api/sessions/{id}/questions/{questionId}/answers`
+- `GET /api/sessions/{id}/answers/stt-status`
+- `POST /api/sessions/{id}/report/generate`
+- `GET /api/sessions/{id}/report`
 
 ### 미디어 서버
 
@@ -70,6 +116,173 @@
   - AI 서버는 오디오 파일만 받아 Whisper로 STT를 수행한다.
 
 ## 3. 역할별 UX 흐름
+
+## 3.0 신청/예약 플로우 디버깅
+
+면접 신청이 안 되면 이 섹션만 먼저 본다. 면접방, 카메라, STT는 그 다음이다.
+
+### 정상 신청 요청 순서
+
+멘티가 멘토 신청 버튼을 누르면 Network 탭에 아래 순서가 보여야 한다.
+
+```txt
+POST /api/sessions
+POST /api/sessions/{session_id}/job-posting      선택 사항
+POST /api/sessions/{session_id}/resume
+POST /api/reservation/request
+```
+
+정상 payload 예:
+
+```json
+// POST /api/sessions
+{
+  "mentor_id": 32,
+  "job_category": "백엔드 개발"
+}
+```
+
+```json
+// POST /api/sessions/{id}/resume
+{
+  "content": "[지원 동기]\n...\n\n[멘토에게 전달할 내용]\n..."
+}
+```
+
+```json
+// POST /api/reservation/request
+{
+  "mentor_id": 32,
+  "availability_id": 62,
+  "session_id": 51,
+  "job_posting_id": null
+}
+```
+
+성공 기준:
+
+- `POST /api/sessions` 응답에 `id`가 있어야 한다.
+- `POST /api/sessions/{id}/resume`가 201이어야 한다.
+- `POST /api/reservation/request`의 `session_id`가 null이면 안 된다.
+- 멘토 수락 전 reservation 상태는 `PENDING`이어야 한다.
+
+### 현재 발생했던 대표 문제
+
+문제 형태:
+
+```txt
+POST /api/sessions 500 Internal Server Error
+POST /api/reservation/request 201
+reservation.session_id = null
+```
+
+의미:
+
+- 프론트 payload는 정상일 수 있다.
+- 세션 생성이 백엔드 내부 예외로 실패했다.
+- 기존에는 세션 생성 실패를 무시하고 예약 신청을 계속 보내 `session_id: null` 예약이 생겼다.
+- 이 상태에서는 자소서가 세션에 저장되지 않고, 멘토 추천 질문 생성도 실패할 수 있다.
+
+현재 방어 기준:
+
+- `POST /api/sessions`가 실패하면 신청을 중단한다.
+- `session_id` 없는 예약을 더 만들지 않는다.
+- 사용자는 세션 생성 실패 메시지를 받아야 한다.
+
+### Network 탭 확인법
+
+Chrome DevTools:
+
+1. `Network` 탭
+2. `Fetch/XHR` 필터
+3. 신청 버튼 클릭
+4. 아래 요청을 순서대로 클릭해 확인
+
+확인 항목:
+
+- `Headers`
+  - Request URL
+  - Request Method
+  - Status Code
+  - Authorization Bearer token 존재 여부
+- `Payload`
+  - `mentor_id`
+  - `availability_id`
+  - `session_id`
+  - `job_category`
+- `Response`
+  - `code`
+  - `message`
+
+상태코드 해석:
+
+- `400`: 요청 값 문제. payload, enum, 날짜, 상태값 확인
+- `401`: 로그인 토큰 없음/만료
+- `403`: 역할/권한 문제. 멘티가 멘토 API를 호출했거나 세션 참여자가 아님
+- `404`: mentor/session/resume/availability id 없음
+- `409`: 이미 예약된 availability
+- `500`: 백엔드 내부 예외. 반드시 서버 로그 확인
+- `502`: AI 서버 호출 실패
+
+### 백엔드 로그 확인법
+
+배포 서버:
+
+```bash
+docker logs carpoolink-backend --tail 200
+docker logs -f carpoolink-backend
+```
+
+로컬 서버:
+
+- Spring Boot 실행 터미널에서 `Unhandled exception` 검색
+- 요청을 다시 보내고 바로 아래 stacktrace 확인
+
+찾아야 할 문구:
+
+```txt
+Unhandled exception
+Caused by:
+DataIntegrityViolationException
+SQLIntegrityConstraintViolationException
+Data truncated for column
+Unknown column
+Column ... cannot be null
+Cannot add or update a child row
+```
+
+의심 원인:
+
+- 배포 DB 스키마와 Entity 불일치
+- `interview_session.status` enum/컬럼 제약 불일치
+- `scheduled_at` not null 제약
+- `session_participant` FK 실패
+- `mentor_id`는 존재하지만 role이 `MENTOR`가 아님
+- 로그인 토큰 sub는 멘티인데 요청의 mentor_id가 잘못 해석됨
+- 운영 DB에는 id가 있는데 로컬 H2에는 데이터가 없음
+
+### 백엔드/프론트 환경 혼동 확인
+
+프론트 요청 URL이 `localhost:5173/api/...`로 보여도 실제 백엔드는 proxy target일 수 있다.
+
+확인 파일:
+
+- `client/.env.development`
+- `client/vite.config.js`
+- `client/vercel.json`
+
+데모 로컬 프론트가 배포 백엔드를 보려면:
+
+```env
+VITE_API_BASE_URL=http://54.116.176.242:8080
+VITE_MEDIA_SERVER_URL=http://54.116.176.242:4000
+```
+
+확인 방법:
+
+- 프론트 dev server 재시작
+- 신청 시 로컬 Spring Boot 터미널에 요청 로그가 찍히지 않아야 한다.
+- 배포 백엔드 로그에 요청이 찍혀야 한다.
 
 ## 3.1 멘토 UX
 
@@ -156,9 +369,10 @@
 
 현재 데모 안정성을 위해 주의할 점:
 
-- 신청 흐름에서 `POST /api/sessions`가 실패해도 예약 신청 자체가 막히면 안 된다.
+- 신청 흐름에서 `POST /api/sessions`가 실패하면 예약 신청을 중단해야 한다.
 - 예약 신청의 기준 상태는 `Reservation.status=PENDING`이다.
-- 멘토 수락 시 세션이 생성되거나 기존 세션이 확정되어야 한다.
+- `POST /api/reservation/request`에는 `session_id`가 null이 아닌 실제 세션 id로 들어가야 한다.
+- 멘토 수락 시 기존 `session_id`가 확정되어야 하며, 자소서가 붙은 세션과 다른 세션이 새로 만들어지면 안 된다.
 
 ### 면접 준비 화면
 
@@ -472,8 +686,16 @@ DPO JSONL 예:
 - [ ] 멘티가 멘토 탐색에서 멘토 확인
 - [ ] 멘티가 자소서 등록
 - [ ] 멘티가 가능한 시간을 선택해 신청
+- [ ] Network에서 `POST /api/sessions`가 201인지 확인
+- [ ] `POST /api/sessions` 응답의 `id`를 기록
+- [ ] Network에서 `POST /api/sessions/{id}/resume`가 201인지 확인
+- [ ] Network에서 `POST /api/reservation/request` payload의 `session_id`가 위 `id`와 같은지 확인
+- [ ] `session_id: null` 예약이 생성되지 않는지 확인
 - [ ] 멘토 대시보드에 수락 대기 표시
+- [ ] Network에서 `GET /api/reservation/mentor?status=PENDING`가 200인지 확인
 - [ ] 멘토가 수락
+- [ ] Network에서 `POST /api/reservation/{id}/response`가 200인지 확인
+- [ ] 수락 응답의 `session_id`가 신청 때 생성한 `session_id`와 같은지 확인
 - [ ] 멘티 대시보드에 확정 세션 표시
 
 ### B. 면접 준비
@@ -485,6 +707,8 @@ DPO JSONL 예:
 - [ ] 로컬 미리보기 표시
 - [ ] 상대방 영상 표시
 - [ ] 멘토 화면에 추천 질문 표시
+- [ ] Network에서 `POST /api/sessions/{id}/questions/recommendations`가 200인지 확인
+- [ ] 추천 질문 응답에 `personal_questions[].questions`가 있는지 확인
 - [ ] 멘토 화면에 멘티 자소서/요청사항 표시
 - [ ] 멘티 화면에는 추천 질문이 보이지 않음
 - [ ] 멘티 화면에는 본인 자소서/요청사항 요약만 표시
@@ -567,21 +791,201 @@ DPO JSONL 예:
 - 실제 면접 플로우에서는 DB에 저장된 질문/답변/리포트만 보여줘야 한다.
 - 리포트 화면에서 `mockAiReport`, 하드코딩된 질문/답변, 임시 점수가 남아 있는지 확인한다.
 
+## 10.1 긴급 장애 판별표
+
+### 신청 버튼을 눌렀는데 신청이 안 됨
+
+먼저 볼 요청:
+
+```txt
+POST /api/sessions
+```
+
+가능한 결과:
+
+| 결과 | 의미 | 다음 행동 |
+|---|---|---|
+| 201 | 세션 생성 성공 | `POST /api/sessions/{id}/resume` 확인 |
+| 400 | 요청 형식/값 문제 | Payload의 `mentor_id`, `job_category` 확인 |
+| 401 | 토큰 문제 | 재로그인, Authorization 헤더 확인 |
+| 403 | 권한 문제 | 로그인 role이 `MENTEE`인지 확인 |
+| 404 | mentor id 없음 | 멘토 목록에서 받은 id인지 확인 |
+| 500 | 백엔드 내부 예외 | 백엔드 로그 stacktrace 확인 |
+
+`POST /api/sessions`가 실패했는데 아래 요청이 나가면 안 된다.
+
+```txt
+POST /api/reservation/request
+```
+
+나가면 위험한 상태:
+
+```json
+{
+  "session_id": null,
+  "status": "PENDING"
+}
+```
+
+이 경우:
+
+- 자소서가 세션에 붙지 않았을 가능성이 높다.
+- 추천 질문 생성이 실패할 수 있다.
+- 해당 예약은 데모 추천 질문 테스트용으로 쓰지 않는 것이 좋다.
+
+### 자소서가 저장됐는지 모르겠음
+
+정상 확인:
+
+```txt
+POST /api/sessions/{id}/resume 201
+```
+
+응답 예:
+
+```json
+{
+  "id": 10,
+  "session_id": 51,
+  "content": "...",
+  "created_at": "..."
+}
+```
+
+이 요청이 없으면:
+
+- 자소서 관리 화면에서는 localStorage에만 저장된 상태일 수 있다.
+- 실제 DB 저장은 면접 신청 시 `session_id`가 생긴 뒤 진행된다.
+- `POST /api/sessions`가 실패하면 자소서는 DB에 올라가지 않는다.
+
+### 멘토 수락 대기 목록이 비어 있음
+
+먼저 볼 요청:
+
+```txt
+GET /api/reservation/mentor?status=PENDING
+```
+
+확인:
+
+- Authorization token의 role이 `MENTOR`인지
+- 멘티가 신청한 mentor id와 현재 로그인한 멘토 id가 같은지
+- 예약 생성 응답의 `mentor_id`가 맞는지
+- 백엔드 배포 Swagger에 `/api/reservation/mentor`가 있는지
+
+### 추천 질문이 안 뜸
+
+먼저 볼 요청:
+
+```txt
+POST /api/sessions/{id}/questions/recommendations
+```
+
+해석:
+
+- 200: 추천 질문 생성 성공
+- 403: 로그인 사용자가 세션 멘토가 아님
+- 404: 세션 또는 자소서 없음
+- 502: AI 서버/ngrok 문제
+- 500: 백엔드 내부 예외
+
+필수 선행 조건:
+
+- reservation의 `session_id`가 null이 아님
+- 해당 session에 멘티 participant가 있음
+- 해당 session + mentee member 조합으로 resume이 저장되어 있음
+- AI 서버 `/api/generate-session-questions`가 열려 있음
+
+### 리포트가 404임
+
+요청:
+
+```txt
+GET /api/sessions/{id}/report 404
+```
+
+의미:
+
+- 아직 리포트가 생성되지 않았을 수 있다.
+- 면접 신청 실패와 직접 관련된 에러가 아닐 수 있다.
+
+다음 확인:
+
+```txt
+GET /api/sessions/{id}/answers/stt-status
+POST /api/sessions/{id}/report/generate
+```
+
+리포트 생성 선행 조건:
+
+- 질문이 1개 이상 저장됨
+- 답변이 1개 이상 저장됨
+- 답변 STT가 완료되었거나 실패 fallback 처리 가능
+- AI 서버 `/report`가 열려 있음
+
+### STT가 안 됨
+
+먼저 볼 요청:
+
+```txt
+POST /api/sessions/{id}/questions/audio
+POST /api/sessions/{id}/questions/{questionId}/answers
+```
+
+해석:
+
+- 201인데 `stt_status=FAILED`: 오디오는 저장됐고 AI STT 실패
+- 500: S3 저장 또는 백엔드 내부 예외
+- 502: AI 서버 `/api/stt` 연결 실패
+
+확인:
+
+- AI 서버 Swagger `/api/stt`에서 직접 오디오 업로드 테스트
+- 백엔드 `ai.server.base-url`이 현재 ngrok URL인지 확인
+- Colab이 살아 있는지 확인
+- 브라우저가 만든 `audio/webm`을 AI 서버가 처리할 수 있는지 확인
+
+### 영상/카메라가 안 나옴
+
+확인 순서:
+
+1. 브라우저 주소가 `localhost` 또는 HTTPS인지 확인
+2. Mac 시스템 설정에서 Chrome/Safari 카메라/마이크 권한 확인
+3. 프론트 준비 화면에서 getUserMedia 권한 요청이 뜨는지 확인
+4. Network/Console에서 socket.io 연결 확인
+5. media-server 로그 확인
+6. `ANNOUNCED_IP`, `LOCAL_IP`, `RTC_MIN_PORT`, `RTC_MAX_PORT` 확인
+7. 서버 방화벽에서 UDP/TCP `10000-10100` 열림 확인
+
+## 10.2 오늘 데모를 위한 최소 우회 전략
+
+아래는 정식 해결이 아니라 데모 중 멈춤을 줄이기 위한 임시 운영 기준이다.
+
+- 신청이 막히면 DB에 `session_id: null` 예약을 만들지 말고 즉시 에러를 보여준다.
+- 추천 질문이 실패하면 멘토는 자소서 요약을 보고 직접 질문을 진행한다.
+- STT가 실패하면 오디오는 저장하고, 리포트에는 “STT 실패, 수동 확인 필요” 상태를 표시한다.
+- 리포트 생성이 실패하면 저장된 질문/답변 목록 화면까지는 이동 가능하게 한다.
+- AI 서버/ngrok가 끊기면 STT/추천/리포트는 실패할 수 있지만 로그인/예약/면접방/오디오 저장은 유지되어야 한다.
+
 ## 11. 현재 우선순위
 
-1. 신청 흐름이 멈추지 않게 만들기
-2. 멘토 수락 후 세션이 확정되어 준비 화면에 들어가게 만들기
-3. 카메라/마이크 미리보기 안정화
-4. 역할별 준비 화면 분리: 멘토는 추천 질문/멘티 자료, 멘티는 본인 자료만 표시
-5. 면접 중 질문/답변 버튼과 오디오 저장 안정화
-6. 동시 녹음 방지 lock과 현재 발화자 표시
-7. Whisper STT 성공/실패 상태 저장
-8. IT 용어 STT 보정 또는 수동 수정 fallback
-9. 질문-답변 pair 정확성 보장
-10. 실제 데이터 기반 리포트 생성과 Fit-Gap 표시
-11. 답변 다시 듣기
-12. 멘토 수정본 저장
-13. DPO JSONL export 확인
+1. `POST /api/sessions` 500 원인 제거
+2. `session_id: null` 예약 생성 방지
+3. `POST /api/sessions/{id}/resume` 201 확인
+4. `POST /api/reservation/request`에 실제 `session_id` 포함 확인
+5. 멘토 수락 후 같은 세션이 확정되어 준비 화면에 들어가게 만들기
+6. 멘토 준비 화면에서 자소서 기반 추천 질문 생성 확인
+7. 카메라/마이크 미리보기 안정화
+8. 역할별 준비 화면 분리: 멘토는 추천 질문/멘티 자료, 멘티는 본인 자료만 표시
+9. 면접 중 질문/답변 버튼과 오디오 저장 안정화
+10. 동시 녹음 방지 lock과 현재 발화자 표시
+11. Whisper STT 성공/실패 상태 저장
+12. IT 용어 STT 보정 또는 수동 수정 fallback
+13. 질문-답변 pair 정확성 보장
+14. 실제 데이터 기반 리포트 생성과 Fit-Gap 표시
+15. 답변 다시 듣기
+16. 멘토 수정본 저장
+17. DPO JSONL export 확인
 
 ## 12. 구현 시 주의할 점
 

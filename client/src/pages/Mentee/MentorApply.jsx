@@ -144,6 +144,7 @@ export default function MentorApply(){
   const [availabilityError,setAvailabilityError]=useState("");
   const [loading,setLoading]=useState(false);
   const [submitted,setSubmitted]=useState(false);
+  const [requestNote,setRequestNote]=useState("");
 
   useEffect(() => {
     if (!mentor.id) return;
@@ -210,7 +211,10 @@ export default function MentorApply(){
       }
 
       if (sessionId && resumeContent) {
-        await saveResume(sessionId, resumeContent);
+        const noteBlock = requestNote.trim()
+          ? `\n\n[멘토에게 전달할 내용]\n${requestNote.trim()}`
+          : "";
+        await saveResume(sessionId, `${resumeContent}${noteBlock}`);
       }
 
       await requestReservation({
@@ -374,6 +378,27 @@ export default function MentorApply(){
                     }}>{t.time}</button>
                   ))}
                 </div>
+              </div>
+
+              {/* 03 멘토에게 전달할 내용 */}
+              <div style={{padding:"24px 32px",borderBottom:`1px solid ${C.border}`}}>
+                <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:10}}>03 멘토에게 전달할 내용</p>
+                <textarea
+                  value={requestNote}
+                  onChange={e=>setRequestNote(e.target.value)}
+                  rows={4}
+                  placeholder={"현재 준비 상황, 걱정되는 부분, 멘토에게 받고 싶은 피드백을 적어주세요.\n예: 프로젝트 꼬리질문 대비가 필요하고, 백엔드 장애 대응 경험 답변을 점검받고 싶어요."}
+                  style={{
+                    width:"100%",resize:"vertical",border:`1.5px solid ${C.border}`,borderRadius:10,
+                    padding:"13px 14px",fontSize:14,lineHeight:1.7,fontFamily:"inherit",outline:"none",
+                    background:C.white,color:C.text,
+                  }}
+                  onFocus={e=>e.currentTarget.style.borderColor=C.navy}
+                  onBlur={e=>e.currentTarget.style.borderColor=C.border}
+                />
+                <p style={{fontSize:12,color:C.textMuted,marginTop:8}}>
+                  이 내용은 자소서 정보와 함께 저장되어 멘토의 사전 질문 준비에 활용됩니다.
+                </p>
               </div>
 
               {/* 포인트 + 신청 버튼 */}

@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 
 public record ParticipantInfo(
         @JsonProperty("user_id") Long userId,
+        String name,
         String role,
         @JsonProperty("answer_status") AnswerStatus answerStatus,
         @JsonProperty("joined_at") LocalDateTime joinedAt
@@ -15,6 +16,7 @@ public record ParticipantInfo(
     public static ParticipantInfo of(SessionParticipant participant, String role) {
         return new ParticipantInfo(
                 participant.getMember().getId(),
+                participant.getMember().getName(),
                 role,
                 participant.getAnswerStatus(),
                 participant.getCreateDate()

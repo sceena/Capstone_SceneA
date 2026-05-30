@@ -284,6 +284,14 @@ const HistoryItem = ({ date, title, mentor, score, tag, tagColor, onView }) => (
   </div>
 );
 
+const normalizeStatus = (status) => String(status || "").toLowerCase();
+const getScheduledAt = (session) => session.scheduledAt ?? session.scheduled_at ?? "";
+const getSessionTitle = (session) => session.title ?? (session.job_category ? `${session.job_category} 모의 면접` : "모의 면접");
+const getMentorName = (session) => session.mentorName ?? session.mentor_name ?? "";
+const getSessionType = (session) => session.sessionType ?? session.session_type ?? "1:1 면접";
+const toDateText = (value) => value ? String(value).slice(5, 10).replace("-", ".") : "";
+const toTimeText = (value) => value ? String(value).slice(11, 16) : "";
+
 /* ════════════════════════════════════════
    메인 컴포넌트
 ════════════════════════════════════════ */
@@ -318,7 +326,7 @@ export default function MenteeDashboard() {
   useEffect(() => {
     const viewed = JSON.parse(localStorage.getItem("scena_viewed_finals") || "[]");
     const unread = sessions.filter(s =>
-      s.status === "completed" &&
+      normalizeStatus(s.status) === "completed" &&
       (s.report_status === "final" || s.tag === "최종 리포트") &&
       !viewed.includes(String(s.id))
     );
@@ -326,30 +334,31 @@ export default function MenteeDashboard() {
   }, [sessions]);
 
   /* API 응답에서 UI 데이터 파생 */
-  const completedSessions = sessions.filter(s => s.status === "completed");
-  const scheduledSessions = sessions.filter(s => s.status === "scheduled");
-  const todaySession = scheduledSessions[0] ?? null;
+  const completedSessions = sessions.filter(s => normalizeStatus(s.status) === "completed");
+  const scheduledSessions = sessions.filter(s => normalizeStatus(s.status) === "scheduled");
+  const scheduledCards = scheduledSessions.map(s => ({
+    id: s.id,
+    date: toDateText(getScheduledAt(s)),
+    time: toTimeText(getScheduledAt(s)),
+    title: getSessionTitle(s),
+    mentor: getMentorName(s) ? `${getMentorName(s)} 멘토` : "",
+    type: getSessionType(s),
+    status: "confirmed",
+  }));
+  const todaySession = scheduledCards[0] ?? null;
 
   const history = completedSessions.map(s => ({
     id: s.id,
-    date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
-    title: s.title ?? "",
-    mentor: s.mentorName ? `${s.mentorName} 멘토` : "",
+    date: toDateText(getScheduledAt(s)),
+    title: getSessionTitle(s),
+    mentor: getMentorName(s) ? `${getMentorName(s)} 멘토` : "",
     score: s.aiScore ?? "-",
     tag: s.tag ?? "완료",
     tagColor: s.report_status === "final" || s.tag === "최종 리포트" ? C.navy : C.teal,
     isFinal: s.report_status === "final" || s.tag === "최종 리포트",
   }));
 
-  const upcoming = scheduledSessions.map(s => ({
-    id: s.id,
-    date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
-    time: s.scheduledAt?.slice(11, 16) ?? "",
-    title: s.title ?? "",
-    mentor: s.mentorName ? `${s.mentorName} 멘토` : "",
-    type: s.sessionType ?? "1:1",
-    status: "confirmed",
-  }));
+  const upcoming = scheduledCards;
 
   return (
     <>

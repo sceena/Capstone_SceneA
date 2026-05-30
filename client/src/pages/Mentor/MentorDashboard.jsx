@@ -328,6 +328,14 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
   );
 };
 
+const normalizeStatus = (status) => String(status || "").toLowerCase();
+const getScheduledAt = (session) => session.scheduledAt ?? session.scheduled_at ?? "";
+const getSessionTitle = (session) => session.title ?? (session.job_category ? `${session.job_category} 모의 면접` : "모의 면접");
+const getMenteeName = (session) => session.menteeName ?? session.mentee_name ?? "";
+const getSessionType = (session) => session.sessionType ?? session.session_type ?? "1:1 면접";
+const toDateText = (value) => value ? String(value).slice(5, 10).replace("-", ".") : "";
+const toTimeText = (value) => value ? String(value).slice(11, 16) : "";
+
 /* ════════════════════════════════════════
    메인 컴포넌트
 ════════════════════════════════════════ */
@@ -352,14 +360,14 @@ export default function MentorDashboard() {
 
   /* API 응답에서 UI 데이터 파생 — 면접 세션만 (멘토링은 면접 종료 후 자동 진입) */
   const sessions = rawSessions
-    .filter(s => (s.status === "scheduled" || s.status === "in_progress") && s.kind !== "mentoring")
+    .filter(s => (normalizeStatus(s.status) === "scheduled" || normalizeStatus(s.status) === "in_progress") && s.kind !== "mentoring")
     .map(s => ({
       id: s.id,
-      title: s.title ?? "",
-      date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
-      mentor: s.menteeName ?? "",
-      type: s.sessionType ?? "1:1 세션",
-      time: s.scheduledAt?.slice(11, 16) ?? "",
+      title: getSessionTitle(s),
+      date: toDateText(getScheduledAt(s)),
+      mentor: getMenteeName(s),
+      type: getSessionType(s),
+      time: toTimeText(getScheduledAt(s)),
     }));
 
   const [requests, setRequests] = useState([]);
@@ -388,14 +396,14 @@ export default function MentorDashboard() {
   }, [loadReservationRequests]);
 
   const upcoming = rawSessions
-    .filter(s => s.status === "scheduled")
+    .filter(s => normalizeStatus(s.status) === "scheduled")
     .map(s => ({
       id: s.id,
-      date: s.scheduledAt?.slice(5, 10).replace("-", ".") ?? "",
-      time: s.scheduledAt?.slice(11, 16) ?? "",
-      title: s.title ?? "",
-      mentor: s.menteeName ?? "",
-      type: s.sessionType ?? "1:1",
+      date: toDateText(getScheduledAt(s)),
+      time: toTimeText(getScheduledAt(s)),
+      title: getSessionTitle(s),
+      mentor: getMenteeName(s),
+      type: getSessionType(s),
       status: "confirmed",
     }));
 
@@ -427,7 +435,7 @@ export default function MentorDashboard() {
 
         {/* ── 미완료 피드백 알림 배너 ── */}
         {(() => {
-          const pendingFeedback = rawSessions.filter(s => s.status === "completed" && !s.feedbackSubmitted);
+          const pendingFeedback = rawSessions.filter(s => normalizeStatus(s.status) === "completed" && !s.feedbackSubmitted);
           if (pendingFeedback.length === 0) return null;
           return (
             <div style={{

@@ -338,17 +338,24 @@ export default function InterviewRobby({ role = "mentee" }) {
     navigate(role === "mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
   };
 
+  const scheduledAt = sessionData?.scheduledAt ?? sessionData?.scheduled_at ?? "";
+  const mentorName = sessionData?.mentorName ?? sessionData?.mentor_name ?? "멘토";
+  const menteeFromParticipants = sessionData?.participants?.find?.(p => p.role === "mentee");
+  const menteeName = sessionData?.menteeName ?? sessionData?.mentee_name ?? menteeFromParticipants?.name ?? "멘티";
+  const mentorInfo = sessionData?.mentorInfo ?? sessionData?.mentor_info ?? "면접 준비를 함께 진행합니다.";
+  const menteeGoal = sessionData?.menteeGoal ?? sessionData?.mentee_goal ?? "멘토에게 전달한 자소서와 지원 정보를 바탕으로 면접을 준비합니다.";
+
   /* API 데이터 우선, 없으면 fallback */
   const session = {
-    title:       sessionData?.title       ?? "세션 로딩 중...",
-    date:        sessionData?.scheduledAt ?? "",
-    type:        sessionData?.sessionType ?? "1:1 개인 세션",
-    menteeName:  sessionData?.menteeName  ?? "",
-    menteeInfo:  sessionData?.menteeInfo  ?? "",
-    menteeGoal:  sessionData?.menteeGoal  ?? "",
-    aiReport:    sessionData?.aiReport    ?? "",
-    mentorName:  sessionData?.mentorName  ?? "",
-    mentorInfo:  sessionData?.mentorInfo  ?? "",
+    title:       sessionData?.title ?? (sessionData?.job_category ? `${sessionData.job_category} 모의 면접` : "세션 로딩 중..."),
+    date:        scheduledAt,
+    type:        sessionData?.sessionType ?? sessionData?.session_type ?? "1:1 개인 세션",
+    menteeName,
+    menteeInfo:  sessionData?.menteeInfo ?? sessionData?.mentee_info ?? "",
+    menteeGoal,
+    aiReport:    sessionData?.aiReport ?? sessionData?.ai_report ?? "멘티의 자기소개서와 지원 정보를 기반으로 추천 질문을 확인하세요.",
+    mentorName,
+    mentorInfo,
   };
 
   const isMentor = role === "mentor";
@@ -582,7 +589,7 @@ export default function InterviewRobby({ role = "mentee" }) {
             overflowY:"auto",
           }}>
             {/* 장치 테스트 안내 배너 */}
-            {(!camStatus === "ok" || !micOk) && (
+            {(camStatus !== "ok" || !micOk) && (
               <div style={{
                 background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)",
                 borderRadius:10, padding:"10px 14px",
@@ -625,7 +632,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                   display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:13, fontWeight:700, color:"#fff", flexShrink:0,
                 }}>
-                  {isMentor ? session.menteeName[0] : session.mentorName[0]}
+                  {(isMentor ? session.menteeName : session.mentorName)?.[0] ?? "?"}
                 </div>
                 <div>
                   <p style={{ fontSize:14, fontWeight:700, color:"#fff" }}>

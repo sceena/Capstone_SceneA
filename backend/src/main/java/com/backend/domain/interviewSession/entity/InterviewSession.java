@@ -53,4 +53,8 @@ public class InterviewSession extends BaseEntity {
             throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
         }
     }
+
+    public void reschedule(LocalDateTime scheduledAt) {
+        this.scheduledAt = scheduledAt;
+    }
 }

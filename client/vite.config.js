@@ -1,36 +1,41 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [
-    react(),
-    babel({ presets: [reactCompilerPreset()] })
-  ],
-  server: {
-    host: true,  // 0.0.0.0 바인딩 → 같은 네트워크 기기에서 접근 가능
-    proxy: {
-      '/api': {
-        target: 'http://54.116.176.242:8080',
-        changeOrigin: true,
-        headers: {
-          Origin: 'http://localhost:5173',
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const apiTarget = env.VITE_API_BASE_URL || 'http://54.116.176.242:8080'
+  const mediaTarget = env.VITE_MEDIA_SERVER_URL || 'http://54.116.176.242:4000'
+
+  return {
+    plugins: [
+      react(),
+      babel({ presets: [reactCompilerPreset()] })
+    ],
+    server: {
+      host: true,
+      proxy: {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+          headers: {
+            Origin: 'http://localhost:5173',
+          },
+        },
+        '/oauth2': {
+          target: apiTarget,
+          changeOrigin: false,
+        },
+        '/login/oauth2': {
+          target: apiTarget,
+          changeOrigin: false,
+        },
+        '/socket.io': {
+          target: mediaTarget,
+          changeOrigin: true,
+          ws: true,
         },
       },
-      '/oauth2': {
-        target: 'http://54.116.176.242:8080',
-        changeOrigin: false,
-      },
-      '/login/oauth2': {
-        target: 'http://54.116.176.242:8080',
-        changeOrigin: false,
-      },
-      '/socket.io': {
-        target: 'http://54.116.176.242:4000',
-        changeOrigin: true,
-        ws: true,
-      },
     },
-  },
+  }
 })

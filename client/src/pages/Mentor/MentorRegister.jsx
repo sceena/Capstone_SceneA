@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
-import { updateMyProfile, saveMentorAvailability } from "../../api/users";
+import { createMentorAvailability, deleteMentorAvailability, getMentorAvailabilities } from "../../api/reservations";
+import { getMyProfile, updateMyProfile } from "../../api/users";
 
 /* ============================================================
    멘토 정보 등록  (pages/mentor/InfoRegister.jsx)
@@ -17,8 +18,75 @@ const C = {
   bg:      "#FAF8F4", error:"#D94040",
 };
 
-const DAYS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
+const WEEKDAYS = ["일","월","화","수","목","금","토"];
 const TIMES = ["09:00","10:00","11:00","14:00","15:00","16:00","19:00","20:00","21:00"];
+
+const toDateKey = (date) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-");
+};
+
+const getScheduleDays = () => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(tomorrow);
+    date.setDate(tomorrow.getDate() + index);
+    return {
+      key: toDateKey(date),
+      label: `${date.getMonth() + 1}/${date.getDate()} (${WEEKDAYS[date.getDay()]})`,
+    };
+  });
+};
+
+const toLocalDateTimeString = (date) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-") + "T" + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join(":");
+};
+
+const buildAvailabilityPayloads = (slots, durationLabel) => {
+  const durationMinutes = Number(String(durationLabel).match(/\d+/)?.[0] || 60);
+
+  return slots.map(slot => {
+    const divider = slot.lastIndexOf("-");
+    const dateKey = slot.slice(0, divider);
+    const time = slot.slice(divider + 1);
+    const [hour, minute] = time.split(":").map(Number);
+    const start = new Date(`${dateKey}T00:00:00`);
+    start.setHours(hour, minute, 0, 0);
+
+    const end = new Date(start);
+    end.setMinutes(end.getMinutes() + durationMinutes);
+
+    return {
+      start_time: toLocalDateTimeString(start),
+      end_time: toLocalDateTimeString(end),
+    };
+  });
+};
+
+const availabilityToSlotKey = (availability) => {
+  const startTime = availability.start_time ?? availability.startTime;
+  if (!startTime) return null;
+  const date = new Date(startTime);
+  if (Number.isNaN(date.getTime())) return null;
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return `${toDateKey(date)}-${time}`;
+};
 
 /* ── 로고 ── */
 const LogoIcon = ({ size=26, color=C.white }) => (
@@ -248,13 +316,29 @@ const Step2 = ({ data, onChange }) => (
 );
 
 /* ══════════════ STEP 3 — 정원·일정 설정 ══════════════ */
+const CapacityCard = ({ n, label, selected, onClick }) => (
+  <button type="button" onClick={onClick} style={{
+    flex:1, padding:"18px 8px", textAlign:"center",
+    background: selected ? C.white : C.bg,
+    border:`2px solid ${selected ? C.navy : C.border}`,
+    borderRadius:10, cursor:"pointer", fontFamily:"inherit",
+    transition:"all 0.18s",
+    boxShadow: selected ? "0 2px 12px rgba(13,34,68,0.12)" : "none",
+  }}>
+    <p style={{ fontSize:28, fontWeight:700, color: selected?C.navy:C.textMuted, marginBottom:4 }}>{n}</p>
+    <p style={{ fontSize:12, color: selected?C.textSub:C.textMuted }}>{label}</p>
+  </button>
+);
+
 const Step3 = ({ data, onChange }) => {
-  const toggleSlot = (day, time) => {
-    const key = `${day}-${time}`;
+  const scheduleDays = getScheduleDays();
+
+  const toggleSlot = (dateKey, time) => {
+    const key = `${dateKey}-${time}`;
     const cur = data.slots;
     onChange("slots", cur.includes(key) ? cur.filter(x=>x!==key) : [...cur, key]);
   };
-  const isSlotOn = (day, time) => data.slots.includes(`${day}-${time}`);
+  const isSlotOn = (dateKey, time) => data.slots.includes(`${dateKey}-${time}`);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:28 }}>
@@ -263,29 +347,18 @@ const Step3 = ({ data, onChange }) => {
         <p style={{ fontSize:13, color:C.textSub }}>최대 동시 예약 인원과 멘토링 가능한 시간대를 설정해주세요</p>
       </div>
 
-      {/* 면접 유형 선택 */}
+      {/* 정원 선택 */}
       <div>
-        <label style={{ fontSize:13, fontWeight:600, color:C.text, display:"block", marginBottom:12 }}>면접 유형</label>
+        <label style={{ fontSize:13, fontWeight:600, color:C.text, display:"block", marginBottom:12 }}>최대 동시 예약 인원</label>
         <div style={{ display:"flex", gap:10 }}>
-          {[
-            { v:"1",     l:"1:1 면접",  desc:"멘티 1명과 1대1 면접" },
-            { v:"group", l:"그룹 면접", desc:"2인 이상 동시 면접" },
-          ].map(c => (
-            <button key={c.v} type="button" onClick={() => onChange("capacity", c.v)} style={{
-              flex:1, padding:"20px 16px", textAlign:"center",
-              background: data.capacity===c.v ? C.white : C.bg,
-              border:`2px solid ${data.capacity===c.v ? C.navy : C.border}`,
-              borderRadius:10, cursor:"pointer", fontFamily:"inherit",
-              transition:"all 0.18s",
-              boxShadow: data.capacity===c.v ? "0 2px 12px rgba(13,34,68,0.12)" : "none",
-            }}>
-              <p style={{ fontSize:16, fontWeight:700, color: data.capacity===c.v ? C.navy : C.textMuted, marginBottom:4 }}>{c.l}</p>
-              <p style={{ fontSize:12, color: data.capacity===c.v ? C.textSub : C.textMuted }}>{c.desc}</p>
-            </button>
+          {[{n:"1",l:"1:1 전용"},{n:"2",l:"최대 2인"},{n:"3",l:"최대 3인"},{n:"4",l:"최대 4인"}].map(c=>(
+            <CapacityCard key={c.n} n={c.n} label={c.l}
+              selected={data.capacity===c.n}
+              onClick={()=>onChange("capacity",c.n)}/>
           ))}
         </div>
-        {data.capacity === "group" && (
-          <p style={{ fontSize:12, color:C.teal, marginTop:8 }}>✓ 그룹 면접 모드가 활성화됩니다</p>
+        {parseInt(data.capacity)>=2 && (
+          <p style={{ fontSize:12, color:C.teal, marginTop:8 }}>✓ 2인 이상 선택 시 그룹 면접 모드가 활성화됩니다</p>
         )}
       </div>
 
@@ -296,19 +369,19 @@ const Step3 = ({ data, onChange }) => {
           <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:"4px 4px", minWidth:560 }}>
             <thead>
               <tr>
-                {DAYS.map(d=>(
-                  <th key={d} style={{ fontSize:11, fontWeight:600, color:C.textMuted, padding:"4px 0", textAlign:"center" }}>{d}</th>
+                {scheduleDays.map(day=>(
+                  <th key={day.key} style={{ fontSize:11, fontWeight:600, color:C.textMuted, padding:"4px 0", textAlign:"center" }}>{day.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {TIMES.map(time=>(
                 <tr key={time}>
-                  {DAYS.map(day=>{
-                    const on = isSlotOn(day,time);
+                  {scheduleDays.map(day=>{
+                    const on = isSlotOn(day.key,time);
                     return (
-                      <td key={day} style={{ padding:"2px" }}>
-                        <button type="button" onClick={()=>toggleSlot(day,time)} style={{
+                      <td key={day.key} style={{ padding:"2px" }}>
+                        <button type="button" onClick={()=>toggleSlot(day.key,time)} style={{
                           width:"100%", padding:"7px 4px",
                           background: on ? "#111" : C.creamDark,
                           color: on ? C.white : C.textMuted,
@@ -330,11 +403,11 @@ const Step3 = ({ data, onChange }) => {
         <div style={{ display:"flex", gap:16, marginTop:10 }}>
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             <div style={{ width:10, height:10, borderRadius:2, background:"#111" }}/>
-            <span style={{ fontSize:11, color:C.textMuted }}>선택된 슬롯 (저장됨)</span>
+            <span style={{ fontSize:11, color:C.textMuted }}>확정 슬롯</span>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             <div style={{ width:10, height:10, borderRadius:2, background:C.creamDark, border:`1px solid ${C.border}` }}/>
-            <span style={{ fontSize:11, color:C.textMuted }}>미선택 — 클릭으로 추가</span>
+            <span style={{ fontSize:11, color:C.textMuted }}>임시 가능 슬롯 — 클릭으로 선택/해제</span>
           </div>
         </div>
       </div>
@@ -413,7 +486,7 @@ const Step4 = ({ d1, d2, d3 }) => {
       </div>
       <div style={{ background:C.white, borderRadius:14, padding:"20px 24px", border:`1px solid ${C.border}` }}>
         <p style={{ fontSize:12, fontWeight:700, color:C.textMuted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:4 }}>일정·정원</p>
-        <ReviewRow label="면접 유형" value={d3.capacity === "1" ? "1:1 면접" : "그룹 면접"}/>
+        <ReviewRow label="최대 인원" value={`${d3.capacity}인`}/>
         <ReviewRow label="세션 길이" value={d3.duration}/>
         <ReviewRow label="포인트" value={`${d3.point} P / 세션`}/>
         <ReviewRow label="가능 슬롯" value={`${confirmedSlots}개 시간대 선택됨`}/>
@@ -434,6 +507,7 @@ export default function MentorInfoRegister() {
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [availabilityIds, setAvailabilityIds] = useState([]);
 
   const [d1, setD1] = useState({ company:"", job:"", years:"", prevCompany:"", techStack:[], bio:"" });
   const [d2, setD2] = useState({ types:[], focusItems:[], philosophy:"" });
@@ -443,10 +517,27 @@ export default function MentorInfoRegister() {
   const upd2 = (k,v) => setD2(p=>({...p,[k]:v}));
   const upd3 = (k,v) => setD3(p=>({...p,[k]:v}));
 
+  useEffect(() => {
+    getMyProfile()
+      .then(profile => getMentorAvailabilities(profile.id))
+      .then(items => {
+        setAvailabilityIds(items.map(item => item.id).filter(Boolean));
+        const slots = [...new Set(items.map(availabilityToSlotKey).filter(Boolean))];
+        if (slots.length > 0) {
+          setD3(prev => ({ ...prev, slots }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handleNext = () => { if(step<4) setStep(s=>s+1); };
   const handlePrev = () => { if(step>1) setStep(s=>s-1); };
 
   const handleSubmit = async () => {
+    if (d3.slots.length === 0) {
+      alert("예약 가능 시간을 하나 이상 선택해주세요.");
+      return;
+    }
     setLoading(true);
     try {
       const typeNameMap = { tech:"기술 면접", culture:"인성 면접", portfolio:"포트폴리오", mock:"모의 면접" };
@@ -457,39 +548,16 @@ export default function MentorInfoRegister() {
       ];
 
       const bio = d1.bio?.trim() || null;
-      const hasTags = tags.length > 0;
-
-      if (bio || hasTags) {
-        await updateMyProfile(
-          { bio, tags: hasTags ? tags : null },
-          null
-        );
+      if (bio || tags.length > 0) {
+        await updateMyProfile({ bio, tags: tags.length > 0 ? tags : null }, null);
       }
 
-      if (d3.slots.length > 0) {
-        const durationMinutes = parseInt(d3.duration) || 60;
-        const dayMap = { MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6, SUN: 0 };
-        const toLocalISO = d => {
-          const p = n => String(n).padStart(2, "0");
-          return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
-        };
-        for (const slotKey of d3.slots) {
-          const [day, time] = slotKey.split("-");
-          const [hour, min] = time.split(":").map(Number);
-          const now = new Date();
-          const diff = (dayMap[day] - now.getDay() + 7) % 7 || 7;
-          const start = new Date(now);
-          start.setDate(now.getDate() + diff);
-          start.setHours(hour, min, 0, 0);
-          const end = new Date(start);
-          end.setMinutes(end.getMinutes() + durationMinutes);
-          await saveMentorAvailability({ start_time: toLocalISO(start), end_time: toLocalISO(end) });
-        }
-      }
-
+      const payloads = buildAvailabilityPayloads(d3.slots, d3.duration);
+      await Promise.all(payloads.map(createMentorAvailability));
+      await Promise.all(availabilityIds.map(deleteMentorAvailability));
       navigate("/dashboard/mentor");
-    } catch (err) {
-      alert(err?.message || "등록 중 오류가 발생했어요. 다시 시도해주세요.");
+    } catch (error) {
+      alert(error?.message || "예약 가능 시간 저장에 실패했습니다.");
     } finally {
       setLoading(false);
     }

@@ -53,8 +53,8 @@ class UserControllerTest {
         MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(
                 List.of(
                         new MentorListResponse(10L, "박지훈", "지훈멘토", "네이버 백엔드 6년차", null,
-                                List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill"))),
-                        new MentorListResponse(11L, "이수연", "수연멘토", null, null, List.of())
+                                List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill")), List.of()),
+                        new MentorListResponse(11L, "이수연", "수연멘토", null, null, List.of(), List.of())
                 ), 2L, 1
         );
         given(userService.getMentors(any(), any())).willReturn(response);
@@ -77,7 +77,7 @@ class UserControllerTest {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
         MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(
                 List.of(new MentorListResponse(10L, "박지훈", "지훈멘토", "Spring 전문", null,
-                        List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill")))),
+                        List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill")), List.of())),
                 1L, 1
         );
         given(userService.getMentors(any(), any())).willReturn(response);

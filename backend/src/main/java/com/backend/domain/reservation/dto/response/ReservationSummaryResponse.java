@@ -6,20 +6,24 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 
-public record ReservationResponse(
+public record ReservationSummaryResponse(
         Long id,
-        @JsonProperty("mentor_id") Long mentorId,
-        @JsonProperty("availability_id") Long availabilityId,
         @JsonProperty("session_id") Long sessionId,
+        @JsonProperty("mentee_id") Long menteeId,
+        @JsonProperty("mentee_name") String menteeName,
+        @JsonProperty("availability_id") Long availabilityId,
+        @JsonProperty("scheduled_at") LocalDateTime scheduledAt,
         ReservationStatus status,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
-    public static ReservationResponse from(Reservation reservation) {
-        return new ReservationResponse(
+    public static ReservationSummaryResponse from(Reservation reservation) {
+        return new ReservationSummaryResponse(
                 reservation.getId(),
-                reservation.getMentorAvailability().getMentor().getId(),
-                reservation.getMentorAvailability().getId(),
                 reservation.getInterviewSession() != null ? reservation.getInterviewSession().getId() : null,
+                reservation.getMentee().getId(),
+                reservation.getMentee().getName(),
+                reservation.getMentorAvailability().getId(),
+                reservation.getMentorAvailability().getStartTime(),
                 reservation.getStatus(),
                 reservation.getCreateDate()
         );

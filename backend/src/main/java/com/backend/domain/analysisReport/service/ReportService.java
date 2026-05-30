@@ -52,7 +52,7 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ReportService {
 
-    private static final int CONTEXT_MAX_LENGTH = 1000;
+    private static final int CONTEXT_MAX_LENGTH = 5000;
 
     private final AnalysisReportRepository reportRepository;
     private final InterviewSessionRepository sessionRepository;

@@ -5,6 +5,8 @@ import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.reservation.entity.Reservation;
 import com.backend.domain.reservation.entity.ReservationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,4 +20,19 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     List<Reservation> findAllByMentorAvailability_Mentor(Member mentor);
 
     List<Reservation> findAllByMentorAvailability_MentorAndStatus(Member mentor, ReservationStatus status);
+
+    @Query("""
+            select r
+            from Reservation r
+            join fetch r.mentorAvailability a
+            join fetch r.mentee
+            left join fetch r.interviewSession
+            where a.mentor = :mentor
+              and (:status is null or r.status = :status)
+            order by a.startTime asc
+            """)
+    List<Reservation> findMentorReservations(
+            @Param("mentor") Member mentor,
+            @Param("status") ReservationStatus status
+    );
 }

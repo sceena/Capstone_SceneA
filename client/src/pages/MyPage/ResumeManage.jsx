@@ -132,15 +132,17 @@ const CoverLetterItem = ({ idx, data, onChange, onRemove, isFirst }) => {
 };
 
 const DRAFT_KEY = "scena_resume_draft";
+const getResumeDraftKey = (user) => `${DRAFT_KEY}:${user?.email || user?.id || user?.memberId || "anonymous"}`;
 
 export default function ResumeManage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
+  const draftKey = getResumeDraftKey(user);
 
   const [items, setItems] = useState(() => {
     try {
-      const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
+      const draft = JSON.parse(localStorage.getItem(draftKey));
       if (Array.isArray(draft) && draft.length > 0) return draft;
     } catch {}
     return [
@@ -165,13 +167,13 @@ export default function ResumeManage() {
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
   const handleSave = () => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(items));
+    localStorage.setItem(draftKey, JSON.stringify(items));
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
 
   const handleComplete = () => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(items));
+    localStorage.setItem(draftKey, JSON.stringify(items));
     const resumeContent = items.map(it => `[${it.title}]\n${it.content}`).join("\n\n");
     navigate("/mentor/search", {
       state: {

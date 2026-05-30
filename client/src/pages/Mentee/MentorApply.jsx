@@ -50,10 +50,11 @@ const MENTOR={
 };
 
 const RESUME_DRAFT_KEY = "scena_resume_draft";
+const getResumeDraftKey = (user) => `${RESUME_DRAFT_KEY}:${user?.email || user?.id || user?.memberId || "anonymous"}`;
 
-const getStoredResumeContent = () => {
+const getStoredResumeContent = (user) => {
   try {
-    const draft = JSON.parse(localStorage.getItem(RESUME_DRAFT_KEY));
+    const draft = JSON.parse(localStorage.getItem(getResumeDraftKey(user)));
     if (!Array.isArray(draft)) return "";
     return draft
       .filter(item => item?.content?.trim())
@@ -175,7 +176,7 @@ export default function MentorApply(){
     setLoading(true);
     try {
       const jobPosting = navState?.jobPosting;
-      const resumeContent = navState?.resumeContent || getStoredResumeContent();
+      const resumeContent = navState?.resumeContent || getStoredResumeContent(user);
 
       if (!resumeContent.trim()) {
         setLoading(false);

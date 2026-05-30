@@ -13,7 +13,7 @@ spring:
             client-secret: ${KAKAO_CLIENT_SECRET}
             redirect-uri: "https://dooong.site/login/oauth2/code/kakao"
             authorization-grant-type: authorization_code
-            scope: profile_nickname, account_email
+            scope: profile_nickname, profile_image
           naver:
             client-id: ${NAVER_CLIENT_ID}
             client-secret: ${NAVER_CLIENT_SECRET}

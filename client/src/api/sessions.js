@@ -31,7 +31,16 @@ export async function createSession(data) {
     headers: authHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("세션 생성 실패");
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body?.message || body?.detail || body?.error || "";
+    } catch {
+      detail = await res.text().catch(() => "");
+    }
+    throw new Error(`세션 생성 실패 (${res.status})${detail ? `: ${detail}` : ""}`);
+  }
   return res.json();
 }
 

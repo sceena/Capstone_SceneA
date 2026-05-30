@@ -187,13 +187,15 @@ export default function MentorApply(){
       let sessionId = null;
       let jobPostingId = null;
 
-      try {
-        const session = await createSession({
-          mentor_id: mentor.id,
-          job_category: jobPosting?.jobCategory || mentor.job,
-        });
-        sessionId = session?.id;
-      } catch {}
+      const session = await createSession({
+        mentor_id: mentor.id,
+        job_category: jobPosting?.jobCategory || mentor.job,
+      });
+      sessionId = session?.id;
+
+      if (!sessionId) {
+        throw new Error("면접 세션 생성 응답에 session_id가 없습니다.");
+      }
 
       if (sessionId && jobPosting?.company) {
         try {

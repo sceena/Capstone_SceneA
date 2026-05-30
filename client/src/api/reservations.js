@@ -58,8 +58,8 @@ export async function deleteMentorAvailability(availabilityId) {
 }
 
 export async function getMentorReservationRequests(status = "PENDING") {
-  const params = new URLSearchParams({ status });
-  const res = await fetch(`/api/reservation/mentor?${params}`, {
+  const query = status ? `?${new URLSearchParams({ status })}` : "";
+  const res = await fetch(`/api/reservation/mentor${query}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, "예약 신청 목록 조회 실패"));

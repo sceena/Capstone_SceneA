@@ -38,7 +38,11 @@ public class ReservationService {
         Member mentor = memberRepository.findById(mentorId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
-        return reservationRepository.findAllByMentorAvailability_MentorAndStatus(mentor, status).stream()
+        List<Reservation> reservations = status != null
+                ? reservationRepository.findAllByMentorAvailability_MentorAndStatus(mentor, status)
+                : reservationRepository.findAllByMentorAvailability_Mentor(mentor);
+
+        return reservations.stream()
                 .map(ReservationSummaryResponse::from)
                 .toList();
     }

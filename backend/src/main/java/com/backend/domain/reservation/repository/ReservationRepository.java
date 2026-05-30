@@ -15,5 +15,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     List<Reservation> findAllByMentee(Member mentee);
 
+    List<Reservation> findAllByMentorAvailability_Mentor(Member mentor);
+
     List<Reservation> findAllByMentorAvailability_MentorAndStatus(Member mentor, ReservationStatus status);
 }

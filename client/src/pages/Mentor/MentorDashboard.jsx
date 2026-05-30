@@ -207,21 +207,55 @@ const DashCard = ({ title, sub, children, style }) => (
 );
 
 /* ── 수락 대기 요청 카드 ── */
-const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline, scheduledAt, sessionType }) => {
-  const dateLabel = scheduledAt ? (() => {
+const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline, scheduledAt, sessionType, requestedAt, disabled }) => {
+  const dateInfo = scheduledAt ? (() => {
     const dt = new Date(scheduledAt);
     const days = ['일','월','화','수','목','금','토'];
-    return `${dt.getMonth()+1}월 ${dt.getDate()}일 (${days[dt.getDay()]}) ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    return {
+      month: `${dt.getMonth()+1}월`,
+      day: String(dt.getDate()).padStart(2, "0"),
+      weekday: days[dt.getDay()],
+      time: `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`,
+    };
   })() : null;
+  const requestedLabel = requestedAt ? new Date(requestedAt).toLocaleString("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }) : null;
 
   return (
     <div style={{
       background:C.bg,
       borderRadius:12, padding:"16px 18px",
       marginBottom:12,
-      border:`1px solid ${C.border}`,
+      border:`1.5px solid ${dateInfo ? C.teal + "66" : C.border}`,
     }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+      <div style={{ display:"flex", gap:14, marginBottom:12 }}>
+        <div style={{
+          width:58, borderRadius:10, overflow:"hidden", flexShrink:0,
+          background: dateInfo ? C.teal : C.creamDark,
+          textAlign:"center", boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.22)",
+        }}>
+          <div style={{ background:"rgba(0,0,0,0.14)", padding:"3px 0" }}>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.9)", fontWeight:700 }}>
+              {dateInfo?.month || "--"}
+            </span>
+          </div>
+          <div style={{ padding:"5px 0 2px" }}>
+            <span style={{ fontSize:22, color:C.white, fontWeight:900, lineHeight:1 }}>
+              {dateInfo?.day || "--"}
+            </span>
+          </div>
+          <div style={{ padding:"1px 0 6px" }}>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.86)", fontWeight:700 }}>
+              {dateInfo ? `${dateInfo.weekday} ${dateInfo.time}` : "시간 미정"}
+            </span>
+          </div>
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:7 }}>
         <div style={{
           width:36, height:36, borderRadius:"50%", flexShrink:0,
           background: avatarColor,
@@ -233,52 +267,57 @@ const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline,
           </svg>
         </div>
         <div style={{ flex: 1 }}>
-          <p style={{ fontSize:14, fontWeight:700, color:C.text }}>{name}</p>
+          <p style={{ fontSize:15, fontWeight:800, color:C.text }}>{name || "멘티"}</p>
           <p style={{ fontSize:12, color:C.textMuted }}>{company}</p>
         </div>
       </div>
 
       {/* 날짜·시간·유형 배지 */}
-      {(dateLabel || sessionType) && (
+      {(dateInfo || sessionType || requestedLabel) && (
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
-          {dateLabel && (
+          {dateInfo && (
             <span style={{ fontSize:11, fontWeight:700, background:"#E1F5EE", color:C.teal, padding:"3px 10px", borderRadius:99, display:"flex", alignItems:"center", gap:4 }}>
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <rect x="1" y="2" width="8" height="7" rx="1" stroke={C.teal} strokeWidth="1.2"/>
                 <path d="M3.5 1v2M6.5 1v2M1 5h8" stroke={C.teal} strokeWidth="1.2" strokeLinecap="round"/>
               </svg>
-              {dateLabel}
+              면접 {dateInfo.month} {dateInfo.day}일 {dateInfo.time}
             </span>
           )}
           {sessionType && (
             <span style={{ fontSize:11, fontWeight:600, background:"#E8E5DF", color:"#555", padding:"3px 10px", borderRadius:99 }}>{sessionType}</span>
           )}
+          {requestedLabel && (
+            <span style={{ fontSize:11, fontWeight:600, background:"#F8EEE2", color:"#8A5A20", padding:"3px 10px", borderRadius:99 }}>신청 {requestedLabel}</span>
+          )}
         </div>
       )}
 
       <p style={{ fontSize:13, color:C.textSub, lineHeight:1.75, marginBottom:14 }}>{message}</p>
+        </div>
+      </div>
       <div style={{ display:"flex", gap:8 }}>
-        <button onClick={onAccept} style={{
+        <button onClick={onAccept} disabled={disabled} style={{
           flex:1, padding:"8px",
-          background:C.navy, color:C.white,
+          background: disabled ? C.creamDark : C.navy, color: disabled ? C.textMuted : C.white,
           border:"none", borderRadius:8,
-          fontSize:12, fontWeight:600, cursor:"pointer",
+          fontSize:12, fontWeight:600, cursor:disabled ? "not-allowed" : "pointer",
           fontFamily:"inherit", transition:"background 0.18s",
         }}
-          onMouseEnter={e => e.currentTarget.style.background=C.navyMid}
-          onMouseLeave={e => e.currentTarget.style.background=C.navy}
+          onMouseEnter={e => { if (!disabled) e.currentTarget.style.background=C.navyMid; }}
+          onMouseLeave={e => { if (!disabled) e.currentTarget.style.background=C.navy; }}
         >
           수락
         </button>
-        <button onClick={onDecline} style={{
+        <button onClick={onDecline} disabled={disabled} style={{
           flex:1, padding:"8px",
           background:"transparent", color:C.textSub,
           border:`1px solid ${C.border}`, borderRadius:8,
-          fontSize:12, fontWeight:500, cursor:"pointer",
+          fontSize:12, fontWeight:500, cursor:disabled ? "not-allowed" : "pointer",
           fontFamily:"inherit", transition:"border-color 0.18s",
         }}
-          onMouseEnter={e => e.currentTarget.style.borderColor=C.text}
-          onMouseLeave={e => e.currentTarget.style.borderColor=C.border}
+          onMouseEnter={e => { if (!disabled) e.currentTarget.style.borderColor=C.text; }}
+          onMouseLeave={e => { if (!disabled) e.currentTarget.style.borderColor=C.border; }}
         >
           거절
         </button>
@@ -371,22 +410,32 @@ export default function MentorDashboard() {
     }));
 
   const [requests, setRequests] = useState([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+  const [requestsError, setRequestsError] = useState("");
 
   const loadReservationRequests = useCallback(() => {
-    getMentorReservationRequests()
+    setRequestsLoading(true);
+    getMentorReservationRequests(null)
       .then(data => {
-        setRequests(data.map(r => ({
+        const pending = data.filter(r => normalizeStatus(r.status) === "pending");
+        setRequests(pending.map(r => ({
           id: r.id,
-          name: r.mentee_name ?? "",
-          company: r.session_id ? `세션 #${r.session_id}` : "",
+          name: r.mentee_name ?? r.menteeName ?? "",
+          company: r.session_id || r.sessionId ? `세션 #${r.session_id ?? r.sessionId}` : "면접 신청",
           message: "면접 신청이 도착했습니다. 신청 일정을 확인한 뒤 수락 또는 거절해주세요.",
           avatarColor: "#1B4F7A",
-          scheduledAt: r.scheduled_at ?? null,
+          scheduledAt: r.scheduled_at ?? r.scheduledAt ?? null,
           sessionType: "1:1 면접",
+          requestedAt: r.created_at ?? r.createdAt ?? null,
         })));
+        setRequestsError("");
       })
       .catch(error => {
         console.error("[MentorDashboard] 예약 신청 목록 조회 실패", error);
+        setRequestsError(error?.message || "예약 신청 목록을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        setRequestsLoading(false);
       });
   }, []);
   useEffect(() => {
@@ -408,14 +457,24 @@ export default function MentorDashboard() {
     }));
 
   const handleAccept = async (id) => {
-    try { await respondReservation({ reservationId: id, accepted: true }); } catch {}
-    setRequests(r => r.filter(x => x.id !== id));
-    loadSessions();
+    try {
+      await respondReservation({ reservationId: id, accepted: true });
+      setRequests(r => r.filter(x => x.id !== id));
+      loadSessions();
+      loadReservationRequests();
+    } catch (error) {
+      alert(error?.message || "예약 수락에 실패했습니다.");
+    }
   };
   const handleDecline = async (id) => {
-    try { await respondReservation({ reservationId: id, accepted: false }); } catch {}
-    setRequests(r => r.filter(x => x.id !== id));
-    loadSessions();
+    try {
+      await respondReservation({ reservationId: id, accepted: false });
+      setRequests(r => r.filter(x => x.id !== id));
+      loadSessions();
+      loadReservationRequests();
+    } catch (error) {
+      alert(error?.message || "예약 거절에 실패했습니다.");
+    }
   };
 
   return (
@@ -519,8 +578,20 @@ export default function MentorDashboard() {
         }}>
 
           {/* 수락 대기 중인 요청 */}
-          <DashCard title="수락 대기 중인 요청" sub="멘티가 멘토링을 요청했습니다">
-            {requests.length > 0 ? (
+          <DashCard title="수락 대기 중인 요청" sub="멘티가 신청한 면접 일정을 확인하고 확정하세요">
+            {requestsError && (
+              <div style={{
+                background:"#FEF2F2", border:"1px solid #FCA5A5", color:"#B91C1C",
+                borderRadius:10, padding:"10px 12px", fontSize:12, marginBottom:12,
+              }}>
+                {requestsError}
+              </div>
+            )}
+            {requestsLoading ? (
+              <div style={{ textAlign:"center", padding:"40px 0", color:C.textMuted, fontSize:14 }}>
+                예약 신청을 불러오는 중입니다...
+              </div>
+            ) : requests.length > 0 ? (
               requests.map(r => (
                 <RequestCard
                   key={r.id}
@@ -530,6 +601,7 @@ export default function MentorDashboard() {
                   avatarColor={r.avatarColor}
                   scheduledAt={r.scheduledAt}
                   sessionType={r.sessionType}
+                  requestedAt={r.requestedAt}
                   onAccept={()  => handleAccept(r.id)}
                   onDecline={() => handleDecline(r.id)}
                 />

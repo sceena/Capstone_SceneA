@@ -32,7 +32,7 @@ public class ReservationController {
     @GetMapping("/mentor")
     public ResponseEntity<List<ReservationSummaryResponse>> getMentorReservations(
             @AuthenticationPrincipal Long mentorId,
-            @RequestParam(defaultValue = "PENDING") ReservationStatus status) {
+            @RequestParam(required = false) ReservationStatus status) {
         return ResponseEntity.ok(reservationService.getMentorReservations(mentorId, status));
     }
 

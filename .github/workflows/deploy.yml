@@ -144,12 +144,23 @@ jobs:
             set -e
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+            AI_SERVER_BASE_URL_VALUE="${{ secrets.AI_SERVER_BASE_URL }}"
+            ANNOUNCED_IP_VALUE="${{ secrets.ANNOUNCED_IP }}"
+            if [ -z "$AI_SERVER_BASE_URL_VALUE" ]; then
+              AI_SERVER_BASE_URL_VALUE="https://crib-mutilator-uncle.ngrok-free.dev"
+            fi
+            if [ -z "$ANNOUNCED_IP_VALUE" ]; then
+              ANNOUNCED_IP_VALUE="${{ secrets.EC2_HOST }}"
+            fi
+
             # ── backend ──────────────────────────────────────
+            echo "Pulling backend image..."
             docker pull ${{ env.IMAGE_NAME }}:latest
 
             docker stop carpoolink-backend || true
             docker rm carpoolink-backend || true
 
+            echo "Starting backend container..."
             docker run -d \
               --name carpoolink-backend \
               --restart unless-stopped \
@@ -169,21 +180,24 @@ jobs:
               -e "NAVER_CLIENT_ID=${{ secrets.NAVER_CLIENT_ID }}" \
               -e "NAVER_CLIENT_SECRET=${{ secrets.NAVER_CLIENT_SECRET }}" \
               -e "OAUTH_REDIRECT_URI=${{ secrets.OAUTH_REDIRECT_URI }}" \
+              -e "AI_SERVER_BASE_URL=$AI_SERVER_BASE_URL_VALUE" \
               ${{ env.IMAGE_NAME }}:latest
 
             # ── media-server ──────────────────────────────────
+            echo "Pulling media-server image..."
             docker pull ${{ env.MEDIA_IMAGE_NAME }}:latest
 
             docker stop carpoolink-media-server || true
             docker rm carpoolink-media-server || true
 
+            echo "Starting media-server container..."
             docker run -d \
               --name carpoolink-media-server \
               --network host \
               --restart unless-stopped \
               -e "PORT=4000" \
               -e "SPRING_BOOT_URL=http://localhost:8080" \
-              -e "ANNOUNCED_IP=${{ secrets.ANNOUNCED_IP }}" \
+              -e "ANNOUNCED_IP=$ANNOUNCED_IP_VALUE" \
               -e "RTC_MIN_PORT=10000" \
               -e "RTC_MAX_PORT=10100" \
               -e "LOCAL_IP=${{ secrets.LOCAL_IP }}" \

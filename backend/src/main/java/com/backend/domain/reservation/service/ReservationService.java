@@ -1,6 +1,7 @@
 package com.backend.domain.reservation.service;
 
 import com.backend.domain.interviewSession.entity.InterviewSession;
+import com.backend.domain.interviewSession.entity.SessionParticipant;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
 import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
 import com.backend.domain.member.entity.Member;
@@ -107,6 +108,13 @@ public class ReservationService {
                         .scheduledAt(reservation.getMentorAvailability().getStartTime())
                         .build();
                 interviewSessionRepository.save(session);
+                reservation.linkSession(session);
+
+                SessionParticipant participant = SessionParticipant.builder()
+                        .interviewSession(session)
+                        .member(reservation.getMentee())
+                        .build();
+                participantRepository.save(participant);
             } else {
                 session.confirmSchedule(reservation.getMentorAvailability().getStartTime());
             }

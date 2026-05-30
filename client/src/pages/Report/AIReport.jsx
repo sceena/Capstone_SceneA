@@ -80,6 +80,17 @@ async function loadReport(sessionId) {
   }
 }
 
+async function loadSession(sessionId) {
+  return requestJson(`/api/sessions/${sessionId}`);
+}
+
+async function updateSessionStatus(sessionId, status) {
+  return requestJson(`/api/sessions/${sessionId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
 function toQuestionNo(questionId, reports = []) {
   const index = reports.findIndex((item) => item.question_id === questionId);
   return index >= 0 ? `Q${index + 1}` : `Q${questionId}`;
@@ -97,7 +108,7 @@ function formatReplayTime(replay = {}) {
 }
 
 // ─── Audio Player ────────────────────────────────────────────────
-function AudioPlayer({ sessionId, questionId }) {
+function AudioPlayer({ sessionId, questionId, answerId }) {
   const [state, setState] = useState("idle"); // idle | loading | playing | paused | error
   const audioRef = useRef(null);
   const blobUrlRef = useRef(null);
@@ -116,14 +127,18 @@ function AudioPlayer({ sessionId, questionId }) {
 
     setState("loading");
     try {
-      const answers = await requestJson(`/api/sessions/${sessionId}/questions/${questionId}/answers`);
-      if (!answers?.length) throw new Error("no answer");
-      const answerId = answers[0].id;
+      let resolvedAnswerId = answerId;
+      if (!resolvedAnswerId) {
+        const answers = await requestJson(`/api/sessions/${sessionId}/questions/${questionId}/answers`);
+        if (!answers?.length) throw new Error("no answer");
+        resolvedAnswerId = answers[0].id;
+      }
+      if (!resolvedAnswerId) throw new Error("no answer");
 
       const token = (() => {
         try { const u = JSON.parse(localStorage.getItem("scena_auth")); return u?.accessToken || u?.token || u?.access_token; } catch { return null; }
       })();
-      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/questions/${questionId}/answers/${answerId}/audio`, {
+      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/questions/${questionId}/answers/${resolvedAnswerId}/audio`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("audio fetch failed");
@@ -449,6 +464,7 @@ function MenteeReport({ sessionId, report }) {
     improvements: item.improvements || [],
     replay: item.replay,
     questionId: item.question_id,
+    answerId: item.answer_id,
   }));
   const metaBadges = report?.__mock
     ? ["1차 AI 리포트", "분석 완료", "개발 mock"]
@@ -537,7 +553,7 @@ function MenteeReport({ sessionId, report }) {
               )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
-                <AudioPlayer sessionId={sessionId} questionId={qa.questionId} />
+                <AudioPlayer sessionId={sessionId} questionId={qa.questionId} answerId={qa.answerId} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
                 <div style={{ background: "#F0FDF4", borderRadius: 10, padding: 14 }}>
@@ -640,6 +656,9 @@ function MentorReport({ sessionId, report }) {
                       <span style={{ fontSize: 11, fontWeight: 700, color: scColor, background: `${scColor}18`, padding: "2px 8px", borderRadius: 99, flexShrink: 0 }}>AI {sc}</span>
                     </div>
                     <p style={{ fontSize: 12, color: "#555", lineHeight: 1.7, background: "#FAF8F4", borderRadius: 7, padding: "8px 10px", margin: 0 }}>{qr.answer}</p>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                      <AudioPlayer sessionId={sessionId} questionId={qr.question_id} answerId={qr.answer_id} />
+                    </div>
                   </div>
                 );
               })}
@@ -652,7 +671,10 @@ function MentorReport({ sessionId, report }) {
           <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "0 0 8px" }}>AI 분석이 완료되었습니다</p>
           <p style={{ color: "white", fontSize: 18, fontWeight: 700, margin: "0 0 20px" }}>멘티와 함께 리포트를 리뷰하는 멘토링 세션을 시작해보세요</p>
           <button
-            onClick={() => navigate(`/mentoring/mentor/${sessionId}`)}
+            onClick={async () => {
+              try { await updateSessionStatus(sessionId, "in_progress"); } catch {}
+              navigate(`/mentoring/mentor/${sessionId}`);
+            }}
             style={{ padding: "14px 40px", borderRadius: 12, border: "none", background: GREEN, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
             onMouseLeave={e => e.currentTarget.style.opacity = "1"}
@@ -690,6 +712,7 @@ function exportWord(role) {
 export default function AIReportPage() {
   const { sessionId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [phase, setPhase] = useState("loading");
   const [report, setReport] = useState(null);
   const [error, setError] = useState("");
@@ -721,6 +744,25 @@ export default function AIReportPage() {
       cancelled = true;
     };
   }, [sessionId]);
+
+  useEffect(() => {
+    if (role !== "mentee" || !sessionId || !/^\d+$/.test(String(sessionId))) return;
+    let cancelled = false;
+    const checkMentoringStarted = async () => {
+      try {
+        const data = await loadSession(sessionId);
+        const status = String(data?.status || "").toLowerCase();
+        if (!cancelled && status === "in_progress") {
+          navigate(`/mentoring/mentee/${sessionId}`);
+        }
+      } catch {}
+    };
+    const interval = window.setInterval(checkMentoringStarted, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [role, sessionId, navigate]);
 
   return (
     <div style={{ fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>

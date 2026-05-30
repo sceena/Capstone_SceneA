@@ -1014,3 +1014,477 @@ POST /api/sessions/{id}/questions/{questionId}/answers
 15. 답변 다시 듣기
 16. 멘토 평가 수정
 17. DPO export 확인
+
+## 14. 면접 진행 UX 전체 디버깅 프롬프트
+
+아래 프롬프트는 면접 진행 화면을 다시 점검하거나 다른 팀원에게 디버깅을 요청할 때 그대로 사용한다.
+
+```txt
+너는 시니어 풀스택 개발자이자 WebRTC/STT 기반 면접 서비스 디버깅 담당자다.
+
+목표는 대규모 리팩토링이 아니라, 현재 캡스톤 데모에서 멘토-멘티 면접 진행 UX가 끊기지 않고 실제 데이터 기반 리포트까지 이어지게 만드는 것이다.
+
+절대 지켜야 할 원칙:
+- 면접 입장 자체는 멘토/멘티가 자유롭게 할 수 있어야 한다.
+- 동기화가 필요한 지점은 면접 종료, 리포트 준비, 멘토링 세션 시작/종료다.
+- 미디어 서버/WebRTC가 실패해도 질문/답변 오디오 저장과 리포트용 데이터 축적은 멈추면 안 된다.
+- AI 서버/STT가 실패해도 오디오 저장은 성공해야 한다.
+- 추천 질문과 실제 질문을 절대 섞지 않는다.
+- 추천 질문은 멘토 참고용이고, 실제 질문은 멘토가 말한 오디오 STT 결과다.
+- 멘토 질문 1개에는 멘티 답변 1개 이상이 정확히 매칭되어야 한다.
+- 멘토가 질문을 완료한 뒤에는 해당 질문에 대한 답변이 저장되기 전까지 다음 질문 시작을 막아야 한다.
+- 멘티는 멘토의 실제 질문이 저장되기 전까지 답변 시작을 누를 수 없어야 한다.
+- 멘토만 면접 종료를 누를 수 있어야 한다.
+- 멘토가 면접 종료를 누르면 멘티도 자동으로 리포트 생성/리포트 화면으로 이동해야 한다.
+- 멘토가 리포트 이후 멘토링 세션을 시작하면 멘티도 자동으로 멘토링 세션으로 이동해야 한다.
+- 멘토링 세션 종료도 멘토가 주도하고, 멘티는 자동으로 후속 화면으로 이동해야 한다.
+
+먼저 코드를 수정하지 말고 다음 파일을 확인하라:
+- client/src/pages/Interview/InterviewLobby.jsx
+- client/src/pages/Interview/InterviewSession.jsx
+- client/src/pages/Interview/MentoringSession.jsx
+- client/src/pages/Mentee/MenteeDashboard.jsx
+- client/src/pages/Mentor/MentorDashboard.jsx
+- client/src/pages/Report/AIReport.jsx
+- client/src/pages/Report/ReportGenerating.jsx
+- client/src/api/sessions.js
+- backend/src/main/java/com/backend/domain/interviewSession/**
+- backend/src/main/java/com/backend/domain/interviewQuestion/**
+- backend/src/main/java/com/backend/domain/interviewAnswer/**
+- backend/src/main/java/com/backend/domain/analysisReport/**
+- media-server/src/**
+
+분석 결과는 아래 순서로 출력하라:
+1. 현재 면접 진행 상태 흐름 요약
+2. 멘토 화면에서 보여야 할 것과 실제 보이는 것
+3. 멘티 화면에서 보여야 할 것과 실제 보이는 것
+4. 질문 시작/완료 버튼의 기대 동작과 실제 코드 동작
+5. 답변 시작/완료 버튼의 기대 동작과 실제 코드 동작
+6. 추천 질문과 실제 질문이 분리되어 있는지
+7. 질문-답변 pair가 깨질 수 있는 지점
+8. 동시 녹음 lock이 깨질 수 있는 지점
+9. 미디어 서버가 죽었을 때 살아 있어야 하는 HTTP fallback
+10. STT 실패 시 살아 있어야 하는 fallback
+11. 면접 종료 동기화가 백엔드 상태 기반으로 되는지
+12. 리포트 생성 이후 멘토링 시작 동기화가 되는지
+13. 멘토/멘티 타이머가 같은 기준 시각으로 계산되는지
+14. 오늘 당장 고칠 최소 수정 파일
+15. 수정하면 위험한 파일
+16. 브라우저 Network/Console에서 확인할 요청과 응답
+
+수정이 필요하면 가장 작은 변경부터 제안하고, 기존 정상 기능을 깨뜨릴 가능성이 있으면 먼저 설명하라.
+```
+
+## 15. 면접 진행 상태와 역할별 UX 기준
+
+### 15.1 상태 기준
+
+면접 진행 화면에서 다루는 상태는 크게 네 종류다.
+
+| 구분 | 권장 상태 | 저장 위치 | 용도 |
+|---|---|---|---|
+| 세션 상태 | `SCHEDULED`, `IN_PROGRESS`, `COMPLETED` | 백엔드 `InterviewSession.status` | 입장 가능 여부, 면접 종료 동기화 |
+| 질문 상태 | 질문 없음, 질문 녹음 중, 답변 대기 중, 답변 완료 | 프론트 + 질문/답변 DB | 질문-답변 turn 진행 |
+| 녹음 lock | 없음, 멘토 질문 녹음, 멘티 답변 녹음 | media-server activeRecorder + 프론트 fallback | 동시 녹음 방지 |
+| STT 상태 | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` | `InterviewQuestion`, `InterviewAnswer` | 리포트 생성 품질 확인 |
+
+중요:
+
+- `IN_PROGRESS`는 “누군가 면접방에 들어왔다”가 아니라 “면접이 진행 중/리포트 이후 멘토링 시작 신호”로도 재사용될 수 있다.
+- 더 정확한 구조는 `INTERVIEW_IN_PROGRESS`, `INTERVIEW_COMPLETED`, `REPORT_READY`, `MENTORING_IN_PROGRESS`, `MENTORING_COMPLETED`로 분리하는 것이다.
+- 데모 최소 수정에서는 새 DB 스키마 없이 기존 세션 상태 + 프론트 polling으로 동기화한다.
+
+### 15.2 멘토 화면 기준
+
+멘토 준비 화면:
+
+- 카메라/마이크 미리보기
+- 멘티 자소서/지원 정보
+- AI 추천 질문 생성 버튼
+- 생성된 추천 질문 목록
+- 추천 질문 선택/수정/저장
+- 추천 질문은 참고용임을 명확히 보여줌
+
+멘토 면접 진행 화면:
+
+- 화상 영역
+- 실제 질문 기록 패널
+- `질문 시작` 버튼
+- 질문 녹음 중 음성 파동 표시
+- `질문 완료` 버튼
+- 현재 답변 대상 질문 표시
+- AI 추천 질문 패널
+- AI 추천 질문 보기/접기 토글
+- 실제 질문 기록 목록
+- 멘티 답변 대기 중이면 다음 질문 시작 비활성화
+- 면접 종료 버튼 표시
+
+멘토가 질문을 끝낸 직후:
+
+- 방금 저장된 질문이 `activeQuestion`이 된다.
+- 멘토 화면에는 “멘티 답변 대기 중” 안내가 떠야 한다.
+- `질문 시작` 버튼은 비활성화되어야 한다.
+- 멘티 답변이 저장되기 전까지 다음 질문을 만들 수 없어야 한다.
+
+멘티 답변이 저장된 직후:
+
+- 해당 질문 id가 answered 상태가 된다.
+- 멘토의 `질문 시작` 버튼이 다시 활성화된다.
+- 다음 질문을 진행할 수 있다.
+
+### 15.3 멘티 화면 기준
+
+멘티 준비 화면:
+
+- 카메라/마이크 미리보기
+- 본인이 제출한 자소서/사전 정보
+- 추천 질문은 보이지 않아야 한다.
+- 입장 자체는 멘토와 독립적으로 가능해야 한다.
+
+멘티 면접 진행 화면:
+
+- 화상 영역
+- 현재 질문 표시
+- 질문이 없으면 “멘토 질문 대기 중”
+- 질문이 저장되면 `답변 시작` 버튼 활성화
+- 답변 중 음성 녹음
+- `답변 완료` 클릭 시 답변 오디오 업로드
+- 답변 업로드가 성공하면 다음 질문 대기 상태로 돌아감
+- 면접 종료 버튼은 보이지 않거나 비활성 안내만 보여야 한다.
+
+멘티가 먼저 입장한 경우:
+
+- `멘토 질문 대기 중` 상태가 정상이다.
+- 답변 시작 버튼은 비활성화되어야 한다.
+- 멘토가 질문을 저장하면 polling 또는 socket으로 현재 질문이 잡혀야 한다.
+
+멘토가 먼저 입장한 경우:
+
+- 멘티 대시보드에서 `IN_PROGRESS` 세션도 입장 가능 일정으로 보여야 한다.
+- 멘티가 뒤늦게 들어와도 기존 active question 또는 DB의 미답변 질문을 받아야 한다.
+
+## 16. 질문-답변 turn 진행 알고리즘
+
+### 16.1 정상 1회 turn
+
+```txt
+1. 멘토가 질문 시작 클릭
+2. 프론트 MediaRecorder 시작
+3. media-server activeRecorder = QUESTION 시도
+4. media-server 응답이 없으면 프론트는 로컬 녹음 fallback 시작
+5. 멘토가 질문 완료 클릭
+6. POST /api/sessions/{id}/questions/audio
+7. 백엔드가 질문 오디오 저장
+8. 백엔드가 AI 서버 /api/stt 호출
+9. STT 성공 시 InterviewQuestion.content 갱신
+10. STT 실패 시 질문 record는 남기고 stt_status=FAILED
+11. 프론트 activeQuestion = 저장된 질문
+12. 멘토 질문 버튼 잠금
+13. 멘티 화면 polling/socket으로 activeQuestion 획득
+14. 멘티 답변 시작 활성화
+15. 멘티 답변 시작 클릭
+16. 프론트 MediaRecorder 시작
+17. 멘티 답변 완료 클릭
+18. POST /api/sessions/{id}/questions/{questionId}/answers
+19. 백엔드가 답변 오디오 저장
+20. 백엔드가 AI 서버 /api/stt 호출
+21. STT 성공 시 InterviewAnswer.sttText 저장
+22. STT 실패 시 답변 record는 남기고 stt_status=FAILED
+23. 프론트 answeredQuestionIds에 questionId 추가
+24. 멘토 화면이 답변 저장을 감지
+25. 멘토 질문 버튼 다시 활성화
+```
+
+### 16.2 멘토가 계속 질문하려는 경우
+
+기대 동작:
+
+- 방금 질문에 대한 답변이 저장되기 전까지 `질문 시작` 비활성화
+- 안내 문구: `멘티 답변을 기다리는 중입니다. 답변 저장 후 다음 질문을 진행하세요.`
+
+깨지는 원인:
+
+- `activeQuestion`은 있는데 `questionButtonDisabled` 조건에 반영되지 않음
+- 답변 저장 여부를 프론트가 감지하지 못함
+- 답변 업로드 실패 후 lock이 풀리지 않음
+
+확인 요청:
+
+```txt
+멘토 질문 완료 후:
+- activeQuestion 값이 있는가?
+- questionButtonDisabled가 true인가?
+- getQuestionAnswers(sessionId, activeQuestion.id)가 주기적으로 호출되는가?
+- 답변 저장 후 activeQuestion이 null로 바뀌는가?
+```
+
+### 16.3 멘티 답변 버튼이 안 열리는 경우
+
+가능 원인:
+
+- `activeQuestion`이 멘티 화면에 전달되지 않음
+- media-server `activeQuestion` broadcast 실패
+- DB polling이 실패
+- 질문이 추천 질문과 실제 질문으로 잘못 분류됨
+- `activeRecorder`가 `QUESTION` 상태로 stale하게 남아서 답변 버튼이 막힘
+- 멘티가 해당 session participant가 아니어서 API 접근 실패
+
+확인 순서:
+
+```txt
+1. Network: GET /api/sessions/{id}/questions 응답 확인
+2. 응답 중 stt_status가 있는 질문이 있는지 확인
+3. 멘티 프론트 activeQuestion 값 확인
+4. 답변 버튼 disabled 조건 확인
+5. activeRecorder 값 확인
+6. POST /api/sessions/{id}/questions/{questionId}/answers 호출 여부 확인
+```
+
+## 17. 추천 질문과 실제 질문 분리 기준
+
+추천 질문:
+
+- 준비 화면에서 AI가 생성
+- 멘토 참고용
+- 면접 진행 중 우측 추천 질문 패널에 표시
+- 리포트 질문-답변 pair의 질문으로 직접 쓰면 안 됨
+- `stt_status`가 없는 질문이면 추천 질문으로 간주 가능
+
+실제 질문:
+
+- 멘토가 면접 중 직접 말함
+- 질문 오디오가 저장됨
+- STT 결과가 질문 텍스트가 됨
+- `stt_status`가 `PENDING/PROCESSING/COMPLETED/FAILED` 중 하나
+- 답변 대상 질문이 됨
+
+혼동 방지 규칙:
+
+- 추천 질문 state와 실제 질문 state를 분리한다.
+- 추천 질문 목록에 실제 질문을 append하지 않는다.
+- 실제 질문 기록 목록에 추천 질문을 표시하지 않는다.
+- 준비 화면에서 추천 질문을 저장하지 않고 입장해도 진행 화면에는 캐시 또는 자동 저장으로 보여야 한다.
+
+확인 요청:
+
+```txt
+멘토 진행 화면에서:
+- AI 추천질문 패널에는 준비 화면에서 추천된 질문만 보이는가?
+- 실제 질문 기록에는 멘토가 질문 완료한 항목만 보이는가?
+- 질문 완료 후 AI 추천질문 목록이 늘어나지 않는가?
+```
+
+## 18. 타이머 동기화 기준
+
+현재 주의할 문제:
+
+- 멘토와 멘티가 서로 다른 시각에 컴포넌트를 mount하면 로컬 `elapsed=0` 기준이 달라진다.
+- 그러면 같은 면접인데 멘토/멘티 화면의 record 시간이 다르게 보인다.
+
+권장 기준:
+
+- 타이머 시작 시각은 프론트 로컬 mount 시간이 아니라 백엔드 `InterviewSession.startedAt`이어야 한다.
+- 멘토가 면접 시작 또는 준비 화면 입장 시 `PATCH /api/sessions/{id}/status { status: "in_progress" }`를 호출한다.
+- 백엔드는 최초 `IN_PROGRESS` 전환 시 `startedAt`을 저장한다.
+- 멘토/멘티 화면은 `GET /api/sessions/{id}`의 `started_at`을 기준으로 `elapsed = now - started_at`을 계산한다.
+- `started_at`이 없으면 임시로 로컬 mount 시간을 쓰되, 3초 polling으로 `started_at`이 생기면 보정한다.
+
+디버깅 요청:
+
+```txt
+InterviewSession.jsx의 타이머가 local mount 기준인지 started_at 기준인지 확인하라.
+멘토와 멘티가 30초 차이로 입장해도 같은 elapsed가 보이도록 수정이 필요한지 판단하라.
+수정이 필요하면:
+1. getSession(id)로 started_at을 가져온다.
+2. started_at이 있으면 elapsed를 Date.now() - started_at으로 계산한다.
+3. started_at이 없으면 로컬 기준으로 임시 표시한다.
+4. 세션 상태가 completed가 되면 타이머를 멈춘다.
+```
+
+## 19. 종료/리포트/멘토링 동기화 기준
+
+### 19.1 면접 종료
+
+요구 UX:
+
+- 면접 입장은 자유롭게 한다.
+- 면접 종료는 멘토만 누를 수 있다.
+- 멘티에게는 종료 버튼이 아니라 “멘토가 종료하면 자동 이동” 안내를 보여준다.
+- 멘토가 종료하면 백엔드 세션 상태가 `COMPLETED`가 된다.
+- 멘티 면접 화면은 `GET /api/sessions/{id}` polling으로 `COMPLETED`를 감지한다.
+- 감지 즉시 `/report/generating/{id}` 또는 실제 리포트 화면으로 이동한다.
+
+확인 요청:
+
+```txt
+멘토 종료 클릭 후:
+- PATCH /api/sessions/{id}/status {status:"completed"} 성공?
+- 멘토는 /report/ai/{id}로 이동?
+- 멘티는 3초 이내 /report/generating/{id}로 이동?
+- 멘티에게 종료 버튼이 보이지 않는가?
+```
+
+### 19.2 리포트 생성
+
+요구 UX:
+
+- 리포트는 더미가 아니라 저장된 질문/답변 기반이어야 한다.
+- 질문 1개 이상, 답변 1개 이상이어야 한다.
+- 답변 오디오는 다시 듣기 가능해야 한다.
+- STT가 실패하면 실패 상태를 표시하거나 수동 확인 fallback을 둔다.
+
+확인 요청:
+
+```txt
+리포트 생성 전:
+- GET /api/sessions/{id}/questions
+- GET /api/sessions/{id}/questions/{questionId}/answers
+- GET /api/sessions/{id}/answers/stt-status
+
+리포트 생성:
+- POST /api/sessions/{id}/report/generate
+- GET /api/sessions/{id}/report
+```
+
+### 19.3 멘토링 시작
+
+요구 UX:
+
+- 리포트 생성 후 멘토가 멘토링 시작 버튼을 누른다.
+- 멘티가 같은 리포트 화면에 있으면 자동으로 멘토링 세션으로 이동한다.
+- 미디어 서버 socket이 아니라 백엔드 상태 polling으로 동기화한다.
+
+권장 구현:
+
+```txt
+멘토:
+1. /report/ai/{id}에서 멘토링 시작 클릭
+2. PATCH /api/sessions/{id}/status {status:"in_progress"} 또는 별도 mentoring 상태 저장
+3. /mentoring/mentor/{id} 이동
+
+멘티:
+1. /report/ai/{id}에서 GET /api/sessions/{id} polling
+2. 멘토링 시작 상태 감지
+3. /mentoring/mentee/{id} 자동 이동
+```
+
+더 정확한 장기 개선:
+
+- 세션 상태를 면접과 멘토링이 공유하지 않게 분리한다.
+- 예: `interviewStatus`, `reportStatus`, `mentoringStatus`
+- 또는 `SessionPhase = INTERVIEW_READY / INTERVIEWING / REPORTING / REPORT_READY / MENTORING / FINISHED`
+
+## 20. 모든 경우의 수 점검표
+
+### 20.1 입장 순서
+
+| 경우 | 기대 동작 | 확인 |
+|---|---|---|
+| 멘토 먼저 입장 | 멘토는 질문 가능, 멘티는 나중에 입장 가능 | 멘티 대시보드에 `IN_PROGRESS`도 입장 가능으로 보이는가 |
+| 멘티 먼저 입장 | 멘티는 질문 대기 중, 답변 버튼 비활성 | `activeQuestion` 없음 |
+| 둘 다 늦게 입장 | 기존 질문/답변 상태를 DB에서 복구 | GET questions/answers 확인 |
+| 멘토 새로고침 | active question 또는 답변 대기 상태 복구 | DB polling 확인 |
+| 멘티 새로고침 | 미답변 질문을 다시 잡음 | answeredQuestionIds/answers 확인 |
+
+### 20.2 질문/답변 진행
+
+| 경우 | 기대 동작 | 확인 |
+|---|---|---|
+| 멘토 질문 시작 | 녹음 시작, 파동 표시 | 버튼 `질문 완료`로 변경 |
+| 멘토 질문 완료 | 질문 업로드, 답변 대기 | POST questions/audio |
+| 질문 STT 실패 | 질문 record는 남음 | stt_status=FAILED |
+| 멘티 답변 시작 | 답변 녹음 시작 | 버튼 `답변 완료` |
+| 멘티 답변 완료 | 답변 업로드 | POST answers |
+| 답변 STT 실패 | 답변 record와 audioUrl은 남음 | stt_status=FAILED |
+| 답변 저장 후 | 멘토 다음 질문 가능 | getQuestionAnswers 감지 |
+
+### 20.3 실패 상황
+
+| 실패 | 유지되어야 하는 것 | fallback |
+|---|---|---|
+| media-server 연결 실패 | 질문/답변 오디오 저장 | HTTP upload + DB polling |
+| recordingStart ack 없음 | 로컬 녹음 시작 | 1.5초 timeout |
+| recordingStop ack 없음 | lock 해제 | 1초 timeout |
+| AI 서버 STT 실패 | 오디오 저장 | stt_status=FAILED |
+| 추천 질문 실패 | 면접 진행 | 멘토 직접 질문 |
+| 리포트 생성 실패 | 저장된 질문/답변 조회 | 재시도/수동 확인 |
+| 멘티 중간 입장 | 미답변 질문 표시 | DB polling |
+| 멘토가 계속 질문 클릭 | 버튼 비활성 | 답변 저장 전 질문 금지 |
+
+## 21. 브라우저/서버 로그 체크 포인트
+
+### 멘토 질문 완료 후
+
+Network:
+
+```txt
+POST /api/sessions/{id}/questions/audio
+GET /api/sessions/{id}/questions
+GET /api/sessions/{id}/questions/{questionId}/answers
+```
+
+응답에서 볼 것:
+
+```json
+{
+  "id": 123,
+  "content": "질문 음성 변환 중입니다. 또는 STT 텍스트",
+  "stt_status": "COMPLETED 또는 FAILED"
+}
+```
+
+### 멘티 답변 완료 후
+
+Network:
+
+```txt
+POST /api/sessions/{id}/questions/{questionId}/answers
+GET /api/sessions/{id}/questions/{questionId}/answers
+```
+
+응답에서 볼 것:
+
+```json
+{
+  "id": 456,
+  "question_id": 123,
+  "stt_text": "...",
+  "stt_status": "COMPLETED 또는 FAILED"
+}
+```
+
+### 종료 후
+
+Network:
+
+```txt
+PATCH /api/sessions/{id}/status {"status":"completed"}
+GET /api/sessions/{id}
+POST /api/sessions/{id}/report/generate
+GET /api/sessions/{id}/report
+```
+
+### 서버 로그
+
+백엔드:
+
+- 질문 오디오 S3 업로드 성공/실패
+- 답변 오디오 S3 업로드 성공/실패
+- AI STT 호출 성공/실패
+- 리포트 생성 성공/실패
+
+AI 서버:
+
+- `/api/stt` 요청 수신 여부
+- Whisper 모델 로딩 여부
+- 오디오 decoding 실패 여부
+- `/report` 요청 수신 여부
+
+media-server:
+
+- `join`
+- `recordingStart`
+- `recordingStop`
+- `activeRecorder`
+- `activeQuestion`
+- transport/producer/consumer 생성

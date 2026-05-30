@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Device } from "mediasoup-client";
-import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, uploadQuestionAudio, getQuestions } from "../../api/sessions";
+import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, uploadQuestionAudio, getQuestions, getSession, getQuestionAnswers } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
 import {
   describeMediaError,
@@ -20,6 +20,88 @@ function getPeerIdFromToken(token) {
   } catch {
     return null;
   }
+}
+
+function getAudioRecorderOptions() {
+  if (typeof MediaRecorder === "undefined") return {};
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  const mimeType = candidates.find(type => MediaRecorder.isTypeSupported(type));
+  return mimeType ? { mimeType } : {};
+}
+
+function createAudioBlob(chunks) {
+  const type = chunks.find(chunk => chunk?.type)?.type || "audio/webm";
+  return new Blob(chunks, { type });
+}
+
+function describeRecordingError(error) {
+  if (typeof MediaRecorder === "undefined") {
+    return "현재 브라우저가 녹음을 지원하지 않습니다. Chrome으로 다시 시도해주세요.";
+  }
+  if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
+    return "브라우저 또는 macOS 마이크 권한을 허용해주세요.";
+  }
+  if (error?.message) return error.message;
+  return "마이크 권한 또는 브라우저 녹음 지원을 확인해주세요.";
+}
+
+function getQuestionSttStatus(question) {
+  return question?.stt_status ?? question?.sttStatus ?? null;
+}
+
+function splitSessionQuestions(items) {
+  const list = Array.isArray(items) ? items : [];
+  return {
+    recommendations: list.filter(question => !getQuestionSttStatus(question)),
+    spoken: list.filter(question => getQuestionSttStatus(question)),
+  };
+}
+
+function getCachedRecommendations(sessionId) {
+  try {
+    const raw = sessionStorage.getItem(`scena_session_recommendations_${sessionId}`);
+    const contents = JSON.parse(raw || "[]");
+    return Array.isArray(contents)
+      ? contents.filter(Boolean).map((content, index) => ({ id: `cached-${index}`, content }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function findNextSpokenQuestion(spokenQuestions, answeredQuestionIds) {
+  const answered = new Set(answeredQuestionIds.map(String));
+  return [...spokenQuestions].reverse().find(question => !answered.has(String(question.id))) || null;
+}
+
+function hasAnswerItems(data) {
+  if (Array.isArray(data)) return data.length > 0;
+  if (Array.isArray(data?.answers)) return data.answers.length > 0;
+  if (Array.isArray(data?.content)) return data.content.length > 0;
+  return false;
+}
+
+function RecordingWave({ level = 0 }) {
+  const normalized = Math.min(1, Math.max(0.08, level * 5));
+  const bars = Array.from({ length: 18 });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, height: 28, flex: 1 }}>
+      {bars.map((_, i) => {
+        const shape = (Math.sin(i * 0.85) + 1) / 2;
+        const height = 5 + Math.round((8 + shape * 18) * normalized);
+        return (
+          <span key={i} style={{
+            width: 3,
+            height,
+            borderRadius: 999,
+            background: "#1D9E75",
+            opacity: 0.38 + normalized * 0.62,
+            transition: "height 0.18s ease, opacity 0.18s ease",
+          }} />
+        );
+      })}
+    </div>
+  );
 }
 
 /* ── 통합 비디오 타일 ── */
@@ -113,6 +195,7 @@ function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = 
 export default function InterviewSession({ role = "mentee" }) {
   const navigate = useNavigate();
   const { id } = useParams();
+  const isMentor = role === "mentor";
 
   /* ── 타이머 ── */
   const [elapsed, setElapsed] = useState(0);
@@ -136,11 +219,13 @@ export default function InterviewSession({ role = "mentee" }) {
   const [ending, setEnding] = useState(false);
 
   /* ── 멘토 전용 ── */
-  const [checkedQs, setCheckedQs] = useState([]);
   const [chatMsg, setChatMsg] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
   const [activeQuestion, setActiveQuestion] = useState(null);
+  const [recommendationsOpen, setRecommendationsOpen] = useState(true);
+  const [spokenQuestions, setSpokenQuestions] = useState([]);
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState([]);
   const questionRecorderRef = useRef(null);
   const questionAudioChunksRef = useRef([]);
 
@@ -157,10 +242,31 @@ export default function InterviewSession({ role = "mentee" }) {
   const [questions, setQuestions] = useState([]);
   useEffect(() => {
     if (!id || !/^\d+$/.test(id)) return;
-    getQuestions(id).then(data => {
-      if (Array.isArray(data)) setQuestions(data);
-    }).catch(() => {});
-  }, [id]);
+    let cancelled = false;
+
+    const loadQuestions = async () => {
+      try {
+        const data = await getQuestions(id);
+        if (cancelled) return;
+        const { recommendations, spoken } = splitSessionQuestions(data);
+        setQuestions(recommendations.length > 0 ? recommendations : getCachedRecommendations(id));
+        setSpokenQuestions(spoken);
+        if (!isMentor) {
+          const nextQuestion = findNextSpokenQuestion(spoken, answeredQuestionIds);
+          setActiveQuestion(prev => (
+            prev?.id === nextQuestion?.id ? prev : nextQuestion
+          ));
+        }
+      } catch {}
+    };
+
+    loadQuestions();
+    const interval = window.setInterval(loadQuestions, isMentor ? 8000 : 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [id, isMentor, answeredQuestionIds]);
 
   /* ── WebRTC refs ── */
   const localStreamRef = useRef(null);
@@ -171,6 +277,7 @@ export default function InterviewSession({ role = "mentee" }) {
   const videoProducerRef = useRef(null);
   const audioProducerRef = useRef(null);
   const consumersRef = useRef(new Map());
+  const redirectedByEndRef = useRef(false);
 
   /* recvTransport 준비 전 도착한 newProducer 이벤트 큐 */
   const pendingProducersRef = useRef([]);
@@ -189,8 +296,6 @@ export default function InterviewSession({ role = "mentee" }) {
   const [audioLevels, setAudioLevels] = useState({});
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const [connectionState, setConnectionState] = useState("connecting"); // connecting | connected | reconnecting | failed
-
-  const isMentor = role === "mentor";
 
   /* ── 미디어 소비 ── */
   const consumeProducer = useCallback((producerId, peerId, kind) => {
@@ -284,7 +389,7 @@ export default function InterviewSession({ role = "mentee" }) {
         setActiveRecorder(roomActiveRecorder || null);
         if (roomActiveQuestion) {
           setActiveQuestion(roomActiveQuestion);
-          setQuestions(prev => prev.some(q => q.id === roomActiveQuestion.id) ? prev : [...prev, roomActiveQuestion]);
+          setSpokenQuestions(prev => prev.some(q => q.id === roomActiveQuestion.id) ? prev : [...prev, roomActiveQuestion]);
         }
 
         /* Device 초기화 */
@@ -441,7 +546,7 @@ export default function InterviewSession({ role = "mentee" }) {
       socket.on("activeQuestion", ({ question }) => {
         setActiveQuestion(question || null);
         if (question) {
-          setQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);
+          setSpokenQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);
         }
       });
 
@@ -512,18 +617,37 @@ export default function InterviewSession({ role = "mentee" }) {
 
   /* ── 통화 종료 ── */
   const handleEndCall = async () => {
+    if (!isMentor) return;
     if (!window.confirm("면접을 종료하시겠습니까?")) return;
     setEnding(true);
     try {
-      if (isMentor) await updateSessionStatus(id, "completed");
+      await updateSessionStatus(id, "completed");
     } catch {}
     await new Promise(r => setTimeout(r, 800));
-    if (isMentor) {
-      navigate(`/report/ai/${id}`, { state: { role: "mentor" } });
-    } else {
-      navigate(`/report/generating/${id}`);
-    }
+    navigate(`/report/ai/${id}`, { state: { role: "mentor" } });
   };
+
+  useEffect(() => {
+    if (isMentor || !id || !/^\d+$/.test(id)) return;
+    let cancelled = false;
+    const checkSessionEnd = async () => {
+      try {
+        const data = await getSession(id);
+        const status = String(data?.status || "").toLowerCase();
+        if (!cancelled && status === "completed" && !redirectedByEndRef.current) {
+          redirectedByEndRef.current = true;
+          setEnding(true);
+          navigate(`/report/generating/${id}`);
+        }
+      } catch {}
+    };
+    const interval = window.setInterval(checkSessionEnd, 3000);
+    checkSessionEnd();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [id, isMentor, navigate]);
 
   const requestRecordingLock = (recordingType) => new Promise((resolve) => {
     const socket = socketRef.current;
@@ -531,7 +655,17 @@ export default function InterviewSession({ role = "mentee" }) {
       resolve(true);
       return;
     }
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.warn("recordingStart 응답 지연: 로컬 녹음을 우선 시작합니다.");
+      resolve(true);
+    }, 1500);
     socket.emit("recordingStart", { recordingType }, (res = {}) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
       if (res.error) {
         setActiveRecorder(res.activeRecorder || null);
         alert("다른 참여자가 말하는 중입니다. 발화가 끝난 뒤 다시 시도해주세요.");
@@ -549,10 +683,39 @@ export default function InterviewSession({ role = "mentee" }) {
       setActiveRecorder(null);
       return;
     }
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      setActiveRecorder(null);
+    }, 1000);
     socket.emit("recordingStop", {}, (res = {}) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
       setActiveRecorder(res.activeRecorder || null);
     });
   };
+
+  useEffect(() => {
+    if (!isMentor || !activeQuestion?.id || !id || !/^\d+$/.test(id)) return;
+    let cancelled = false;
+    const checkAnswerSaved = async () => {
+      try {
+        const data = await getQuestionAnswers(id, activeQuestion.id);
+        if (cancelled || !hasAnswerItems(data)) return;
+        const key = String(activeQuestion.id);
+        setAnsweredQuestionIds(prev => prev.includes(key) ? prev : [...prev, key]);
+        setActiveQuestion(null);
+      } catch {}
+    };
+    const interval = window.setInterval(checkAnswerSaved, 3000);
+    checkAnswerSaved();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeQuestion?.id, id, isMentor]);
 
   /* ── 답변 상태 / 녹음 ── */
   const handleAnswerStatus = async (nextStatus) => {
@@ -575,13 +738,14 @@ export default function InterviewSession({ role = "mentee" }) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioChunksRef.current = [];
-        const recorder = new MediaRecorder(stream);
+        const recorder = new MediaRecorder(stream, getAudioRecorderOptions());
         recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
         mediaRecorderRef.current = recorder;
-        recorder.start();
-      } catch {
+        recorder.start(250);
+      } catch (error) {
         releaseRecordingLock();
         setAnswerStatus("idle");
+        alert(describeRecordingError(error));
       }
     } else if (nextStatus === "done" && mediaRecorderRef.current?.state !== "inactive") {
       setAnswerStatus(nextStatus);
@@ -595,14 +759,20 @@ export default function InterviewSession({ role = "mentee" }) {
       const memberId = user?.id || getPeerIdFromToken(user?.accessToken || "");
       const questionId = answerQuestionRef.current?.id;
       mediaRecorderRef.current.onstop = async () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         try {
+          const blob = createAudioBlob(audioChunksRef.current);
+          if (!blob.size) throw new Error("녹음된 답변 오디오가 없습니다. 답변 시작 후 1초 이상 말한 뒤 완료해주세요.");
           if (questionId) {
             await uploadAnswerAudio(id, questionId, blob, {
               answerStart: answerStartRef.current,
               answerEnd,
               menteeId: memberId,
             });
+            setAnsweredQuestionIds(prev => {
+              const key = String(questionId);
+              return prev.includes(key) ? prev : [...prev, key];
+            });
+            setActiveQuestion(prev => String(prev?.id) === String(questionId) ? null : prev);
           }
         } catch {
         } finally {
@@ -619,12 +789,13 @@ export default function InterviewSession({ role = "mentee" }) {
     if (questionRecordStatus === "recording") {
       setQuestionRecordStatus("uploading");
       questionRecorderRef.current.onstop = async () => {
-        const blob = new Blob(questionAudioChunksRef.current, { type: "audio/webm" });
         questionRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
         questionRecorderRef.current = null;
         try {
+          const blob = createAudioBlob(questionAudioChunksRef.current);
+          if (!blob.size) throw new Error("녹음된 질문 오디오가 없습니다. 질문 시작 후 1초 이상 말한 뒤 완료해주세요.");
           const question = await uploadQuestionAudio(id, blob);
-          setQuestions(prev => [...prev, question]);
+          setSpokenQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);
           setActiveQuestion(question);
           socketRef.current?.emit("activeQuestion", { question });
         } catch (error) {
@@ -643,14 +814,15 @@ export default function InterviewSession({ role = "mentee" }) {
       if (!locked) return;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       questionAudioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream, getAudioRecorderOptions());
       recorder.ondataavailable = (e) => { if (e.data.size > 0) questionAudioChunksRef.current.push(e.data); };
       questionRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
       setQuestionRecordStatus("recording");
-    } catch {
+    } catch (error) {
       releaseRecordingLock();
-      alert("마이크 권한을 확인해주세요.");
+      setQuestionRecordStatus("idle");
+      alert(describeRecordingError(error));
     }
   };
 
@@ -660,16 +832,15 @@ export default function InterviewSession({ role = "mentee" }) {
     setChatMsg("");
   };
 
-  const toggleCheck = (i) => {
-    setCheckedQs(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]);
-  };
-
   const SPEAK_THRESHOLD = 0.025;
   // 참가자가 1명이라도 있으면 발화자 메인 뷰 활성화
   const mainViewId = peerIds.length > 0 ? (activeSpeakerId || peerIds[0]) : null;
   const recordingLockedByOther = Boolean(activeRecorder?.peerId && activeRecorder.peerId !== localPeerId);
-  const answerButtonDisabled = (!activeQuestion && answerStatus !== "answering") || (recordingLockedByOther && answerStatus !== "answering");
-  const questionButtonDisabled = questionRecordStatus === "uploading" || (recordingLockedByOther && questionRecordStatus !== "recording");
+  const staleQuestionLock = Boolean(activeQuestion?.id && activeRecorder?.recordingType === "QUESTION");
+  const answerBlockedByRecorder = recordingLockedByOther && !staleQuestionLock;
+  const waitingForAnswer = isMentor && Boolean(activeQuestion?.id) && questionRecordStatus !== "recording";
+  const answerButtonDisabled = (!activeQuestion && answerStatus !== "answering") || (answerBlockedByRecorder && answerStatus !== "answering");
+  const questionButtonDisabled = questionRecordStatus === "uploading" || waitingForAnswer || (recordingLockedByOther && questionRecordStatus !== "recording");
 
   return (
     <>
@@ -694,35 +865,45 @@ export default function InterviewSession({ role = "mentee" }) {
         {/* ════ 재접속 / 연결 실패 배너 ════ */}
         {(connectionState === "reconnecting" || connectionState === "failed") && (
           <div style={{
-            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-            background: "rgba(0,0,0,0.65)", zIndex: 9999,
-            display: "flex", alignItems: "center", justifyContent: "center",
+            position: "fixed", top: 76, left: "50%", transform: "translateX(-50%)",
+            zIndex: 9999, width: "min(520px, calc(100vw - 32px))",
           }}>
             <div style={{
-              background: "#fff", borderRadius: 16, padding: "36px 48px",
-              textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
+              background: "rgba(255,255,255,0.96)", borderRadius: 14, padding: "14px 18px",
+              boxShadow: "0 8px 30px rgba(0,0,0,0.18)", border: "1px solid #E8E0D0",
+              display: "flex", alignItems: "center", gap: 12,
             }}>
               {connectionState === "reconnecting" ? (
                 <>
                   <div style={{
-                    width: 48, height: 48, borderRadius: "50%",
-                    border: "4px solid #E8E0D0", borderTopColor: "#1D9E75",
-                    animation: "spin 0.9s linear infinite", margin: "0 auto 20px",
+                    width: 22, height: 22, borderRadius: "50%",
+                    border: "3px solid #E8E0D0", borderTopColor: "#1D9E75",
+                    animation: "spin 0.9s linear infinite", flexShrink: 0,
                   }} />
-                  <p style={{ fontSize: 16, fontWeight: 700, color: "#1A1818", marginBottom: 6 }}>재연결 중...</p>
-                  <p style={{ fontSize: 13, color: "#9E9B95" }}>잠시만 기다려 주세요.</p>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: "#1A1818", marginBottom: 2 }}>미디어 서버 재연결 중</p>
+                    <p style={{ fontSize: 11, color: "#6b7280" }}>화면 공유 연결을 복구하고 있습니다. 질문/답변 녹음은 계속 시도할 수 있습니다.</p>
+                  </div>
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 36, marginBottom: 16 }}>⚠️</div>
-                  <p style={{ fontSize: 16, fontWeight: 700, color: "#EF4444", marginBottom: 6 }}>연결에 실패했습니다</p>
-                  <p style={{ fontSize: 13, color: "#9E9B95", marginBottom: 20 }}>네트워크를 확인하고 다시 시도해 주세요.</p>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: "50%",
+                    background: "#FEE2E2", color: "#EF4444",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 14, fontWeight: 900, flexShrink: 0,
+                  }}>!</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: "#EF4444", marginBottom: 2 }}>미디어 서버 연결 실패</p>
+                    <p style={{ fontSize: 11, color: "#6b7280" }}>상대 화면이 보이지 않을 수 있습니다. 로컬 녹음과 오디오 저장은 계속 진행할 수 있습니다.</p>
+                  </div>
                   <button
                     onClick={() => window.location.reload()}
                     style={{
-                      padding: "10px 28px", background: "#0D2240", color: "#fff",
-                      border: "none", borderRadius: 24, fontSize: 14, fontWeight: 700,
+                      padding: "8px 12px", background: "#0D2240", color: "#fff",
+                      border: "none", borderRadius: 999, fontSize: 12, fontWeight: 800,
                       cursor: "pointer", fontFamily: "inherit",
+                      flexShrink: 0,
                     }}
                   >
                     새로고침
@@ -945,18 +1126,32 @@ export default function InterviewSession({ role = "mentee" }) {
               )}
 
               {/* End Call */}
-              <button onClick={handleEndCall} disabled={ending} style={{
-                padding: "12px 24px",
-                background: ending ? "#9ca3af" : "#EF4444",
-                color: "#fff", border: "none", borderRadius: 24,
-                fontSize: 14, fontWeight: 700, cursor: ending ? "not-allowed" : "pointer",
-                fontFamily: "inherit", transition: "background 0.18s", marginLeft: 8,
-              }}
-                onMouseEnter={e => { if (!ending) e.currentTarget.style.background = "#DC2626"; }}
-                onMouseLeave={e => { if (!ending) e.currentTarget.style.background = "#EF4444"; }}
-              >
-                {ending ? "종료 중..." : "End Call"}
-              </button>
+              {isMentor ? (
+                <button onClick={handleEndCall} disabled={ending} style={{
+                  padding: "12px 24px",
+                  background: ending ? "#9ca3af" : "#EF4444",
+                  color: "#fff", border: "none", borderRadius: 24,
+                  fontSize: 14, fontWeight: 700, cursor: ending ? "not-allowed" : "pointer",
+                  fontFamily: "inherit", transition: "background 0.18s", marginLeft: 8,
+                }}
+                  onMouseEnter={e => { if (!ending) e.currentTarget.style.background = "#DC2626"; }}
+                  onMouseLeave={e => { if (!ending) e.currentTarget.style.background = "#EF4444"; }}
+                >
+                  {ending ? "종료 중..." : "면접 종료"}
+                </button>
+              ) : (
+                <div style={{
+                  padding: "10px 16px",
+                  borderRadius: 24,
+                  background: "rgba(255,255,255,0.12)",
+                  color: "rgba(255,255,255,0.72)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  marginLeft: 8,
+                }}>
+                  {ending ? "리포트로 이동 중..." : "멘토가 종료하면 자동 이동"}
+                </div>
+              )}
             </div>
           </div>
 
@@ -995,10 +1190,38 @@ export default function InterviewSession({ role = "mentee" }) {
                         : "질문 시작"}
                   </button>
                   <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.6, marginTop: 8 }}>
-                    {recordingLockedByOther
+                    {waitingForAnswer
+                      ? "멘티 답변을 기다리는 중입니다. 답변 저장 후 다음 질문을 진행하세요."
+                      : recordingLockedByOther
                       ? "다른 참여자가 말하는 중입니다. 발화가 끝난 뒤 질문을 시작하세요."
                       : "멘토가 실제로 말한 질문 오디오가 STT로 변환되어 리포트 질문으로 저장됩니다."}
                   </p>
+                  {questionRecordStatus === "recording" && (
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      marginTop: 10,
+                      padding: "9px 10px",
+                      borderRadius: 10,
+                      background: "#F0FDF4",
+                      border: "1px solid #B7E2D4",
+                    }}>
+                      <span style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: "#EF4444",
+                        boxShadow: "0 0 0 4px rgba(239,68,68,0.12)",
+                        flexShrink: 0,
+                        animation: "pulse 1s ease-in-out infinite",
+                      }} />
+                      <RecordingWave level={audioLevels['__local'] || 0} />
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#11745D", flexShrink: 0 }}>
+                        질문 녹음 중
+                      </span>
+                    </div>
+                  )}
                   {activeQuestion && (
                     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#E8F5EE", border: "1px solid #B7E2D4" }}>
                       <p style={{ fontSize: 10, fontWeight: 800, color: "#11745D", marginBottom: 4 }}>현재 답변 대상 질문</p>
@@ -1008,43 +1231,64 @@ export default function InterviewSession({ role = "mentee" }) {
                 </div>
 
                 <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase", marginBottom: 10 }}>AI 추천질문</p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {questions.map((q, i) => (
-                      <div key={i} style={{
-                        background: "#FAF8F4", borderRadius: 10, padding: "12px 14px",
-                        border: "1px solid #E8E0D0", cursor: "pointer",
-                        borderLeft: "3px solid #1D9E75", transition: "background 0.15s",
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase" }}>AI 추천질문</p>
+                    <button
+                      type="button"
+                      onClick={() => setRecommendationsOpen(v => !v)}
+                      style={{
+                        border: "1px solid #D7E7DF",
+                        background: recommendationsOpen ? "#E8F5EE" : "#fff",
+                        color: "#11745D",
+                        borderRadius: 999,
+                        padding: "4px 9px",
+                        fontSize: 10,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
                       }}
-                        onMouseEnter={e => e.currentTarget.style.background = "#E8F5EE"}
-                        onMouseLeave={e => e.currentTarget.style.background = "#FAF8F4"}
-                      >
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", display: "block", marginBottom: 4 }}>Q{i + 1}</span>
-                        <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.65 }}>{q.content}</p>
-                      </div>
-                    ))}
+                    >
+                      {recommendationsOpen ? "접기" : "보기"}
+                    </button>
                   </div>
+                  {recommendationsOpen && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {questions.length > 0 ? questions.map((q, i) => (
+                        <div key={q.id ?? i} style={{
+                          background: "#FAF8F4", borderRadius: 10, padding: "12px 14px",
+                          border: "1px solid #E8E0D0",
+                          borderLeft: "3px solid #1D9E75", transition: "background 0.15s",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.background = "#E8F5EE"}
+                          onMouseLeave={e => e.currentTarget.style.background = "#FAF8F4"}
+                        >
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", display: "block", marginBottom: 4 }}>추천 {i + 1}</span>
+                          <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.65 }}>{q.content}</p>
+                        </div>
+                      )) : (
+                        <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
+                          준비 화면에서 생성한 AI 추천 질문이 여기에 표시됩니다.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#6b7280", textTransform: "uppercase", marginBottom: 10 }}>질문 리스트</p>
-                  {questions.map((q, i) => {
-                    const checked = checkedQs.includes(i);
-                    return (
-                      <label key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid #f3f4f6", cursor: "pointer" }}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleCheck(i)}
-                          style={{ marginTop: 2, accentColor: "#0D2240", width: 14, height: 14, flexShrink: 0 }} />
-                        <p style={{ fontSize: 12, color: checked ? "#9ca3af" : "#374151", lineHeight: 1.7, textDecoration: checked ? "line-through" : "none" }}>
-                          {q.content}
-                        </p>
-                      </label>
-                    );
-                  })}
-                  {questions.length > 0 && checkedQs.length === questions.length && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, padding: "10px", background: "#f0fdf4", borderRadius: 8 }}>
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="#1D9E75" /><path d="M4.5 8l2.5 2.5 4-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      <span style={{ fontSize: 12, color: "#1D9E75", fontWeight: 600 }}>And you're good to go!</span>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#6b7280", textTransform: "uppercase", marginBottom: 10 }}>실제 질문 기록</p>
+                  {spokenQuestions.length > 0 ? spokenQuestions.map((q, i) => (
+                    <div key={q.id ?? i} style={{ padding: "10px 0", borderBottom: "1px solid #f3f4f6" }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: "#6b7280", display: "block", marginBottom: 4 }}>
+                        질문 {i + 1}
+                      </span>
+                      <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.7 }}>
+                        {q.content}
+                      </p>
                     </div>
+                  )) : (
+                    <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
+                      질문 완료를 누르면 멘토가 실제로 말한 질문이 여기에 기록됩니다.
+                    </p>
                   )}
                 </div>
               </div>

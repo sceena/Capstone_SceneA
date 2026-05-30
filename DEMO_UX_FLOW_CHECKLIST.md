@@ -25,18 +25,19 @@
 
 1. 프론트가 어느 백엔드를 보고 있는지 확인한다.
 2. 로그인 토큰의 role/id와 실제 요청 payload가 맞는지 확인한다.
-3. `POST /api/sessions`가 성공해 `session_id`를 받는지 확인한다.
-4. `POST /api/sessions/{id}/resume`가 성공해 자소서가 세션에 붙는지 확인한다.
-5. `POST /api/reservation/request`에 `session_id`가 null이 아닌 실제 id로 들어가는지 확인한다.
-6. 멘토 대시보드에서 `GET /api/reservation/mentor?status=PENDING`가 성공하는지 확인한다.
-7. 멘토 수락 후 같은 `session_id`가 확정 세션으로 유지되는지 확인한다.
+3. `POST /api/reservation/request`가 `resume_content`를 포함해 성공하는지 확인한다.
+4. 신청 직후 reservation의 `session_id`가 null이어도 정상이다. 아직 멘토가 수락하지 않았기 때문이다.
+5. 멘토 대시보드에서 `GET /api/reservation/mentor?status=PENDING`가 성공하는지 확인한다.
+6. 멘토가 `POST /api/reservation/{id}/response`로 수락했을 때 `session_id`가 생성되는지 확인한다.
+7. 수락 후 생성된 세션에 멘티 참여자와 자소서가 붙어 추천 질문 생성에 사용되는지 확인한다.
 
 핵심 기준:
 
-- `session_id: null`인 예약이 생기면 추천 질문/자소서 기반 준비 화면은 깨질 수 있다.
-- `POST /api/sessions`가 실패하면 예약 신청을 진행하면 안 된다.
+- 신청 직후 `session_id: null`은 정상이고, 수락 후에도 null이면 문제다.
+- 최신 main 흐름에서는 멘티 신청 화면이 `POST /api/sessions`를 직접 호출하지 않는다.
+- 신청 화면에서 여전히 `POST /api/sessions`가 먼저 보이면 프론트가 오래된 코드로 실행 중인지 확인한다.
 - `GET /api/sessions/{id}/report`의 404는 “아직 리포트 없음”일 수 있으므로 신청 실패와 분리해서 본다.
-- `POST /api/sessions`의 500은 치명적이다. 이 경우 백엔드 로그의 stacktrace를 반드시 확인한다.
+- `POST /api/reservation/request` 또는 수락 API의 500은 치명적이다. 이 경우 백엔드 로그의 stacktrace를 반드시 확인한다.
 
 ### 프론트엔드
 
@@ -126,45 +127,36 @@
 멘티가 멘토 신청 버튼을 누르면 Network 탭에 아래 순서가 보여야 한다.
 
 ```txt
-POST /api/sessions
-POST /api/sessions/{session_id}/job-posting      선택 사항
-POST /api/sessions/{session_id}/resume
 POST /api/reservation/request
+GET /api/reservation/mentor?status=PENDING       멘토 화면
+POST /api/reservation/{id}/response              멘토 수락
 ```
 
 정상 payload 예:
-
-```json
-// POST /api/sessions
-{
-  "mentor_id": 32,
-  "job_category": "백엔드 개발"
-}
-```
-
-```json
-// POST /api/sessions/{id}/resume
-{
-  "content": "[지원 동기]\n...\n\n[멘토에게 전달할 내용]\n..."
-}
-```
 
 ```json
 // POST /api/reservation/request
 {
   "mentor_id": 32,
   "availability_id": 62,
-  "session_id": 51,
-  "job_posting_id": null
+  "resume_content": "[지원 동기]\n...\n\n[멘토에게 전달할 내용]\n..."
+}
+```
+
+```json
+// POST /api/reservation/{id}/response
+{
+  "accepted": true
 }
 ```
 
 성공 기준:
 
-- `POST /api/sessions` 응답에 `id`가 있어야 한다.
-- `POST /api/sessions/{id}/resume`가 201이어야 한다.
-- `POST /api/reservation/request`의 `session_id`가 null이면 안 된다.
-- 멘토 수락 전 reservation 상태는 `PENDING`이어야 한다.
+- `POST /api/reservation/request` 응답 상태는 `PENDING`이어야 한다.
+- 신청 직후 reservation의 `session_id`가 null이어도 정상이다.
+- 멘토 수락 응답에 `session_id`가 있어야 한다.
+- 수락 후 `GET /api/sessions/{session_id}`에서 멘토/멘티 참여자가 보여야 한다.
+- 수락 후 `POST /api/sessions/{session_id}/questions/recommendations`가 자소서 기반으로 동작해야 한다.
 
 ### 현재 발생했던 대표 문제
 
@@ -178,16 +170,17 @@ reservation.session_id = null
 
 의미:
 
-- 프론트 payload는 정상일 수 있다.
-- 세션 생성이 백엔드 내부 예외로 실패했다.
-- 기존에는 세션 생성 실패를 무시하고 예약 신청을 계속 보내 `session_id: null` 예약이 생겼다.
-- 이 상태에서는 자소서가 세션에 저장되지 않고, 멘토 추천 질문 생성도 실패할 수 있다.
+- 예전 프론트 흐름에서 발생하던 문제다.
+- 최신 main 흐름에서는 신청 단계에서 세션을 만들지 않는다.
+- 자소서는 reservation의 `resume_content`로 먼저 저장하고, 멘토 수락 시 세션과 resume으로 옮겨진다.
+- 따라서 신청 직후 `session_id: null` 자체는 문제가 아니다.
 
 현재 방어 기준:
 
-- `POST /api/sessions`가 실패하면 신청을 중단한다.
-- `session_id` 없는 예약을 더 만들지 않는다.
-- 사용자는 세션 생성 실패 메시지를 받아야 한다.
+- 신청 화면에서 `POST /api/sessions`를 호출하지 않는다.
+- 멘토 수락 후에도 `session_id`가 null이면 실패로 본다.
+- 멘토 수락 후 resume이 세션에 저장되지 않으면 추천 질문 생성이 깨질 수 있다.
+- 사용자는 신청 또는 수락 실패 메시지를 받아야 한다.
 
 ### Network 탭 확인법
 
@@ -369,10 +362,11 @@ VITE_MEDIA_SERVER_URL=http://54.116.176.242:4000
 
 현재 데모 안정성을 위해 주의할 점:
 
-- 신청 흐름에서 `POST /api/sessions`가 실패하면 예약 신청을 중단해야 한다.
+- 신청 흐름에서는 `POST /api/reservation/request`만 성공하면 된다.
+- 신청 payload에는 `mentor_id`, `availability_id`, `resume_content`가 포함되어야 한다.
 - 예약 신청의 기준 상태는 `Reservation.status=PENDING`이다.
-- `POST /api/reservation/request`에는 `session_id`가 null이 아닌 실제 세션 id로 들어가야 한다.
-- 멘토 수락 시 기존 `session_id`가 확정되어야 하며, 자소서가 붙은 세션과 다른 세션이 새로 만들어지면 안 된다.
+- 신청 직후 `session_id`는 null일 수 있다.
+- 멘토 수락 시 `session_id`가 생성되어야 하며, reservation의 `resume_content`가 해당 세션의 resume으로 저장되어야 한다.
 
 ### 면접 준비 화면
 
@@ -686,16 +680,16 @@ DPO JSONL 예:
 - [ ] 멘티가 멘토 탐색에서 멘토 확인
 - [ ] 멘티가 자소서 등록
 - [ ] 멘티가 가능한 시간을 선택해 신청
-- [ ] Network에서 `POST /api/sessions`가 201인지 확인
-- [ ] `POST /api/sessions` 응답의 `id`를 기록
-- [ ] Network에서 `POST /api/sessions/{id}/resume`가 201인지 확인
-- [ ] Network에서 `POST /api/reservation/request` payload의 `session_id`가 위 `id`와 같은지 확인
-- [ ] `session_id: null` 예약이 생성되지 않는지 확인
+- [ ] Network에서 `POST /api/reservation/request`가 201인지 확인
+- [ ] Payload에 `mentor_id`, `availability_id`, `resume_content`가 있는지 확인
+- [ ] 신청 응답 상태가 `PENDING`인지 확인
+- [ ] 신청 직후 `session_id`가 null이어도 정상으로 본다
 - [ ] 멘토 대시보드에 수락 대기 표시
 - [ ] Network에서 `GET /api/reservation/mentor?status=PENDING`가 200인지 확인
 - [ ] 멘토가 수락
 - [ ] Network에서 `POST /api/reservation/{id}/response`가 200인지 확인
-- [ ] 수락 응답의 `session_id`가 신청 때 생성한 `session_id`와 같은지 확인
+- [ ] 수락 응답의 `session_id`가 null이 아닌지 확인
+- [ ] 생성된 세션에 멘티 participant와 resume이 붙었는지 확인
 - [ ] 멘티 대시보드에 확정 세션 표시
 
 ### B. 면접 준비
@@ -798,27 +792,28 @@ DPO JSONL 예:
 먼저 볼 요청:
 
 ```txt
-POST /api/sessions
+POST /api/reservation/request
 ```
 
 가능한 결과:
 
 | 결과 | 의미 | 다음 행동 |
 |---|---|---|
-| 201 | 세션 생성 성공 | `POST /api/sessions/{id}/resume` 확인 |
-| 400 | 요청 형식/값 문제 | Payload의 `mentor_id`, `job_category` 확인 |
+| 201 | 신청 생성 성공 | 응답 `status=PENDING` 확인 |
+| 400 | 요청 형식/값 문제 | Payload의 `mentor_id`, `availability_id`, `resume_content` 확인 |
 | 401 | 토큰 문제 | 재로그인, Authorization 헤더 확인 |
 | 403 | 권한 문제 | 로그인 role이 `MENTEE`인지 확인 |
-| 404 | mentor id 없음 | 멘토 목록에서 받은 id인지 확인 |
+| 404 | mentor/availability id 없음 | 멘토 목록/가용시간에서 받은 id인지 확인 |
+| 409 | 이미 예약된 시간 | 다른 가용시간 선택 |
 | 500 | 백엔드 내부 예외 | 백엔드 로그 stacktrace 확인 |
 
-`POST /api/sessions`가 실패했는데 아래 요청이 나가면 안 된다.
+최신 main 흐름에서는 신청 화면에서 아래 요청이 먼저 나가면 안 된다.
 
 ```txt
-POST /api/reservation/request
+POST /api/sessions
 ```
 
-나가면 위험한 상태:
+신청 직후 아래 상태는 정상이다.
 
 ```json
 {
@@ -827,36 +822,36 @@ POST /api/reservation/request
 }
 ```
 
-이 경우:
+문제 상황:
 
-- 자소서가 세션에 붙지 않았을 가능성이 높다.
-- 추천 질문 생성이 실패할 수 있다.
-- 해당 예약은 데모 추천 질문 테스트용으로 쓰지 않는 것이 좋다.
+- 멘토 수락 후에도 `session_id`가 null이면 세션 생성/연결 실패다.
+- 멘토 수락 후 resume이 세션에 저장되지 않으면 추천 질문 생성이 실패할 수 있다.
+- 신청 버튼에서 `POST /api/sessions`가 호출되면 프론트가 이전 코드로 실행 중일 수 있다.
 
 ### 자소서가 저장됐는지 모르겠음
 
 정상 확인:
 
 ```txt
-POST /api/sessions/{id}/resume 201
+POST /api/reservation/request 201
+POST /api/reservation/{id}/response 200
 ```
 
 응답 예:
 
 ```json
 {
-  "id": 10,
   "session_id": 51,
-  "content": "...",
-  "created_at": "..."
+  "status": "CONFIRMED"
 }
 ```
 
-이 요청이 없으면:
+확인 기준:
 
 - 자소서 관리 화면에서는 localStorage에만 저장된 상태일 수 있다.
-- 실제 DB 저장은 면접 신청 시 `session_id`가 생긴 뒤 진행된다.
-- `POST /api/sessions`가 실패하면 자소서는 DB에 올라가지 않는다.
+- 신청 시 localStorage의 자소서가 `resume_content`로 reservation에 전달되어야 한다.
+- 실제 session resume 저장은 멘토 수락 시 이루어진다.
+- 수락 후 추천 질문이 404이면 해당 세션에 resume이 붙었는지 백엔드 로그/DB로 확인한다.
 
 ### 멘토 수락 대기 목록이 비어 있음
 
@@ -891,7 +886,7 @@ POST /api/sessions/{id}/questions/recommendations
 
 필수 선행 조건:
 
-- reservation의 `session_id`가 null이 아님
+- 멘토가 reservation을 수락했고 응답의 `session_id`가 null이 아님
 - 해당 session에 멘티 participant가 있음
 - 해당 session + mentee member 조합으로 resume이 저장되어 있음
 - AI 서버 `/api/generate-session-questions`가 열려 있음
@@ -961,7 +956,8 @@ POST /api/sessions/{id}/questions/{questionId}/answers
 
 아래는 정식 해결이 아니라 데모 중 멈춤을 줄이기 위한 임시 운영 기준이다.
 
-- 신청이 막히면 DB에 `session_id: null` 예약을 만들지 말고 즉시 에러를 보여준다.
+- 신청이 막히면 `POST /api/reservation/request` 응답과 백엔드 로그를 먼저 확인한다.
+- 신청 직후 `session_id: null`은 정상이나, 멘토 수락 후에도 null이면 데모에 쓰지 않는다.
 - 추천 질문이 실패하면 멘토는 자소서 요약을 보고 직접 질문을 진행한다.
 - STT가 실패하면 오디오는 저장하고, 리포트에는 “STT 실패, 수동 확인 필요” 상태를 표시한다.
 - 리포트 생성이 실패하면 저장된 질문/답변 목록 화면까지는 이동 가능하게 한다.
@@ -969,11 +965,11 @@ POST /api/sessions/{id}/questions/{questionId}/answers
 
 ## 11. 현재 우선순위
 
-1. `POST /api/sessions` 500 원인 제거
-2. `session_id: null` 예약 생성 방지
-3. `POST /api/sessions/{id}/resume` 201 확인
-4. `POST /api/reservation/request`에 실제 `session_id` 포함 확인
-5. 멘토 수락 후 같은 세션이 확정되어 준비 화면에 들어가게 만들기
+1. `POST /api/reservation/request` 201 및 `PENDING` 확인
+2. 신청 payload의 `resume_content` 전달 확인
+3. 멘토 대시보드 수락 대기 목록 확인
+4. 멘토 수락 후 `session_id` 생성 확인
+5. 수락 후 세션에 멘티 participant와 resume 저장 확인
 6. 멘토 준비 화면에서 자소서 기반 추천 질문 생성 확인
 7. 카메라/마이크 미리보기 안정화
 8. 역할별 준비 화면 분리: 멘토는 추천 질문/멘티 자료, 멘티는 본인 자료만 표시

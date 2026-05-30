@@ -560,6 +560,8 @@ export default function Register() {
         }),
       });
       if (!res.ok) throw new Error("signup failed");
+      localStorage.removeItem("scena_resume_draft");
+      localStorage.removeItem(`scena_resume_draft:${account.email}`);
       navigate("/auth/login");
     } catch {
       setErrors({ submit:"회원가입 중 오류가 발생했습니다. 다시 시도해주세요." });

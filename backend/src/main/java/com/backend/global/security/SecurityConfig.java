@@ -48,6 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/dev/**").permitAll()
                         .requestMatchers("/api/internal/**").permitAll()
                         .requestMatchers("/api/auth/oauth2/**").permitAll()
+                        .requestMatchers("/login/oauth2/**", "/oauth2/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/auth/withdraw").authenticated()
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()

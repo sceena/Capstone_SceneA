@@ -521,22 +521,20 @@ export default function MenteeMyPage() {
     }).catch(() => {});
   }, []);
 
-  const historyAll = apiSessions.length > 0
-    ? apiSessions.map((s, i, arr) => ({
-        id: s.id,
-        num: arr.length - i,
-        title: s.title ?? "",
-        wpm: s.wpm ?? 0,
-        wpmLevel: s.wpmLevel ?? "양호",
-        star: s.star ?? "-",
-        ai: s.aiScore ?? 0,
-        silence: s.silence ?? null,
-        mentor: s.mentorName ?? "",
-        date: s.scheduledAt?.slice(0, 10).replace(/-/g, ".") ?? "",
-        type: s.sessionType ?? "1:1",
-        hasAudio: !!s.reportStatus,
-      }))
-    : DUMMY_HISTORY;
+  const historyAll = apiSessions.map((s, i, arr) => ({
+    id: s.id,
+    num: arr.length - i,
+    title: s.title ?? "",
+    wpm: s.wpm ?? 0,
+    wpmLevel: s.wpmLevel ?? "양호",
+    star: s.star ?? "-",
+    ai: s.aiScore ?? 0,
+    silence: s.silence ?? null,
+    mentor: s.mentorName ?? "",
+    date: s.scheduledAt?.slice(0, 10).replace(/-/g, ".") ?? "",
+    type: s.sessionType ?? "1:1",
+    hasAudio: !!s.reportStatus,
+  }));
 
   const displayName = profile?.name ?? userName;
 

@@ -32,15 +32,23 @@ public class Reservation extends BaseEntity {
     @Column(nullable = false)
     private ReservationStatus status = ReservationStatus.PENDING;
 
+    @Column(columnDefinition = "TEXT")
+    private String resumeContent;
+
     @Builder
-    public Reservation(MentorAvailability mentorAvailability, Member mentee, InterviewSession interviewSession) {
+    public Reservation(MentorAvailability mentorAvailability, Member mentee, InterviewSession interviewSession, String resumeContent) {
         this.mentorAvailability = mentorAvailability;
         this.mentee = mentee;
         this.interviewSession = interviewSession;
+        this.resumeContent = resumeContent;
     }
 
     public void confirm() {
         this.status = ReservationStatus.CONFIRMED;
+    }
+
+    public void linkSession(InterviewSession session) {
+        this.interviewSession = session;
     }
 
     public void cancel() {

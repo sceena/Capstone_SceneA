@@ -336,7 +336,6 @@ export default function MenteeDashboard() {
   /* API 응답에서 UI 데이터 파생 */
   const completedSessions = sessions.filter(s => normalizeStatus(s.status) === "completed");
   const scheduledSessions = sessions.filter(s => normalizeStatus(s.status) === "scheduled");
-  const pendingSessions = sessions.filter(s => normalizeStatus(s.status) === "pending");
   const scheduledCards = scheduledSessions.map(s => ({
     id: s.id,
     date: toDateText(getScheduledAt(s)),
@@ -345,15 +344,6 @@ export default function MenteeDashboard() {
     mentor: getMentorName(s) ? `${getMentorName(s)} 멘토` : "",
     type: getSessionType(s),
     status: "confirmed",
-  }));
-  const pendingCards = pendingSessions.map(s => ({
-    id: s.id,
-    date: toDateText(getScheduledAt(s)),
-    time: toTimeText(getScheduledAt(s)),
-    title: getSessionTitle(s),
-    mentor: getMentorName(s) ? `${getMentorName(s)} 멘토` : "",
-    type: getSessionType(s),
-    status: "pending",
   }));
   const todaySession = scheduledCards[0] ?? null;
 
@@ -368,7 +358,7 @@ export default function MenteeDashboard() {
     isFinal: s.report_status === "final" || s.tag === "최종 리포트",
   }));
 
-  const upcoming = [...scheduledCards, ...pendingCards];
+  const upcoming = scheduledCards;
 
   return (
     <>

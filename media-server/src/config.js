@@ -24,8 +24,7 @@ const config = {
     corsOrigins: [
       'http://localhost:3000',
       'http://localhost:5173',
-      // 같은 네트워크 기기에서 접근 시 아래에 PC 로컬 IP 추가
-      // 예: 'http://192.168.0.5:5173'
+      'https://capstone-scene-a.vercel.app',
       `http://${localIPv4}:5173`,
       ...frontendOrigins,
     ],

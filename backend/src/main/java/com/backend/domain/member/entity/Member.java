@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Member extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = true, unique = true)
     private String email;
 
     @Column
@@ -48,7 +48,7 @@ public class Member extends BaseEntity {
 
     @Builder
     public Member(String email, String password, String name, String nickname, String bio, Role role,
-                  MemberProvider provider, String providerId) {
+                  MemberProvider provider, String providerId, String profileImageUrl) {
         this.email = email;
         this.password = password;
         this.name = name;
@@ -57,6 +57,7 @@ public class Member extends BaseEntity {
         this.role = role;
         this.provider = provider != null ? provider : MemberProvider.LOCAL;
         this.providerId = providerId;
+        this.profileImageUrl = profileImageUrl;
     }
 
     public void softDelete() {

@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://dooong.site/api/:path*" },
     { "source": "/oauth2/:path*", "destination": "https://dooong.site/oauth2/:path*" },
-    { "source": "/login/oauth2/:path*", "destination": "https://dooong.site/login/oauth2/:path*" }
+    { "source": "/login/oauth2/:path*", "destination": "https://dooong.site/login/oauth2/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

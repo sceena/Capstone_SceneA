@@ -44,7 +44,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     }
 
     private Member createMember(OAuthAttributes attrs) {
-        if (memberRepository.existsByEmail(attrs.email())) {
+        if (attrs.email() != null && memberRepository.existsByEmail(attrs.email())) {
             throw new OAuth2AuthenticationException(
                     new OAuth2Error("email_conflict",
                             "해당 이메일은 이미 일반 로그인으로 가입되어 있습니다.", null));
@@ -58,6 +58,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .provider(attrs.provider())
                 .providerId(attrs.providerId())
                 .role(role)
+                .profileImageUrl(attrs.profileImageUrl())
                 .build();
         return memberRepository.save(member);
     }

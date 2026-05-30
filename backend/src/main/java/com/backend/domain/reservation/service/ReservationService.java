@@ -118,6 +118,7 @@ public class ReservationService {
                 SessionParticipant participant = SessionParticipant.builder()
                         .interviewSession(session)
                         .member(reservation.getMentee())
+                        .answerStatus(AnswerStatus.WAITING)
                         .build();
                 participantRepository.save(participant);
             } else {

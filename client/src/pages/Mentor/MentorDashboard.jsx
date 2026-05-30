@@ -460,7 +460,6 @@ export default function MentorDashboard() {
       await respondReservation({ reservationId: id, accepted: true });
       setRequests(r => r.filter(x => x.id !== id));
       loadSessions();
-      loadReservationRequests();
     } catch (error) {
       alert(error?.message || "예약 수락에 실패했습니다.");
     }
@@ -470,7 +469,6 @@ export default function MentorDashboard() {
       await respondReservation({ reservationId: id, accepted: false });
       setRequests(r => r.filter(x => x.id !== id));
       loadSessions();
-      loadReservationRequests();
     } catch (error) {
       alert(error?.message || "예약 거절에 실패했습니다.");
     }

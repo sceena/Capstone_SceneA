@@ -56,10 +56,6 @@ public class SessionService {
                 .scheduledAt(java.time.LocalDateTime.now())
                 .build();
 
-        if (requester.getRole() == Role.MENTEE) {
-            session.markPending();
-        }
-
         InterviewSession savedSession = sessionRepository.save(session);
 
         if (requester.getRole() == Role.MENTEE) {

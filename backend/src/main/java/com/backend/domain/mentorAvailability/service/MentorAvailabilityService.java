@@ -7,6 +7,7 @@ import com.backend.domain.mentorAvailability.dto.request.AvailabilityCreateReque
 import com.backend.domain.mentorAvailability.dto.response.AvailabilityResponse;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
+import com.backend.domain.reservation.repository.ReservationRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class MentorAvailabilityService {
 
     private final MentorAvailabilityRepository availabilityRepository;
     private final MemberRepository memberRepository;
+    private final ReservationRepository reservationRepository;
 
     @Transactional
     public List<AvailabilityResponse> getAvailabilities(Long mentorId) {
@@ -37,6 +39,7 @@ public class MentorAvailabilityService {
 
         return availabilityRepository.findAllByMentorAndIsBookedFalse(mentor).stream()
                 .peek(availability -> rollForwardIfExpired(availability, tomorrow))
+                .filter(availability -> !reservationRepository.existsByMentorAvailability(availability))
                 .map(AvailabilityResponse::from)
                 .toList();
     }
@@ -64,7 +67,7 @@ public class MentorAvailabilityService {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
 
-        if (availability.isBooked()) {
+        if (availability.isBooked() || reservationRepository.existsByMentorAvailability(availability)) {
             throw new CustomException(ErrorCode.RESERVATION_SLOT_TAKEN);
         }
 

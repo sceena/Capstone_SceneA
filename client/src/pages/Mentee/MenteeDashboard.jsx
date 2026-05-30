@@ -202,7 +202,8 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
   const diff = Math.ceil((target - today) / 86400000);
   const dday = diff === 0 ? "D-DAY" : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
   const ddayColor = diff === 0 ? "#EF4444" : diff > 0 ? C.navy : C.textMuted;
-  const boxColor = status==="confirmed" ? C.teal : status==="pending" ? "#F59E0B" : C.navyMid;
+  const isEnterable = status === "confirmed" || status === "in_progress";
+  const boxColor = isEnterable ? C.teal : status==="pending" ? "#F59E0B" : C.navyMid;
   return (
     <div style={{
       display:"flex", gap:14, alignItems:"center",
@@ -233,10 +234,10 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
         <div style={{ fontSize:14, fontWeight:800, color:ddayColor, letterSpacing:"-0.02em", marginBottom:4 }}>{dday}</div>
         <div style={{
           fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:99,
-          background: status==="confirmed" ? C.tealLight : "#FEF3C7",
-          color: status==="confirmed" ? C.teal : "#92400E",
+          background: isEnterable ? C.tealLight : "#FEF3C7",
+          color: isEnterable ? C.teal : "#92400E",
         }}>
-          {status==="confirmed" ? "확정" : status==="pending" ? "대기중" : "미확정"}
+          {status==="in_progress" ? "진행중" : status==="confirmed" ? "확정" : status==="pending" ? "대기중" : "미확정"}
         </div>
       </div>
     </div>
@@ -335,16 +336,21 @@ export default function MenteeDashboard() {
 
   /* API 응답에서 UI 데이터 파생 */
   const completedSessions = sessions.filter(s => normalizeStatus(s.status) === "completed");
-  const scheduledSessions = sessions.filter(s => normalizeStatus(s.status) === "scheduled");
-  const scheduledCards = scheduledSessions.map(s => ({
+  const enterableSessions = sessions.filter(s => {
+    const status = normalizeStatus(s.status);
+    return status === "scheduled" || status === "in_progress";
+  });
+  const enterableCards = enterableSessions.map(s => ({
     id: s.id,
     date: toDateText(getScheduledAt(s)),
     time: toTimeText(getScheduledAt(s)),
     title: getSessionTitle(s),
     mentor: getMentorName(s) ? `${getMentorName(s)} 멘토` : "",
     type: getSessionType(s),
-    status: "confirmed",
+    status: normalizeStatus(s.status) === "in_progress" ? "in_progress" : "confirmed",
   }));
+  const scheduledCards = enterableCards;
+
   const history = completedSessions.map(s => ({
     id: s.id,
     date: toDateText(getScheduledAt(s)),
@@ -356,7 +362,7 @@ export default function MenteeDashboard() {
     isFinal: s.report_status === "final" || s.tag === "최종 리포트",
   }));
 
-  const upcoming = scheduledCards;
+  const upcoming = enterableCards;
 
   return (
     <>
@@ -462,7 +468,7 @@ export default function MenteeDashboard() {
         </div>
 
         {/* ── 자소서 업로드 안내 배너 (면접 확정 시) ── */}
-        {scheduledSessions.length > 0 && (
+        {enterableSessions.length > 0 && (
           <div style={{
             background:"#FFF8F0", border:"1.5px solid #F59E0B",
             borderRadius:14, padding:"16px 24px",
@@ -525,7 +531,7 @@ export default function MenteeDashboard() {
             {[
               { n:`${completedSessions.length}회`, label:"완료된 면접" },
               { n: completedSessions.length > 0 ? `${Math.round(completedSessions.reduce((a,s) => a + (Number(s.aiScore) || 0), 0) / completedSessions.length)}점` : "-", label:"평균 점수" },
-              { n:`${scheduledSessions.length}건`, label:"예정된 일정" },
+              { n:`${enterableSessions.length}건`, label:"입장 가능 일정" },
             ].map((s, i) => (
               <div key={i} style={{ textAlign:"center" }}>
                 <p style={{ fontSize:22, fontWeight:700, color:C.navy, letterSpacing:"-0.03em" }}>{s.n}</p>

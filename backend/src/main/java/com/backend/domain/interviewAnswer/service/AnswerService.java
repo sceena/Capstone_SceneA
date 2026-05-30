@@ -1,6 +1,7 @@
 package com.backend.domain.interviewAnswer.service;
 
 import com.backend.domain.ai.client.AiSttClient;
+import com.backend.domain.ai.client.SttTranscriptNormalizer;
 import com.backend.domain.ai.dto.response.AiSttResponse;
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
@@ -53,6 +54,7 @@ public class AnswerService {
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
     private final AiSttClient aiSttClient;
+    private final SttTranscriptNormalizer sttTranscriptNormalizer;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
@@ -222,7 +224,7 @@ public class AnswerService {
         try {
             AiSttResponse response = aiSttClient.transcribe(audio);
             answer.completeStt(
-                    response.text(),
+                    sttTranscriptNormalizer.normalize(response.text()),
                     response.model(),
                     response.durationSec(),
                     response.audioQualityStatus(),

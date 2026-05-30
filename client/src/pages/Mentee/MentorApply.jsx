@@ -49,10 +49,11 @@ const MENTOR={
 };
 
 const RESUME_DRAFT_KEY = "scena_resume_draft";
+const getResumeDraftKey = (user) => `${RESUME_DRAFT_KEY}:${user?.email || user?.id || user?.memberId || "anonymous"}`;
 
-const getStoredResumeContent = () => {
+const getStoredResumeContent = (user) => {
   try {
-    const draft = JSON.parse(localStorage.getItem(RESUME_DRAFT_KEY));
+    const draft = JSON.parse(localStorage.getItem(getResumeDraftKey(user)));
     if (!Array.isArray(draft)) return "";
     return draft
       .filter(item => item?.content?.trim())
@@ -173,6 +174,15 @@ export default function MentorApply(){
     if(!canSubmit)return;
     setLoading(true);
     try {
+      const resumeContent = navState?.resumeContent || getStoredResumeContent(user);
+
+      if (!resumeContent.trim()) {
+        setLoading(false);
+        alert("면접 신청 전에 자소서를 먼저 등록해 주세요.");
+        navigate("/mentee/resume");
+        return;
+      }
+
       await requestReservation({
         mentor_id: mentor.id,
         availability_id: selectedSlot.id,

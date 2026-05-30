@@ -577,85 +577,78 @@ function MenteeReport({ sessionId, report }) {
 }
 
 // ─── Mentor Report ────────────────────────────────────────────────
-function MentorReport({ sessionId }) {
+function MentorReport({ sessionId, report }) {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState("전체");
-  const mentees = [
-    { initials: "김M", name: "김민준", track: "백엔드·신입", wpm: 118, star: "4/4", silence: 2, score: 4.2, color: "#3B5A8A",
-      quotes: ["평균 응답 시간을 340ms까지 줄이는 데 성공했습니다.", "REST를 쓰거나 메시지 큐를 쓰는 방법도 있고 gRPC라는 방법도 있는데..."],
-      myScore: 4, done: true },
-    { initials: "박S", name: "박서연", track: "프론트엔드·1년차", wpm: 142, star: "3/4", silence: 1, score: 3.5, color: "#3A7A6A",
-      quotes: ["React 렌더링 최적화로 LCP를 2.1초에서 0.8초로 단축했어요.", "결과가 어떻게 됐는지는 정확히 기억이 잘 안 나서..."],
-      myScore: 3.5, done: false },
-    { initials: "최H", name: "최현아", track: "풀스택·신입", wpm: 192, star: "2/4", silence: 5, score: 2.8, color: "#7A4A6A",
-      quotes: ["사용자 불편을 직접 인터뷰해서 문제를 정의했습니다.", "그래서 그냥 다 고쳐보려고 했는데 잘 안 됐어요 뭔가..."],
-      myScore: 2, done: false },
-    { initials: "이J", name: "이준석", track: "백엔드·2년차", wpm: 125, star: "4/4", silence: 0, score: 4.7, color: "#5A6A3A",
-      quotes: ["팀 배포 사이클을 3일에서 당일로 줄인 CI/CD 파이프라인을 구축했습니다.", "단점이라고 하면 딱히 생각나는 게 없는데요..."],
-      myScore: 4.7, done: false },
-  ];
-
-  const filtered = filter === "전체" ? mentees : filter === "AI 분석 완료" ? mentees.slice(0, 2) : mentees.filter(m => !m.done);
-
-  const wpmColor = (wpm) => wpm < 130 ? GREEN : wpm < 160 ? "#F59E0B" : "#E24B4A";
+  const aiReport = report?.ai_report;
+  const questionReports = aiReport?.question_reports || [];
+  const overallScore = aiReport?.overall_score ?? report?.total_score ?? 0;
+  const scoreColor = overallScore >= 8 ? GREEN : overallScore >= 6 ? "#F59E0B" : "#E24B4A";
+  const topSummary = aiReport?.top_summary;
+  const best = topSummary?.best_question;
+  const worst = topSummary?.worst_question;
 
   return (
     <div id="report-content" style={{ background: BG, minHeight: "100vh", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", paddingBottom: 80 }}>
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
-        {/* Session info */}
+
+        {/* 세션 헤더 */}
         <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-          {["그룹 면접·4인", "2026.04.07 오후 8:00", "프론트엔드 직무"].map((t, i) => (
-            <span key={i} style={{ fontSize: 12, padding: "4px 12px", borderRadius: 99, background: i === 1 ? "#E1F5EE" : CARD, border: "1px solid #E0DDD8", color: i === 1 ? "#0F6E56" : "#555", fontWeight: 600 }}>{t}</span>
+          {["멘토 리포트 보기", `세션 #${report?.session_id ?? sessionId}`].map((t, i) => (
+            <span key={i} style={{ fontSize: 12, padding: "4px 12px", borderRadius: 99, background: i === 0 ? "#E1F5EE" : CARD, border: "1px solid #E0DDD8", color: i === 0 ? "#0F6E56" : "#555", fontWeight: 600 }}>{t}</span>
           ))}
         </div>
 
-        {/* Filter */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
-          {["전체 (4)", "AI 분석 완료", "피드백 작성 필요"].map((f) => {
-            const label = f.split(" ")[0];
-            return (
-              <button key={f} onClick={() => setFilter(label)}
-                style={{ padding: "7px 18px", borderRadius: 99, border: `1.5px solid ${filter === label ? NAVY : "#DDD"}`, background: filter === label ? NAVY : "white", color: filter === label ? "white" : "#555", fontSize: 13, cursor: "pointer", fontWeight: 600, transition: "all 0.2s" }}>
-                {f}
-              </button>
-            );
-          })}
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#111", margin: "0 0 6px" }}>멘티 AI 면접 분석 리포트</h1>
+        <p style={{ color: "#666", fontSize: 14, margin: "0 0 28px" }}>멘티의 면접 결과를 확인하고 멘토링 세션을 준비하세요</p>
+
+        {/* 종합 점수 */}
+        <div style={{ background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 24, marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "#111", margin: 0 }}>AI 종합 점수</p>
+            <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor }}>{overallScore}<span style={{ fontSize: 13, color: "#999", fontWeight: 400 }}> / 10</span></span>
+          </div>
+          <div style={{ background: "#E8E5DF", borderRadius: 99, height: 8 }}>
+            <div style={{ width: `${Math.min(overallScore * 10, 100)}%`, height: 8, borderRadius: 99, background: scoreColor, transition: "width 1s ease" }} />
+          </div>
         </div>
 
-        {/* Mentee cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 36 }}>
-          {filtered.map((m, i) => (
-            <div key={i} style={{ background: CARD, border: `2px solid ${m.done ? NAVY : "#E8E5DF"}`, borderRadius: 16, padding: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: m.color, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{m.initials}</div>
-                <div>
-                  <p style={{ fontWeight: 700, margin: 0, fontSize: 15, color: "#111" }}>{m.name}</p>
-                  <p style={{ color: "#888", fontSize: 12, margin: 0 }}>{m.track}</p>
+        {/* Best / Worst 문항 */}
+        {(best || worst) && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+            {[{ type: "best", data: best, accent: GREEN, label: "BEST 문항" }, { type: "worst", data: worst, accent: "#E24B4A", label: "WORST 문항" }].map(({ type, data, accent, label }) => (
+              data ? (
+                <div key={type} style={{ background: CARD, border: `1px solid ${accent}30`, borderTop: `3px solid ${accent}`, borderRadius: 12, padding: 16 }}>
+                  <p style={{ fontSize: 11, fontWeight: 800, color: accent, margin: "0 0 8px" }}>{label}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#111", margin: "0 0 6px", lineHeight: 1.5 }}>{data.question}</p>
+                  <p style={{ fontSize: 12, color: "#666", margin: 0 }}>{data.reason}</p>
                 </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-                {[["말하기 속도", `${m.wpm} WPM`, wpmColor(m.wpm)], ["STAR 구조화", m.star, GREEN], ["침묵 횟수", `${m.silence}회`, m.silence <= 2 ? "#555" : "#E24B4A"], ["AI 종합점수", m.score, m.score >= 4 ? GREEN : m.score >= 3 ? "#F59E0B" : "#E24B4A"]].map(([k, v, c]) => (
-                  <div key={k} style={{ background: "#F8F7F4", borderRadius: 8, padding: "10px 12px" }}>
-                    <p style={{ fontSize: 11, color: "#999", margin: "0 0 4px" }}>{k}</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: c, margin: 0 }}>{v}</p>
+              ) : null
+            ))}
+          </div>
+        )}
+
+        {/* Q&A 답변 목록 */}
+        {questionReports.length > 0 && (
+          <div style={{ background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 20, marginBottom: 24 }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: "#111", margin: "0 0 16px" }}>전체 Q&A 답변</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {questionReports.map((qr, i) => {
+                const sc = qr.score ?? 0;
+                const scColor = sc >= 8 ? GREEN : sc >= 6 ? "#F59E0B" : "#E24B4A";
+                const isBad = qr.question_id === worst?.question_id;
+                return (
+                  <div key={qr.question_id ?? i} style={{ borderLeft: `3px solid ${isBad ? "#E24B4A" : GREEN}`, paddingLeft: 12, paddingBottom: i < questionReports.length - 1 ? 14 : 0, borderBottom: i < questionReports.length - 1 ? "1px solid #F0EDE8" : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, lineHeight: 1.5, margin: 0 }}>Q{i + 1} · {qr.question}</p>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: scColor, background: `${scColor}18`, padding: "2px 8px", borderRadius: 99, flexShrink: 0 }}>AI {sc}</span>
+                    </div>
+                    <p style={{ fontSize: 12, color: "#555", lineHeight: 1.7, background: "#FAF8F4", borderRadius: 7, padding: "8px 10px", margin: 0 }}>{qr.answer}</p>
                   </div>
-                ))}
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                {m.quotes.map((q, j) => (
-                  <p key={j} style={{ fontSize: 12, color: "#555", lineHeight: 1.6, margin: "0 0 4px", paddingLeft: 12, borderLeft: `3px solid ${j === 0 ? GREEN : "#E24B4A"}` }}>"{q}"</p>
-                ))}
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Stars score={Math.round(m.myScore)} />
-                  <span style={{ fontSize: 12, color: "#888" }}>{m.myScore}</span>
-                </div>
-                <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 99, background: m.done ? "#E1F5EE" : "#FFF5F5", color: m.done ? "#0F6E56" : "#E24B4A", fontWeight: 600 }}>{m.done ? "피드백 완료" : "피드백 필요"}</span>
-              </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
 
         {/* 멘토링 세션 입장 */}
         <div style={{ background: NAVY, borderRadius: 16, padding: 28, textAlign: "center" }}>
@@ -754,7 +747,7 @@ export default function AIReportPage() {
           <Header onExportWord={() => exportWord(role)} />
           {role === "mentee"
             ? <MenteeReport sessionId={sessionId} report={report} />
-            : <MentorReport sessionId={sessionId} />
+            : <MentorReport sessionId={sessionId} report={report} />
           }
         </>
       )}

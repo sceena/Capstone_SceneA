@@ -58,6 +58,8 @@ const Header = ({ userName, accessToken }) => {
 
 const MentorCard = ({ m, onClick }) => {
   const av = getAvatar(String(m.id ?? ""));
+  const { user } = useAuthStore();
+  const isMentor = user?.role === "mentor";
   return (
     <div onClick={onClick} style={{
       background:C.white, borderRadius:16, padding:"24px 20px",

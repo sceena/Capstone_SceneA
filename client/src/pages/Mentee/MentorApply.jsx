@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation, useParams } from "react-router-dom";
 import { getMentorAvailabilities, requestReservation } from "../../api/reservations";
-import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 import useAuthStore from "../../store/authStore";
 
 const C = {
@@ -174,54 +173,9 @@ export default function MentorApply(){
     if(!canSubmit)return;
     setLoading(true);
     try {
-      const jobPosting = navState?.jobPosting;
-      const resumeContent = navState?.resumeContent || getStoredResumeContent();
-
-      if (!resumeContent.trim()) {
-        setLoading(false);
-        alert("면접 신청 전에 자소서를 먼저 등록해 주세요.");
-        navigate("/mentee/resume");
-        return;
-      }
-
-      let sessionId = null;
-      let jobPostingId = null;
-
-      try {
-        const session = await createSession({
-          mentor_id: mentor.id,
-          job_category: jobPosting?.jobCategory || mentor.job,
-        });
-        sessionId = session?.id;
-      } catch {}
-
-      if (!sessionId) {
-        throw new Error("세션 생성에 실패했습니다.");
-      }
-
-      if (sessionId && jobPosting?.company) {
-        try {
-          const jp = await saveJobPosting(sessionId, {
-            company: jobPosting.company,
-            jobCategory: jobPosting.jobCategory || mentor.job,
-            rawText: jobPosting.rawText || jobPosting.company,
-          });
-          jobPostingId = jp?.id;
-        } catch {}
-      }
-
-      if (sessionId && resumeContent) {
-        const noteBlock = requestNote.trim()
-          ? `\n\n[멘토에게 전달할 내용]\n${requestNote.trim()}`
-          : "";
-        await saveResume(sessionId, `${resumeContent}${noteBlock}`);
-      }
-
       await requestReservation({
         mentor_id: mentor.id,
         availability_id: selectedSlot.id,
-        session_id: sessionId,
-        job_posting_id: jobPostingId ?? null,
       });
     } catch (error) {
       alert(error?.message || "면접 신청에 실패했습니다.");

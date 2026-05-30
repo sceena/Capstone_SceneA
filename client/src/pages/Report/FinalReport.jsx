@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const VIEWED_KEY = "scena_viewed_finals";
 
 function getAuthHeaders() {

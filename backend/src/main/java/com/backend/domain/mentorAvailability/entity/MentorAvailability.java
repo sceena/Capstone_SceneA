@@ -43,4 +43,9 @@ public class MentorAvailability extends BaseEntity {
     public void unbook() {
         this.isBooked = false;
     }
+
+    public void reschedule(LocalDateTime startTime, LocalDateTime endTime) {
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
 }

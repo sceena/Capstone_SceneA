@@ -1,6 +1,7 @@
 package com.backend.domain.reservation.entity;
 
 import com.backend.domain.member.entity.Member;
+import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.global.jpa.BaseEntity;
 import jakarta.persistence.*;
@@ -23,14 +24,19 @@ public class Reservation extends BaseEntity {
     @JoinColumn(name = "mentee_id", nullable = false)
     private Member mentee;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "session_id", unique = true)
+    private InterviewSession interviewSession;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ReservationStatus status = ReservationStatus.PENDING;
 
     @Builder
-    public Reservation(MentorAvailability mentorAvailability, Member mentee) {
+    public Reservation(MentorAvailability mentorAvailability, Member mentee, InterviewSession interviewSession) {
         this.mentorAvailability = mentorAvailability;
         this.mentee = mentee;
+        this.interviewSession = interviewSession;
     }
 
     public void confirm() {

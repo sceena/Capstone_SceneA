@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
-import { updateMyProfile, saveMentorAvailability } from "../../api/users";
+import { createMentorAvailability, deleteMentorAvailability, getMentorAvailabilities } from "../../api/reservations";
+import { updateMyProfile, saveMentorAvailability, getMyProfile } from "../../api/users";
 
 /* ============================================================
    멘토 정보 등록  (pages/mentor/InfoRegister.jsx)
@@ -17,8 +18,75 @@ const C = {
   bg:      "#FAF8F4", error:"#D94040",
 };
 
-const DAYS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
+const WEEKDAYS = ["일","월","화","수","목","금","토"];
 const TIMES = ["09:00","10:00","11:00","14:00","15:00","16:00","19:00","20:00","21:00"];
+
+const toDateKey = (date) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-");
+};
+
+const getScheduleDays = () => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(tomorrow);
+    date.setDate(tomorrow.getDate() + index);
+    return {
+      key: toDateKey(date),
+      label: `${date.getMonth() + 1}/${date.getDate()} (${WEEKDAYS[date.getDay()]})`,
+    };
+  });
+};
+
+const toLocalDateTimeString = (date) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-") + "T" + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join(":");
+};
+
+const buildAvailabilityPayloads = (slots, durationLabel) => {
+  const durationMinutes = Number(String(durationLabel).match(/\d+/)?.[0] || 60);
+
+  return slots.map(slot => {
+    const divider = slot.lastIndexOf("-");
+    const dateKey = slot.slice(0, divider);
+    const time = slot.slice(divider + 1);
+    const [hour, minute] = time.split(":").map(Number);
+    const start = new Date(`${dateKey}T00:00:00`);
+    start.setHours(hour, minute, 0, 0);
+
+    const end = new Date(start);
+    end.setMinutes(end.getMinutes() + durationMinutes);
+
+    return {
+      start_time: toLocalDateTimeString(start),
+      end_time: toLocalDateTimeString(end),
+    };
+  });
+};
+
+const availabilityToSlotKey = (availability) => {
+  const startTime = availability.start_time ?? availability.startTime;
+  if (!startTime) return null;
+  const date = new Date(startTime);
+  if (Number.isNaN(date.getTime())) return null;
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return `${toDateKey(date)}-${time}`;
+};
 
 /* ── 로고 ── */
 const LogoIcon = ({ size=26, color=C.white }) => (
@@ -249,12 +317,14 @@ const Step2 = ({ data, onChange }) => (
 
 /* ══════════════ STEP 3 — 정원·일정 설정 ══════════════ */
 const Step3 = ({ data, onChange }) => {
-  const toggleSlot = (day, time) => {
-    const key = `${day}-${time}`;
+  const scheduleDays = getScheduleDays();
+
+  const toggleSlot = (dateKey, time) => {
+    const key = `${dateKey}-${time}`;
     const cur = data.slots;
     onChange("slots", cur.includes(key) ? cur.filter(x=>x!==key) : [...cur, key]);
   };
-  const isSlotOn = (day, time) => data.slots.includes(`${day}-${time}`);
+  const isSlotOn = (dateKey, time) => data.slots.includes(`${dateKey}-${time}`);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:28 }}>
@@ -296,19 +366,19 @@ const Step3 = ({ data, onChange }) => {
           <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:"4px 4px", minWidth:560 }}>
             <thead>
               <tr>
-                {DAYS.map(d=>(
-                  <th key={d} style={{ fontSize:11, fontWeight:600, color:C.textMuted, padding:"4px 0", textAlign:"center" }}>{d}</th>
+                {scheduleDays.map(day=>(
+                  <th key={day.key} style={{ fontSize:11, fontWeight:600, color:C.textMuted, padding:"4px 0", textAlign:"center" }}>{day.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {TIMES.map(time=>(
                 <tr key={time}>
-                  {DAYS.map(day=>{
-                    const on = isSlotOn(day,time);
+                  {scheduleDays.map(day=>{
+                    const on = isSlotOn(day.key,time);
                     return (
-                      <td key={day} style={{ padding:"2px" }}>
-                        <button type="button" onClick={()=>toggleSlot(day,time)} style={{
+                      <td key={day.key} style={{ padding:"2px" }}>
+                        <button type="button" onClick={()=>toggleSlot(day.key,time)} style={{
                           width:"100%", padding:"7px 4px",
                           background: on ? "#111" : C.creamDark,
                           color: on ? C.white : C.textMuted,
@@ -434,6 +504,7 @@ export default function MentorInfoRegister() {
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [availabilityIds, setAvailabilityIds] = useState([]);
 
   const [d1, setD1] = useState({ company:"", job:"", years:"", prevCompany:"", techStack:[], bio:"" });
   const [d2, setD2] = useState({ types:[], focusItems:[], philosophy:"" });
@@ -443,10 +514,27 @@ export default function MentorInfoRegister() {
   const upd2 = (k,v) => setD2(p=>({...p,[k]:v}));
   const upd3 = (k,v) => setD3(p=>({...p,[k]:v}));
 
+  useEffect(() => {
+    getMyProfile()
+      .then(profile => getMentorAvailabilities(profile.id))
+      .then(items => {
+        setAvailabilityIds(items.map(item => item.id).filter(Boolean));
+        const slots = [...new Set(items.map(availabilityToSlotKey).filter(Boolean))];
+        if (slots.length > 0) {
+          setD3(prev => ({ ...prev, slots }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handleNext = () => { if(step<4) setStep(s=>s+1); };
   const handlePrev = () => { if(step>1) setStep(s=>s-1); };
 
   const handleSubmit = async () => {
+    if (d3.slots.length === 0) {
+      alert("예약 가능 시간을 하나 이상 선택해주세요.");
+      return;
+    }
     setLoading(true);
     try {
       const typeNameMap = { tech:"기술 면접", culture:"인성 면접", portfolio:"포트폴리오", mock:"모의 면접" };
@@ -466,26 +554,9 @@ export default function MentorInfoRegister() {
         );
       }
 
-      if (d3.slots.length > 0) {
-        const durationMinutes = parseInt(d3.duration) || 60;
-        const dayMap = { MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6, SUN: 0 };
-        const toLocalISO = d => {
-          const p = n => String(n).padStart(2, "0");
-          return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
-        };
-        for (const slotKey of d3.slots) {
-          const [day, time] = slotKey.split("-");
-          const [hour, min] = time.split(":").map(Number);
-          const now = new Date();
-          const diff = (dayMap[day] - now.getDay() + 7) % 7 || 7;
-          const start = new Date(now);
-          start.setDate(now.getDate() + diff);
-          start.setHours(hour, min, 0, 0);
-          const end = new Date(start);
-          end.setMinutes(end.getMinutes() + durationMinutes);
-          await saveMentorAvailability({ start_time: toLocalISO(start), end_time: toLocalISO(end) });
-        }
-      }
+      const payloads = buildAvailabilityPayloads(d3.slots, d3.duration);
+      await Promise.all(payloads.map(createMentorAvailability));
+      await Promise.all(availabilityIds.map(deleteMentorAvailability));
 
       navigate("/dashboard/mentor");
     } catch (err) {

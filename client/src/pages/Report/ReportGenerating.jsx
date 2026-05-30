@@ -2,6 +2,18 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { generateSessionReport, getSessionReport, getSessionSttStatus } from "../../api/sessions";
 
+function getAuthHeaders() {
+  const raw = localStorage.getItem("scena_auth");
+  if (!raw) return {};
+  try {
+    const user = JSON.parse(raw);
+    const token = user?.accessToken || user?.token || user?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
@@ -340,6 +352,7 @@ export default function ReportGeneratingPage() {
   const [phase, setPhase] = useState("waiting_stt");
   const [error, setError] = useState("");
   const generatingRef = useRef(false);
+  const [generationStarted, setGenerationStarted] = useState(false);
 
   const goToReport = useCallback(() => {
     navigate(`/report/ai/${sessionId}`, { state: { role: "mentee" } });
@@ -350,6 +363,19 @@ export default function ReportGeneratingPage() {
     const id = setInterval(() => setStepIdx(prev => (prev + 1) % ANALYSIS_STEPS.length), 4000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!sessionId || generationStarted) return;
+    setGenerationStarted(true);
+    fetch(`/api/sessions/${sessionId}/report/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    })
+      .then(res => {
+        if (res.ok) goToReport();
+      })
+      .catch(() => {});
+  }, [sessionId, generationStarted, goToReport]);
 
   // STT 완료 대기 -> 리포트 생성 -> 완료 시 리포트 화면 이동
   useEffect(() => {

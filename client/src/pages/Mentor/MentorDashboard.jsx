@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMySessions, createSession } from "../../api/sessions";
-import { respondReservation } from "../../api/reservations";
+import { getMentorReservationRequests, respondReservation } from "../../api/reservations";
 
 /* ============================================================
    멘토 대시보드  (pages/Dashboard/MentorDashboard.jsx)
@@ -375,6 +375,24 @@ export default function MentorDashboard() {
     }));
 
   const [requests, setRequests] = useState([]);
+
+  const loadReservationRequests = useCallback(() => {
+    getMentorReservationRequests()
+      .then(data => {
+        setRequests(data.map(r => ({
+          id: r.id,
+          name: r.mentee_name ?? "",
+          company: r.session_id ? `세션 #${r.session_id}` : "",
+          message: "면접 신청이 도착했습니다. 신청 일정을 확인한 뒤 수락 또는 거절해주세요.",
+          avatarColor: "#1B4F7A",
+          scheduledAt: r.scheduled_at ?? null,
+          sessionType: "1:1 면접",
+        })));
+      })
+      .catch(error => {
+        console.error("[MentorDashboard] 예약 신청 목록 조회 실패", error);
+      });
+  }, []);
   useEffect(() => {
     const pending = allSessions.filter(s => s.status === "pending");
     setRequests(pending.map(s => ({
@@ -387,6 +405,28 @@ export default function MentorDashboard() {
       sessionType: s.sessionType ?? "1:1 면접",
     })));
   }, [allSessions]);
+
+  useEffect(() => {
+    getMentorReservationRequests()
+      .then(data => {
+        setRequests(data.map(r => ({
+          id: r.id,
+          name: r.mentee_name ?? "",
+          company: r.session_id ? `세션 #${r.session_id}` : "",
+          message: "면접 신청이 도착했습니다. 신청 일정을 확인한 뒤 수락 또는 거절해주세요.",
+          avatarColor: "#1B4F7A",
+          scheduledAt: r.scheduled_at ?? null,
+          sessionType: "1:1 면접",
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadReservationRequests();
+    const intervalId = setInterval(loadReservationRequests, 5000);
+    return () => clearInterval(intervalId);
+  }, [loadReservationRequests]);
 
   const upcoming = rawSessions
     .filter(s => s.status === "scheduled")

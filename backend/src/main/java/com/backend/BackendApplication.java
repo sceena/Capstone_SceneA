@@ -9,5 +9,5 @@ public class BackendApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(BackendApplication.class, args);
 	}
-	// 재배포용 수정 ㅇㅇ
+	// 배포용 커밋
 }

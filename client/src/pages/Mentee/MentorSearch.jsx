@@ -213,7 +213,7 @@ export default function MentorSearch() {
         {!loading && !error && mentors.length > 0 && (
           <div className="mgrid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:18 }}>
             {mentors.map(m => (
-              <MentorCard key={m.id} m={m} onClick={() => navigate(`/mentor/apply/${m.id}`)}/>
+              <MentorCard key={m.id} m={m} onClick={() => navigate(`/mentor/apply/${m.id}`, { state: { mentor: m } })}/>
             ))}
           </div>
         )}

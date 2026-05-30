@@ -345,6 +345,7 @@ export default function ReportGeneratingPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const [stepIdx, setStepIdx] = useState(0);
+  const [generationStarted, setGenerationStarted] = useState(false);
 
   const goToReport = useCallback(() => {
     navigate(`/report/ai/${sessionId}`, { state: { role: "mentee" } });
@@ -355,6 +356,19 @@ export default function ReportGeneratingPage() {
     const id = setInterval(() => setStepIdx(prev => (prev + 1) % ANALYSIS_STEPS.length), 4000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!sessionId || generationStarted) return;
+    setGenerationStarted(true);
+    fetch(`/api/sessions/${sessionId}/report/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    })
+      .then(res => {
+        if (res.ok) goToReport();
+      })
+      .catch(() => {});
+  }, [sessionId, generationStarted, goToReport]);
 
   // 리포트 완료 폴링 (30초마다)
   useEffect(() => {

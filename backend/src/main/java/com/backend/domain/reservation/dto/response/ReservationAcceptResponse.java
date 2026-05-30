@@ -8,12 +8,14 @@ import java.time.LocalDateTime;
 
 public record ReservationAcceptResponse(
         Long id,
+        @JsonProperty("session_id") Long sessionId,
         ReservationStatus status,
         @JsonProperty("updated_at") LocalDateTime updatedAt
 ) {
     public static ReservationAcceptResponse from(Reservation reservation) {
         return new ReservationAcceptResponse(
                 reservation.getId(),
+                reservation.getInterviewSession() != null ? reservation.getInterviewSession().getId() : null,
                 reservation.getStatus(),
                 reservation.getModifyDate()
         );

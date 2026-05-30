@@ -415,7 +415,7 @@ export default function MentorDashboard() {
 
   const loadReservationRequests = useCallback(() => {
     setRequestsLoading(true);
-    getMentorReservationRequests(null)
+    getMentorReservationRequests("PENDING")
       .then(data => {
         const pending = data.filter(r => normalizeStatus(r.status) === "pending");
         setRequests(pending.map(r => ({

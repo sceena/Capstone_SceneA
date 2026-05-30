@@ -4,7 +4,7 @@ import {
   createQuestions,
   getQuestions,
   getRecommendedQuestions,
-  getResumeSkills,
+  getResume,
   getSession,
   joinSession,
   saveResume,
@@ -48,7 +48,8 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [recommendLoading, setRecommendLoading] = useState(false);
   const [recommendSaving, setRecommendSaving] = useState(false);
   const [recommendError, setRecommendError] = useState("");
-  const [resumeSkills, setResumeSkills] = useState([]);
+  const [resumeContent, setResumeContent] = useState("");
+  const [openResumeIndex, setOpenResumeIndex] = useState(null);
 
   /* ── 오디오 레벨 분석 ── */
   const [micLevel, setMicLevel] = useState(0);
@@ -65,8 +66,8 @@ export default function InterviewRobby({ role = "mentee" }) {
       getQuestions(id).then(data => {
         setQuestions(normalizeQuestionList(data));
       }).catch(() => {});
-      getResumeSkills(id).then(data => {
-        setResumeSkills(Array.isArray(data) ? data : []);
+      getResume(id).then(data => {
+        setResumeContent(data?.content ?? "");
       }).catch(() => {});
     }
     if (role === "mentee") {
@@ -206,6 +207,15 @@ export default function InterviewRobby({ role = "mentee" }) {
   useEffect(() => {
     streamRef.current?.getVideoTracks().forEach(t => { t.enabled = camOn; });
   }, [camOn]);
+
+  const parseResumeContent = (content) => {
+    if (!content) return [];
+    return content.split(/\n\n+/).map(section => {
+      const match = section.match(/^\[(.+?)\]\n([\s\S]*)/);
+      if (match) return { title: match[1], content: match[2].trim() };
+      return { title: "자기소개서", content: section.trim() };
+    }).filter(item => item.content);
+  };
 
   const normalizeQuestionList = (data) => {
     if (Array.isArray(data)) return data;
@@ -626,22 +636,44 @@ export default function InterviewRobby({ role = "mentee" }) {
                     <p style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>{session.menteeInfo || session.type}</p>
                   </div>
                 </div>
-                {resumeSkills.length > 0 ? (
+                {resumeContent ? (
                   <div>
-                    <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:6 }}>자소서 키워드</p>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                      {resumeSkills.slice(0, 10).map((skill, i) => (
-                        <span key={i} style={{
-                          fontSize:10, padding:"2px 8px", borderRadius:99,
-                          background:"rgba(29,158,117,0.15)", color:C_teal,
-                          border:"1px solid rgba(29,158,117,0.3)",
-                        }}>{skill?.name ?? skill}</span>
+                    <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:6 }}>자기소개서</p>
+                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                      {parseResumeContent(resumeContent).map((item, i) => (
+                        <div key={i} style={{ borderRadius:8, overflow:"hidden", border:"1px solid rgba(255,255,255,0.1)" }}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenResumeIndex(openResumeIndex === i ? null : i)}
+                            style={{
+                              width:"100%", background:"rgba(255,255,255,0.05)",
+                              border:"none", cursor:"pointer",
+                              display:"flex", alignItems:"center", justifyContent:"space-between",
+                              padding:"8px 10px", gap:8,
+                            }}
+                          >
+                            <span style={{ fontSize:11, color:"rgba(255,255,255,0.75)", fontWeight:600, textAlign:"left" }}>
+                              {item.title}
+                            </span>
+                            <span style={{ fontSize:10, color:"rgba(255,255,255,0.4)", flexShrink:0 }}>
+                              {openResumeIndex === i ? "▼" : "▶"}
+                            </span>
+                          </button>
+                          {openResumeIndex === i && (
+                            <div style={{ padding:"8px 10px", background:"rgba(0,0,0,0.2)" }}>
+                              <p style={{
+                                fontSize:11, color:"rgba(255,255,255,0.6)", lineHeight:1.7,
+                                whiteSpace:"pre-wrap", wordBreak:"break-word", margin:0,
+                              }}>{item.content}</p>
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
                 ) : (
                   <p style={{ fontSize:11, color:"rgba(255,255,255,0.3)", fontStyle:"italic" }}>
-                    자소서 분석 정보가 없습니다
+                    자기소개서가 없습니다
                   </p>
                 )}
               </div>

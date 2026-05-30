@@ -21,6 +21,7 @@ import com.backend.domain.resume.repository.ResumeRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class RecommendedQuestionService {
 
@@ -92,10 +94,18 @@ public class RecommendedQuestionService {
 
         try {
             AiSessionQuestionGenerationResponse response = aiQuestionGenerationClient.generateSessionQuestions(request);
+            response = normalizeResponse(sessionType, candidates, response);
             saveQuestions(batch, response);
             batch.markCompleted(response.sessionType());
             return response;
         } catch (CustomException e) {
+            if (e.getErrorCode() == ErrorCode.AI_SERVER_ERROR) {
+                log.warn("AI question generation failed. Falling back to local resume-based questions. sessionId={}", sessionId);
+                AiSessionQuestionGenerationResponse fallbackResponse = buildFallbackResponse(sessionType, candidates);
+                saveQuestions(batch, fallbackResponse);
+                batch.markCompleted(fallbackResponse.sessionType());
+                return fallbackResponse;
+            }
             batch.markFailed(e.getMessage());
             throw e;
         }
@@ -137,30 +147,129 @@ public class RecommendedQuestionService {
     private void saveQuestions(RecommendedQuestionBatch batch, AiSessionQuestionGenerationResponse response) {
         List<RecommendedQuestion> questions = new ArrayList<>();
 
-        for (int i = 0; i < response.commonQuestions().size(); i++) {
+        List<String> commonQuestions = response.commonQuestions() != null ? response.commonQuestions() : List.of();
+        List<AiPersonalQuestionResponse> personalQuestions = response.personalQuestions() != null
+                ? response.personalQuestions()
+                : List.of();
+
+        for (int i = 0; i < commonQuestions.size(); i++) {
             questions.add(RecommendedQuestion.builder()
                     .batch(batch)
                     .type(RecommendedQuestionType.COMMON)
                     .candidateId(null)
-                    .content(response.commonQuestions().get(i))
+                    .content(commonQuestions.get(i))
                     .orderIndex(i)
                     .build());
         }
 
-        for (AiPersonalQuestionResponse personalQuestion : response.personalQuestions()) {
-            List<String> personalQuestions = personalQuestion.questions();
-            for (int i = 0; i < personalQuestions.size(); i++) {
+        for (AiPersonalQuestionResponse personalQuestion : personalQuestions) {
+            List<String> candidateQuestions = personalQuestion.questions() != null
+                    ? personalQuestion.questions()
+                    : List.of();
+            for (int i = 0; i < candidateQuestions.size(); i++) {
                 questions.add(RecommendedQuestion.builder()
                         .batch(batch)
                         .type(RecommendedQuestionType.PERSONAL)
                         .candidateId(personalQuestion.candidateId())
-                        .content(personalQuestions.get(i))
+                        .content(candidateQuestions.get(i))
                         .orderIndex(i)
                         .build());
             }
         }
 
         recommendedQuestionRepository.saveAll(questions);
+    }
+
+    private AiSessionQuestionGenerationResponse normalizeResponse(
+            String sessionType,
+            List<AiQuestionCandidateRequest> candidates,
+            AiSessionQuestionGenerationResponse response) {
+        if (response == null) {
+            return buildFallbackResponse(sessionType, candidates);
+        }
+
+        String resolvedSessionType = response.sessionType() != null ? response.sessionType() : sessionType;
+        List<String> commonQuestions = sanitizeQuestions(response.commonQuestions());
+        List<AiPersonalQuestionResponse> personalQuestions = response.personalQuestions() != null
+                ? response.personalQuestions().stream()
+                .map(personalQuestion -> new AiPersonalQuestionResponse(
+                        personalQuestion.candidateId(),
+                        sanitizeQuestions(personalQuestion.questions())))
+                .filter(personalQuestion -> !personalQuestion.questions().isEmpty())
+                .toList()
+                : List.of();
+
+        if (personalQuestions.isEmpty()) {
+            return buildFallbackResponse(sessionType, candidates);
+        }
+
+        return new AiSessionQuestionGenerationResponse(
+                resolvedSessionType,
+                commonQuestions,
+                personalQuestions
+        );
+    }
+
+    private List<String> sanitizeQuestions(List<String> questions) {
+        if (questions == null) {
+            return List.of();
+        }
+
+        return questions.stream()
+                .filter(question -> question != null && !question.isBlank())
+                .map(String::trim)
+                .toList();
+    }
+
+    private AiSessionQuestionGenerationResponse buildFallbackResponse(
+            String sessionType,
+            List<AiQuestionCandidateRequest> candidates) {
+        List<String> commonQuestions = GROUP.equals(sessionType)
+                ? List.of(
+                "각자 제출한 서류에서 가장 핵심이라고 생각하는 프로젝트를 하나씩 고르고, 본인의 역할과 결과를 비교해 설명해 주세요.",
+                "팀 프로젝트에서 기술 선택이 갈렸던 상황이 있다면 어떤 기준으로 의사결정했는지 설명해 주세요.",
+                "운영 중 장애나 성능 문제가 발생했을 때 원인을 좁혀 가는 방식을 구체적으로 설명해 주세요.")
+                : List.of();
+
+        List<AiPersonalQuestionResponse> personalQuestions = candidates.stream()
+                .map(candidate -> new AiPersonalQuestionResponse(
+                        candidate.candidateId(),
+                        buildFallbackPersonalQuestions(candidate.content())))
+                .toList();
+
+        return new AiSessionQuestionGenerationResponse(
+                sessionType,
+                commonQuestions,
+                personalQuestions
+        );
+    }
+
+    private List<String> buildFallbackPersonalQuestions(String resumeContent) {
+        String focus = extractResumeFocus(resumeContent);
+        return List.of(
+                "자소서에서 언급한 " + focus + " 경험에서 본인이 직접 맡은 역할과 의사결정을 구체적으로 설명해 주세요.",
+                focus + " 과정에서 가장 어려웠던 기술적 문제는 무엇이었고, 어떤 방식으로 원인을 분석했나요?",
+                focus + " 결과를 수치나 사용자 관점의 변화로 설명할 수 있다면 어떤 지표를 제시할 수 있나요?",
+                "해당 경험을 다시 수행한다면 구조, 성능, 협업 방식 중 무엇을 가장 먼저 개선하고 싶나요?",
+                "이 경험이 지원 직무에서 요구하는 역량과 어떻게 연결된다고 생각하나요?"
+        );
+    }
+
+    private String extractResumeFocus(String resumeContent) {
+        if (resumeContent == null || resumeContent.isBlank()) {
+            return "프로젝트";
+        }
+
+        String normalized = resumeContent
+                .replaceAll("\\[[^\\]]+]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (normalized.isBlank()) {
+            return "프로젝트";
+        }
+
+        int endIndex = Math.min(normalized.length(), 36);
+        return normalized.substring(0, endIndex);
     }
 
     private AiSessionQuestionGenerationResponse toResponse(

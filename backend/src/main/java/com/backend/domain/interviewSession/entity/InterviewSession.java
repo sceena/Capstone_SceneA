@@ -53,4 +53,17 @@ public class InterviewSession extends BaseEntity {
             throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
         }
     }
+
+    public void markPending() {
+        this.status = SessionStatus.PENDING;
+    }
+
+    public void confirmSchedule(LocalDateTime scheduledAt) {
+        this.status = SessionStatus.SCHEDULED;
+        this.scheduledAt = scheduledAt;
+    }
+
+    public void reschedule(LocalDateTime scheduledAt) {
+        this.scheduledAt = scheduledAt;
+    }
 }

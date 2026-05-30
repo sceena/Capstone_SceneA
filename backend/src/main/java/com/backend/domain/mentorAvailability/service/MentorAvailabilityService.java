@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -23,6 +24,7 @@ public class MentorAvailabilityService {
     private final MentorAvailabilityRepository availabilityRepository;
     private final MemberRepository memberRepository;
 
+    @Transactional
     public List<AvailabilityResponse> getAvailabilities(Long mentorId) {
         Member mentor = memberRepository.findById(mentorId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
@@ -31,9 +33,26 @@ public class MentorAvailabilityService {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
 
+        LocalDate tomorrow = LocalDate.now().plusDays(1);
+
         return availabilityRepository.findAllByMentorAndIsBookedFalse(mentor).stream()
+                .peek(availability -> rollForwardIfExpired(availability, tomorrow))
                 .map(AvailabilityResponse::from)
                 .toList();
+    }
+
+    private void rollForwardIfExpired(MentorAvailability availability, LocalDate minimumDate) {
+        if (!availability.getStartTime().toLocalDate().isBefore(minimumDate)) {
+            return;
+        }
+
+        var start = availability.getStartTime();
+        var end = availability.getEndTime();
+        while (start.toLocalDate().isBefore(minimumDate)) {
+            start = start.plusDays(7);
+            end = end.plusDays(7);
+        }
+        availability.reschedule(start, end);
     }
 
     @Transactional

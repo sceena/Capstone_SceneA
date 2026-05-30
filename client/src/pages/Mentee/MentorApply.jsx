@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation, useParams } from "react-router-dom";
-import { requestReservation } from "../../api/reservations";
+import { getMentorAvailabilities, requestReservation } from "../../api/reservations";
 import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 import useAuthStore from "../../store/authStore";
 
@@ -64,27 +64,116 @@ const getStoredResumeContent = () => {
   }
 };
 
+const formatDateLabel = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  }).format(date);
+};
+
+const formatTimeLabel = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(11, 16);
+  return new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+};
+
+const buildAvailabilityDates = (items) => {
+  const groups = new Map();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+  items
+    .filter(item => {
+      const startTime = item.start_time ?? item.startTime;
+      const startDate = new Date(startTime);
+      return !item.is_booked && !item.isBooked && !Number.isNaN(startDate.getTime()) && startDate >= tomorrow;
+    })
+    .sort((a, b) => String(a.start_time ?? a.startTime).localeCompare(String(b.start_time ?? b.startTime)))
+    .forEach(item => {
+      const startTime = item.start_time ?? item.startTime;
+      const key = String(startTime).slice(0, 10);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          date: formatDateLabel(startTime),
+          times: [],
+        });
+      }
+      groups.get(key).times.push({
+        id: item.id,
+        time: formatTimeLabel(startTime),
+        startTime,
+        endTime: item.end_time ?? item.endTime,
+      });
+    });
+  return Array.from(groups.values());
+};
+
 export default function MentorApply(){
   const navigate=useNavigate();
+  const { id: mentorIdParam } = useParams();
   const { state: navState } = useLocation();
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
-  const mentor=MENTOR;
+  const mentorFromState = navState?.mentor ?? {};
+  const selectedMentorId = Number(mentorIdParam || mentorFromState.id || MENTOR.id);
+  const mentor={
+    ...MENTOR,
+    ...mentorFromState,
+    id: selectedMentorId,
+    company: mentorFromState.company ?? MENTOR.company,
+    job: mentorFromState.job ?? mentorFromState.bio ?? MENTOR.job,
+    years: mentorFromState.years ?? MENTOR.years,
+    tags: mentorFromState.tags?.map(tag => tag.name ?? tag) ?? MENTOR.tags,
+  };
   const [sessType,setSessType]=useState("1:1");
   const [participants,setParticipants]=useState(2);
   const [selDateIdx,setSelDateIdx]=useState(0);
   const [selTime,setSelTime]=useState("");
+  const [availableDates,setAvailableDates]=useState([]);
+  const [availabilityLoading,setAvailabilityLoading]=useState(true);
+  const [availabilityError,setAvailabilityError]=useState("");
   const [loading,setLoading]=useState(false);
   const [submitted,setSubmitted]=useState(false);
+  const [requestNote,setRequestNote]=useState("");
 
+  useEffect(() => {
+    if (!mentor.id) return;
+    setAvailabilityLoading(true);
+    setAvailabilityError("");
+    getMentorAvailabilities(mentor.id)
+      .then(data => {
+        const nextDates = buildAvailabilityDates(data);
+        setAvailableDates(nextDates);
+        setSelDateIdx(0);
+        setSelTime("");
+      })
+      .catch(error => {
+        setAvailableDates([]);
+        setSelTime("");
+        setAvailabilityError(error?.message || "예약 가능 시간을 불러오지 못했습니다.");
+      })
+      .finally(() => setAvailabilityLoading(false));
+  }, [mentor.id]);
+
+  const selectedDate = availableDates[selDateIdx] ?? null;
+  const selectedSlot = selectedDate?.times.find(slot => String(slot.id) === String(selTime)) ?? null;
   const totalPoint=sessType==="그룹"?Math.round(mentor.point*participants*0.7):mentor.point;
-  const canSubmit=selTime!=="";
+  const canSubmit=Boolean(selectedSlot) && !availabilityLoading && !loading;
 
   const handleSubmit=async()=>{
     if(!canSubmit)return;
     setLoading(true);
     try {
-      const selectedSlot = mentor.availableDates[selDateIdx];
       const jobPosting = navState?.jobPosting;
       const resumeContent = navState?.resumeContent || getStoredResumeContent();
 
@@ -106,6 +195,10 @@ export default function MentorApply(){
         sessionId = session?.id;
       } catch {}
 
+      if (!sessionId) {
+        throw new Error("세션 생성에 실패했습니다.");
+      }
+
       if (sessionId && jobPosting?.company) {
         try {
           const jp = await saveJobPosting(sessionId, {
@@ -118,15 +211,23 @@ export default function MentorApply(){
       }
 
       if (sessionId && resumeContent) {
-        await saveResume(sessionId, resumeContent);
+        const noteBlock = requestNote.trim()
+          ? `\n\n[멘토에게 전달할 내용]\n${requestNote.trim()}`
+          : "";
+        await saveResume(sessionId, `${resumeContent}${noteBlock}`);
       }
 
       await requestReservation({
         mentor_id: mentor.id,
-        availability_id: selectedSlot.availabilityId ?? 1,
+        availability_id: selectedSlot.id,
+        session_id: sessionId,
         job_posting_id: jobPostingId ?? null,
       });
-    } catch {}
+    } catch (error) {
+      alert(error?.message || "면접 신청에 실패했습니다.");
+      setLoading(false);
+      return;
+    }
     setLoading(false);
     setSubmitted(true);
   };
@@ -142,7 +243,7 @@ export default function MentorApply(){
           </div>
           <h2 style={{fontSize:26,fontWeight:700,color:C.text,marginBottom:10}}>신청이 완료됐어요!</h2>
           <p style={{fontSize:16,color:C.textSub,lineHeight:1.7,marginBottom:8}}><strong style={{color:C.navy}}>{mentor.name} 멘토</strong>님의 승인을 기다리고 있어요.</p>
-          <p style={{fontSize:14,color:C.textMuted,marginBottom:32}}>{mentor.availableDates[selDateIdx].date} · {selTime} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
+          <p style={{fontSize:14,color:C.textMuted,marginBottom:32}}>{selectedDate?.date} · {selectedSlot?.time} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
           <div style={{display:"flex",gap:10}}>
             <button onClick={()=>navigate("/mentor/search")} style={{flex:1,padding:"14px",background:C.white,color:C.text,border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:15,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>다른 멘토 보기</button>
             <button onClick={()=>navigate("/dashboard/mentee")} style={{flex:1,padding:"14px",background:C.navy,color:C.white,border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>대시보드로 이동</button>
@@ -242,9 +343,14 @@ export default function MentorApply(){
 
               {/* 02 일시 선택 */}
               <div style={{padding:"24px 32px 20px",borderBottom:`1px solid ${C.border}`}}>
-                <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:14}}>02 일시 선택 ({mentor.availableDates[selDateIdx].date})</p>
-                <div style={{display:"flex",gap:8,marginBottom:16}}>
-                  {mentor.availableDates.map((d,i)=>(
+                <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:14}}>02 일시 선택 ({selectedDate?.date || "예약 가능 시간"})</p>
+                {availabilityLoading && <p style={{fontSize:13,color:C.textMuted,marginBottom:16}}>예약 가능한 시간을 불러오는 중입니다...</p>}
+                {availabilityError && <p style={{fontSize:13,color:"#EF4444",marginBottom:16}}>{availabilityError}</p>}
+                {!availabilityLoading && !availabilityError && availableDates.length === 0 && (
+                  <p style={{fontSize:13,color:C.textMuted,marginBottom:16}}>현재 예약 가능한 시간이 없습니다.</p>
+                )}
+                <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+                  {availableDates.map((d,i)=>(
                     <button key={i} type="button" onClick={()=>{setSelDateIdx(i);setSelTime("");}} style={{
                       padding:"10px 18px",
                       background:selDateIdx===i?C.navy:C.bg,
@@ -260,18 +366,39 @@ export default function MentorApply(){
               {/* 시간 선택 */}
               <div style={{padding:"20px 32px 24px",borderBottom:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-                  {mentor.availableDates[selDateIdx].times.map(t=>(
-                    <button key={t} type="button" onClick={()=>setSelTime(t)} style={{
+                  {(selectedDate?.times ?? []).map(t=>(
+                    <button key={t.id} type="button" onClick={()=>setSelTime(t.id)} style={{
                       padding:"14px 0",flex:"1 0 calc(25% - 8px)",minWidth:72,
-                      background:selTime===t?"#111":C.white,
-                      color:selTime===t?C.white:C.text,
-                      border:`1.5px solid ${selTime===t?"#111":C.border}`,
+                      background:String(selTime)===String(t.id)?"#111":C.white,
+                      color:String(selTime)===String(t.id)?C.white:C.text,
+                      border:`1.5px solid ${String(selTime)===String(t.id)?"#111":C.border}`,
                       borderRadius:10,cursor:"pointer",
-                      fontSize:16,fontWeight:selTime===t?700:400,fontFamily:"inherit",
+                      fontSize:16,fontWeight:String(selTime)===String(t.id)?700:400,fontFamily:"inherit",
                       transition:"all 0.18s",
-                    }}>{t}</button>
+                    }}>{t.time}</button>
                   ))}
                 </div>
+              </div>
+
+              {/* 03 멘토에게 전달할 내용 */}
+              <div style={{padding:"24px 32px",borderBottom:`1px solid ${C.border}`}}>
+                <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:10}}>03 멘토에게 전달할 내용</p>
+                <textarea
+                  value={requestNote}
+                  onChange={e=>setRequestNote(e.target.value)}
+                  rows={4}
+                  placeholder={"현재 준비 상황, 걱정되는 부분, 멘토에게 받고 싶은 피드백을 적어주세요.\n예: 프로젝트 꼬리질문 대비가 필요하고, 백엔드 장애 대응 경험 답변을 점검받고 싶어요."}
+                  style={{
+                    width:"100%",resize:"vertical",border:`1.5px solid ${C.border}`,borderRadius:10,
+                    padding:"13px 14px",fontSize:14,lineHeight:1.7,fontFamily:"inherit",outline:"none",
+                    background:C.white,color:C.text,
+                  }}
+                  onFocus={e=>e.currentTarget.style.borderColor=C.navy}
+                  onBlur={e=>e.currentTarget.style.borderColor=C.border}
+                />
+                <p style={{fontSize:12,color:C.textMuted,marginTop:8}}>
+                  이 내용은 자소서 정보와 함께 저장되어 멘토의 사전 질문 준비에 활용됩니다.
+                </p>
               </div>
 
               {/* 포인트 + 신청 버튼 */}
@@ -280,9 +407,9 @@ export default function MentorApply(){
                   <span style={{fontSize:16,color:C.textSub}}>최종 차감 포인트</span>
                   <span style={{fontSize:32,fontWeight:700,color:C.navy,letterSpacing:"-0.03em"}}>{totalPoint} <span style={{fontSize:18}}>P</span></span>
                 </div>
-                {selTime&&(
+                {selectedSlot&&(
                   <div style={{background:C.teal+"14",border:`1px solid ${C.teal}40`,borderRadius:10,padding:"12px 16px",marginBottom:14}}>
-                    <p style={{fontSize:15,color:C.teal,fontWeight:600}}>✓ {mentor.availableDates[selDateIdx].date} · {selTime} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
+                    <p style={{fontSize:15,color:C.teal,fontWeight:600}}>✓ {selectedDate?.date} · {selectedSlot.time} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
                   </div>
                 )}
                 <button onClick={canSubmit?handleSubmit:undefined} disabled={!canSubmit||loading} style={{
@@ -300,7 +427,7 @@ export default function MentorApply(){
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" style={{animation:"spin 0.8s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                         신청 중...
                       </span>
-                    :selTime?"신청 정보 입력하기":"시간을 선택해주세요"
+                    :selectedSlot?"신청 정보 입력하기":"시간을 선택해주세요"
                   }
                 </button>
                 {!canSubmit&&<p style={{fontSize:13,color:C.textMuted,textAlign:"center",marginTop:10}}>날짜와 시간을 선택하면 신청할 수 있어요</p>}

@@ -12,6 +12,7 @@ import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
 import com.backend.domain.tag.dto.TagRequest;
 import com.backend.domain.tag.entity.MemberTag;
 import com.backend.domain.tag.entity.Tag;
@@ -62,6 +63,9 @@ class UserServiceTest {
     private MemberTagRepository memberTagRepository;
 
     @Mock
+    private MentorAvailabilityRepository mentorAvailabilityRepository;
+
+    @Mock
     private S3Service s3Service;
 
     @Mock
@@ -92,6 +96,8 @@ class UserServiceTest {
         given(memberRepository.findMentors(Role.MENTOR, null, pageable)).willReturn(mentorPage);
         given(memberTagRepository.findAllByMember(mentor1)).willReturn(List.of(memberTag));
         given(memberTagRepository.findAllByMember(mentor2)).willReturn(List.of());
+        given(mentorAvailabilityRepository.findAllByMentor(mentor1)).willReturn(List.of());
+        given(mentorAvailabilityRepository.findAllByMentor(mentor2)).willReturn(List.of());
 
         MentorListResponse.PageResponse result = userService.getMentors(null, pageable);
 
@@ -117,6 +123,7 @@ class UserServiceTest {
 
         given(memberRepository.findMentors(Role.MENTOR, "Spring", pageable)).willReturn(mentorPage);
         given(memberTagRepository.findAllByMember(mentor)).willReturn(List.of(memberTag));
+        given(mentorAvailabilityRepository.findAllByMentor(mentor)).willReturn(List.of());
 
         MentorListResponse.PageResponse result = userService.getMentors("Spring", pageable);
 

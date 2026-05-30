@@ -77,15 +77,19 @@ def transcribe_audio(audio: UploadFile = File(...)) -> SttResponse:
 
 @router.post("/api/stt/jobs", response_model=SttJobResponse, status_code=202)
 def create_stt_job(request: SttJobRequest) -> SttJobResponse:
+    if request.answer_id is None and request.question_id is None:
+        raise HTTPException(status_code=400, detail="answer_id or question_id is required.")
     stt_executor.submit(
         stt_service.process_s3_job,
         request.answer_id,
+        request.question_id,
         request.audio_key,
         request.callback_url,
         request.bucket,
     )
     return SttJobResponse(
         answer_id=request.answer_id,
+        question_id=request.question_id,
         status="ACCEPTED",
         message="STT job accepted.",
     )

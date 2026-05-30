@@ -18,20 +18,23 @@ class SttResponse(BaseModel):
 
 
 class SttJobRequest(BaseModel):
-    answer_id: int
+    answer_id: int | None = None
+    question_id: int | None = None
     audio_key: str
     callback_url: str
     bucket: str | None = None
 
 
 class SttJobResponse(BaseModel):
-    answer_id: int
+    answer_id: int | None = None
+    question_id: int | None = None
     status: str
     message: str
 
 
 class SttCallbackPayload(BaseModel):
-    answer_id: int
+    answer_id: int | None = None
+    question_id: int | None = None
     status: str
     text: str | None = None
     model: str | None = None

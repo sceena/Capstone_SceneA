@@ -50,6 +50,10 @@ public class SessionService {
                 .scheduledAt(java.time.LocalDateTime.now())
                 .build();
 
+        if (requester.getRole() == Role.MENTEE) {
+            session.markPending();
+        }
+
         InterviewSession savedSession = sessionRepository.save(session);
 
         if (requester.getRole() == Role.MENTEE) {
@@ -94,17 +98,21 @@ public class SessionService {
 
         if (member.getRole() == Role.MENTOR) {
             page = sessionStatus != null
-                    ? sessionRepository.findAllByMentorAndStatus(member, sessionStatus, pageable).map(SessionSummaryResponse::from)
-                    : sessionRepository.findAllByMentor(member, pageable).map(SessionSummaryResponse::from);
+                    ? sessionRepository.findAllByMentorAndStatus(member, sessionStatus, pageable).map(this::toSummary)
+                    : sessionRepository.findAllByMentor(member, pageable).map(this::toSummary);
         } else {
             page = sessionStatus != null
                     ? participantRepository.findAllByMemberAndInterviewSession_Status(member, sessionStatus, pageable)
-                        .map(p -> SessionSummaryResponse.from(p.getInterviewSession()))
+                        .map(p -> toSummary(p.getInterviewSession()))
                     : participantRepository.findAllByMember(member, pageable)
-                        .map(p -> SessionSummaryResponse.from(p.getInterviewSession()));
+                        .map(p -> toSummary(p.getInterviewSession()));
         }
 
         return SessionListResponse.from(page);
+    }
+
+    private SessionSummaryResponse toSummary(InterviewSession session) {
+        return SessionSummaryResponse.from(session, participantRepository.findAllByInterviewSession(session));
     }
 
     @Transactional

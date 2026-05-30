@@ -1,49 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { getSessionReport, saveMentorScore, saveMentorFeedback } from "../../api/sessions";
+import { getSession, getSessionReport, saveMentorAnswerEvaluation, saveMentorFeedback, saveMentorScore } from "../../api/sessions";
 
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
 
-const MOCK_SESSION_INFO = {
-  sessionId: "sess-001",
-  title: "백엔드 개발자 모의 면접",
-  date: "2026.04.02 오후 7:00",
-  duration: "60분",
-  type: "그룹 세션",
+const DEFAULT_SESSION_INFO = {
+  title: "세션 로딩 중...",
+  date: "",
+  duration: "",
+  type: "",
 };
-
-const MOCK_MENTEES = [
-  {
-    menteeId: "m1",
-    menteeName: "김민준",
-    menteeTrack: "백엔드 · 신입",
-    qnas: [
-      { id: "m1-q1", question: "Q1 · 본인이 경험한 가장 큰 기술적 도전과 해결 과정을 말해주세요.", aiScore: 4.0, aiComment: "수치 기반 결과 제시 + STAR 구조 완성도 높음.", transcript: "카카오 인턴 당시 결제 서버 피크 타임 응답 지연 문제를 Redis 캐싱으로 해결, 응답 시간 340ms 달성." },
-      { id: "m1-q2", question: "Q2 · 협업 중 기술적 의견 충돌 경험이 있나요?", aiScore: 5.0, aiComment: "상황-과제-행동-결과가 모두 명확하게 서술됨.", transcript: "REST API 설계 방향 충돌 → 장단점 문서화 → 팀 합의 도출 → API 일관성 향상." },
-      { id: "m1-q3", question: "Q3 · MSA 환경에서의 서비스 간 통신 방식에 대해 설명해보세요.", aiScore: 2.0, aiComment: "만연체 + 이론 나열, R(결과) 누락. 구체적 경험 부재.", transcript: "MSA는 서비스들이 독립적으로 운영되고 REST, 메시지 큐, gRPC 방법이 있는데 저는 주로 REST를 많이 써봤고..." },
-    ],
-  },
-  {
-    menteeId: "m2",
-    menteeName: "이서연",
-    menteeTrack: "프론트엔드 · 신입",
-    qnas: [
-      { id: "m2-q1", question: "Q1 · React의 렌더링 최적화 방법에 대해 설명해보세요.", aiScore: 3.5, aiComment: "useMemo/useCallback 언급했으나 실제 활용 사례가 부족함.", transcript: "useMemo와 useCallback을 사용해 불필요한 렌더링을 방지하고, React.memo로 컴포넌트를 최적화합니다." },
-      { id: "m2-q2", question: "Q2 · 상태 관리 라이브러리 선택 기준은 무엇인가요?", aiScore: 4.5, aiComment: "Redux vs Zustand 트레이드오프를 명확하게 비교함.", transcript: "프로젝트 규모와 팀 구성에 따라 다릅니다. 소규모는 Zustand, 대규모 엔터프라이즈는 Redux Toolkit을 선호합니다." },
-    ],
-  },
-  {
-    menteeId: "m3",
-    menteeName: "박준혁",
-    menteeTrack: "풀스택 · 신입",
-    qnas: [
-      { id: "m3-q1", question: "Q1 · REST API와 GraphQL의 차이를 설명해주세요.", aiScore: 4.8, aiComment: "오버페칭/언더페칭 문제를 정확히 짚어내고 실 사용 경험을 언급함.", transcript: "REST는 고정된 엔드포인트로 오버페칭이 발생할 수 있고, GraphQL은 필요한 데이터만 요청할 수 있어 모바일 환경에서 유리합니다." },
-      { id: "m3-q2", question: "Q2 · CI/CD 파이프라인 구축 경험이 있나요?", aiScore: 3.0, aiComment: "개념은 이해하나 실제 구축 경험 미비. 도구 선택 이유 불명확.", transcript: "GitHub Actions를 사용해 자동 배포를 구현해봤습니다. Docker 컨테이너로 빌드하고 EC2에 배포했습니다." },
-    ],
-  },
-];
 
 function formatTime(secs) {
   const m = Math.floor(secs / 60).toString().padStart(2, "0");
@@ -79,7 +47,7 @@ function StarPicker({ value, onChange }) {
 }
 
 function QuestionCard({ qna, feedbacks, onChange }) {
-  const fb = feedbacks[qna.id] || { score: qna.aiScore, comment: "" };
+  const fb = feedbacks[qna.id] || { score: qna.aiScore, reasoning: "", strengths: "", improvements: "", comment: "" };
   return (
     <div style={{ background: "white", borderRadius: 14, border: "1px solid #E0DDD8", overflow: "hidden", marginBottom: 16 }}>
       <div style={{ background: "#F8F7F4", padding: "14px 20px", borderBottom: "1px solid #E0DDD8" }}>
@@ -103,15 +71,15 @@ function QuestionCard({ qna, feedbacks, onChange }) {
           </p>
           <StarPicker value={fb.score} onChange={(v) => onChange(qna.id, "score", v)} />
         </div>
-        <div>
+        <div style={{ marginBottom: 12 }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 8 }}>
-            이 질문에 대한 코멘트
-            <span style={{ fontSize: 11, fontWeight: 400, color: "#999", marginLeft: 6 }}>선택</span>
+            평가 근거
+            <span style={{ fontSize: 11, fontWeight: 400, color: "#999", marginLeft: 6 }}>DPO chosen reasoning</span>
           </p>
           <textarea
-            value={fb.comment}
-            onChange={(e) => onChange(qna.id, "comment", e.target.value)}
-            placeholder="해당 답변의 강점, 개선점을 구체적으로 작성해주세요."
+            value={fb.reasoning}
+            onChange={(e) => onChange(qna.id, "reasoning", e.target.value)}
+            placeholder="AI 평가를 현직자 관점에서 어떻게 수정했는지 근거를 작성해주세요."
             style={{
               width: "100%", borderRadius: 8, border: "1px solid #D1D5DB",
               padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333",
@@ -122,17 +90,69 @@ function QuestionCard({ qna, feedbacks, onChange }) {
             onBlur={(e) => (e.target.style.borderColor = "#D1D5DB")}
           />
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 8 }}>좋은 점</p>
+            <textarea
+              value={fb.strengths}
+              onChange={(e) => onChange(qna.id, "strengths", e.target.value)}
+              placeholder="한 줄에 하나씩 작성"
+              style={{ width: "100%", minHeight: 72, borderRadius: 8, border: "1px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 8 }}>개선할 점</p>
+            <textarea
+              value={fb.improvements}
+              onChange={(e) => onChange(qna.id, "improvements", e.target.value)}
+              placeholder="한 줄에 하나씩 작성"
+              style={{ width: "100%", minHeight: 72, borderRadius: 8, border: "1px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
+}
+
+function buildMenteesFromQuestionReports(questionReports, sessionId, reportStatus) {
+  const groups = new Map();
+
+  questionReports.forEach((report, index) => {
+    const menteeId = report.mentee_id || `session-${sessionId}`;
+    const menteeName = report.mentee_name || "면접 참여자";
+    if (!groups.has(menteeId)) {
+      groups.set(menteeId, {
+        menteeId,
+        menteeName,
+        menteeTrack: reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
+        qnas: [],
+      });
+    }
+
+    groups.get(menteeId).qnas.push({
+      id: report.answer_id || `${report.question_id}-${menteeId}-${index}`,
+      questionId: report.question_id,
+      answerId: report.answer_id,
+      question: `Q${index + 1} · ${report.question}`,
+      aiScore: Math.max(1, Math.min(5, Number(report.score || 0) / 2)),
+      aiComment: report.reasoning || "",
+      transcript: report.answer || "",
+      strengths: report.strengths || [],
+      improvements: report.improvements || [],
+    });
+  });
+
+  return Array.from(groups.values());
 }
 
 export default function MentorFeedbackPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
 
-  const [sessionInfo] = useState(MOCK_SESSION_INFO);
-  const [menteeList, setMenteeList] = useState(MOCK_MENTEES);
+  const [sessionInfo, setSessionInfo] = useState(DEFAULT_SESSION_INFO);
+  const [menteeList, setMenteeList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
 
   // { [menteeId]: { feedbacks: {qId: {score, comment}}, totalFeedback: "", mentorScore: 4.0 } }
@@ -146,11 +166,43 @@ export default function MentorFeedbackPage() {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    getSessionReport(sessionId)
-      .then(data => {
-        if (data?.mentees?.length) setMenteeList(data.mentees);
-      })
-      .catch(() => {});
+    let cancelled = false;
+    const fetchData = async () => {
+      try {
+        const [sessionData, reportData] = await Promise.allSettled([
+          getSession(sessionId),
+          getSessionReport(sessionId),
+        ]);
+
+        if (cancelled) return;
+
+        if (sessionData.status === "fulfilled" && sessionData.value) {
+          const s = sessionData.value;
+          setSessionInfo({
+            title: s.title || `세션 #${sessionId}`,
+            date: s.scheduledAt ? s.scheduledAt.slice(0, 16).replace("T", " ") : "",
+            duration: s.duration || "",
+            type: s.sessionType || "1:1",
+          });
+        }
+
+        if (reportData.status === "fulfilled" && reportData.value) {
+          const data = reportData.value;
+          if (data?.mentees?.length) {
+            setMenteeList(data.mentees);
+          } else {
+            const questionReports = data?.ai_report?.question_reports || [];
+            if (questionReports.length) {
+              setMenteeList(buildMenteesFromQuestionReports(questionReports, sessionId, data?.report_status));
+            }
+          }
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    };
+
+    fetchData();
+    return () => { cancelled = true; };
   }, [sessionId]);
 
   // Init per-mentee feedback state
@@ -158,7 +210,15 @@ export default function MentorFeedbackPage() {
     const init = {};
     menteeList.forEach(m => {
       const fb = {};
-      m.qnas.forEach(q => { fb[q.id] = { score: q.aiScore, comment: "" }; });
+      m.qnas.forEach(q => {
+        fb[q.id] = {
+          score: q.aiScore,
+          reasoning: q.aiComment || "",
+          strengths: (q.strengths || []).join("\n"),
+          improvements: (q.improvements || []).join("\n"),
+          comment: "",
+        };
+      });
       init[m.menteeId] = { feedbacks: fb, totalFeedback: "", mentorScore: 4.0 };
     });
     setAllFeedbacks(init);
@@ -193,7 +253,7 @@ export default function MentorFeedbackPage() {
     if (field === "score") {
       const qna = currentMentee?.qnas.find(q => q.id === qId);
       if (qna?.answerId) {
-        saveMentorScore(sessionId, qId, qna.answerId, value).catch(() => {});
+        saveMentorScore(sessionId, qna.questionId || qId, qna.answerId, value).catch(() => {});
       }
     }
   };
@@ -227,6 +287,17 @@ export default function MentorFeedbackPage() {
     }
     setIsSending(true);
     try {
+      await Promise.all(currentMentee.qnas
+        .filter((qna) => qna.answerId)
+        .map((qna) => {
+          const fb = currentFbData.feedbacks[qna.id] || {};
+          return saveMentorAnswerEvaluation(sessionId, qna.answerId, {
+            reasoning: fb.reasoning || fb.comment || "멘토가 점수와 피드백을 검토했습니다.",
+            score: Number(fb.score || qna.aiScore || 0) * 2,
+            strengths: splitLines(fb.strengths),
+            improvements: splitLines(fb.improvements),
+          });
+        }));
       await saveMentorFeedback(sessionId, currentFbData.totalFeedback);
     } catch {}
     const newSent = new Set([...sentMentees, currentMentee.menteeId]);
@@ -237,6 +308,11 @@ export default function MentorFeedbackPage() {
     if (nextIdx !== -1) setCurrentMenteeIdx(nextIdx);
   };
 
+  const splitLines = (text) => (text || "")
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
   const allSent = menteeList.length > 0 && menteeList.every(m => sentMentees.has(m.menteeId));
 
   const avgQScore = Object.values(currentFbData.feedbacks).length > 0
@@ -245,6 +321,32 @@ export default function MentorFeedbackPage() {
 
   const timerColor = timeLeft < 300 ? "#EF4444" : timeLeft < 900 ? "#F59E0B" : GREEN;
   const timerUrgent = timeLeft < 300;
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR', sans-serif" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 44, height: 44, border: `3px solid ${GREEN}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
+          <p style={{ color: "#666", fontSize: 14 }}>세션 리포트를 불러오는 중...</p>
+        </div>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
+
+  if (menteeList.length === 0) {
+    return (
+      <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR', sans-serif" }}>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: NAVY, marginBottom: 8 }}>아직 리포트가 없습니다</p>
+          <p style={{ fontSize: 14, color: "#888", marginBottom: 24 }}>면접 종료 후 AI 리포트가 생성되면 피드백을 작성할 수 있습니다.</p>
+          <button onClick={() => navigate("/dashboard/mentor")} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: NAVY, color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            대시보드로 이동
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
@@ -360,8 +462,8 @@ export default function MentorFeedbackPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>1</div>
             <div>
-              <p style={{ fontWeight: 700, fontSize: 15, color: "#111" }}>질문별 멘토 별점 & 코멘트</p>
-              <p style={{ fontSize: 12, color: "#888" }}>AI 별점을 멘토 별점으로 덮어쓰고, 구체적 피드백을 남겨주세요</p>
+              <p style={{ fontWeight: 700, fontSize: 15, color: "#111" }}>질문별 멘토 평가 수정</p>
+              <p style={{ fontSize: 12, color: "#888" }}>AI 초안은 보존하고, 멘토의 점수·근거·좋은 점·개선점을 DPO용 수정본으로 저장합니다</p>
             </div>
             <div style={{ marginLeft: "auto", background: "#F8F7F4", borderRadius: 99, padding: "4px 14px" }}>
               <span style={{ fontSize: 12, color: "#888" }}>Q 평균 </span>

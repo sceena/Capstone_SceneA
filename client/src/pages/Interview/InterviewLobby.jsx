@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   createQuestions,
@@ -8,6 +8,13 @@ import {
   joinSession,
   updateSessionStatus,
 } from "../../api/sessions";
+import {
+  describeMediaError,
+  getStreamVideoDeviceId,
+  getVideoInputDevices,
+  mediaSupportError,
+  openAudioVideoStream,
+} from "../../utils/mediaDevices";
 
 /* ============================================================
    면접 준비 화면  (pages/interview/InterviewReady.jsx)
@@ -27,6 +34,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [stream, setStream] = useState(null);
   const streamRef = useRef(null);
   const [camStatus, setCamStatus] = useState("idle"); // idle | loading | ok | denied
+  const [camError, setCamError] = useState("");
   const [entering, setEntering] = useState(false);
   const [checklist, setChecklist] = useState([false, false, false]);
   const [sessionData, setSessionData] = useState(null);
@@ -59,13 +67,21 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   /* 사용 가능한 카메라 목록 로드 */
   useEffect(() => {
-    navigator.mediaDevices?.enumerateDevices().then(devices => {
-      const cams = devices.filter(d => d.kind === "videoinput");
+    const supportError = mediaSupportError();
+    if (supportError) {
+      setCamStatus("denied");
+      setCamError(supportError);
+      return;
+    }
+
+    getVideoInputDevices().then(cams => {
       setVideoDevices(cams);
       if (cams.length > 0 && !selectedDeviceId) {
-        setSelectedDeviceId(cams[0].deviceId);
+        setSelectedDeviceId(localStorage.getItem('preferredCameraId') || cams[0].deviceId);
       }
-    }).catch(() => {});
+    }).catch(error => {
+      setCamError(describeMediaError(error));
+    });
   }, []);
 
   /* stream 준비되면 video에 연결 (ref가 아직 없을 때 대비) */
@@ -77,17 +93,22 @@ export default function InterviewRobby({ role = "mentee" }) {
     video.play().catch(() => {});
   }, [stream]);
 
-  /* 카메라 초기화 - selectedDeviceId 변경 시마다 재실행 */
-  useEffect(() => {
-    if (!navigator.mediaDevices || !selectedDeviceId) return;
+  const startCameraPreview = useCallback((deviceId = selectedDeviceId) => {
+    const supportError = mediaSupportError();
+    if (supportError) {
+      setCamStatus("denied");
+      setCamError(supportError);
+      return () => {};
+    }
+
     let cancelled = false;
     setCamStatus("loading");
+    setCamError("");
 
-    const videoConstraint = selectedDeviceId
-      ? { deviceId: { exact: selectedDeviceId } }
-      : true;
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
 
-    navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: true })
+    openAudioVideoStream(deviceId)
       .then(s => {
         if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = s;
@@ -98,15 +119,22 @@ export default function InterviewRobby({ role = "mentee" }) {
         }
         setStream(s);
         setCamStatus("ok");
-        localStorage.setItem('preferredCameraId', selectedDeviceId);
+        const actualDeviceId = getStreamVideoDeviceId(s);
+        if (actualDeviceId) {
+          localStorage.setItem('preferredCameraId', actualDeviceId);
+          if (actualDeviceId !== deviceId) setSelectedDeviceId(actualDeviceId);
+        }
         /* 권한 허용 후 카메라 목록 레이블 갱신 */
-        navigator.mediaDevices.enumerateDevices().then(devices => {
-          const cams = devices.filter(d => d.kind === "videoinput");
+        getVideoInputDevices().then(cams => {
           setVideoDevices(cams);
         }).catch(() => {});
       })
-      .catch(() => {
-        if (!cancelled) setCamStatus("denied");
+      .catch(error => {
+        if (!cancelled) {
+          setCamStatus("denied");
+          setCamError(describeMediaError(error));
+          if (deviceId) localStorage.removeItem('preferredCameraId');
+        }
       });
     return () => {
       cancelled = true;
@@ -114,6 +142,9 @@ export default function InterviewRobby({ role = "mentee" }) {
       streamRef.current = null;
     };
   }, [selectedDeviceId]);
+
+  /* 카메라 초기화 - selectedDeviceId 변경 시마다 재실행 */
+  useEffect(() => startCameraPreview(selectedDeviceId), [selectedDeviceId, startCameraPreview]);
 
   /* 마이크 트랙 활성/비활성 */
   useEffect(() => {
@@ -298,26 +329,33 @@ export default function InterviewRobby({ role = "mentee" }) {
   const handleEnter = async () => {
     setEntering(true);
     const isRealSession = id && /^\d+$/.test(id);
-    try {
-      if (isRealSession) {
-        await joinSession(id);
-        if (role === "mentor") await updateSessionStatus(id, "in_progress");
+    if (isRealSession) {
+      try { await joinSession(id); } catch {}
+      if (role === "mentor") {
+        try { await updateSessionStatus(id, "in_progress"); } catch {}
       }
-    } catch {}
+    }
     navigate(role === "mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
   };
 
+  const scheduledAt = sessionData?.scheduledAt ?? sessionData?.scheduled_at ?? "";
+  const mentorName = sessionData?.mentorName ?? sessionData?.mentor_name ?? "멘토";
+  const menteeFromParticipants = sessionData?.participants?.find?.(p => p.role === "mentee");
+  const menteeName = sessionData?.menteeName ?? sessionData?.mentee_name ?? menteeFromParticipants?.name ?? "멘티";
+  const mentorInfo = sessionData?.mentorInfo ?? sessionData?.mentor_info ?? "면접 준비를 함께 진행합니다.";
+  const menteeGoal = sessionData?.menteeGoal ?? sessionData?.mentee_goal ?? "멘토에게 전달한 자소서와 지원 정보를 바탕으로 면접을 준비합니다.";
+
   /* API 데이터 우선, 없으면 fallback */
   const session = {
-    title:       sessionData?.title       ?? "세션 로딩 중...",
-    date:        sessionData?.scheduledAt ?? "",
-    type:        sessionData?.sessionType ?? "1:1 개인 세션",
-    menteeName:  sessionData?.menteeName  ?? "",
-    menteeInfo:  sessionData?.menteeInfo  ?? "",
-    menteeGoal:  sessionData?.menteeGoal  ?? "",
-    aiReport:    sessionData?.aiReport    ?? "",
-    mentorName:  sessionData?.mentorName  ?? "",
-    mentorInfo:  sessionData?.mentorInfo  ?? "",
+    title:       sessionData?.title ?? (sessionData?.job_category ? `${sessionData.job_category} 모의 면접` : "세션 로딩 중..."),
+    date:        scheduledAt,
+    type:        sessionData?.sessionType ?? sessionData?.session_type ?? "1:1 개인 세션",
+    menteeName,
+    menteeInfo:  sessionData?.menteeInfo ?? sessionData?.mentee_info ?? "",
+    menteeGoal,
+    aiReport:    sessionData?.aiReport ?? sessionData?.ai_report ?? "멘티의 자기소개서와 지원 정보를 기반으로 추천 질문을 확인하세요.",
+    mentorName,
+    mentorInfo,
   };
 
   const isMentor = role === "mentor";
@@ -391,8 +429,28 @@ export default function InterviewRobby({ role = "mentee" }) {
                     }
                   </div>
                   <p style={{ fontSize:12, color:"rgba(255,255,255,0.35)" }}>
-                    {camStatus==="denied" ? "카메라 권한이 거부됐어요" : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
+                    {camStatus==="denied" ? (camError || "카메라 권한이 거부됐어요") : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
                   </p>
+                  {camStatus==="denied" && (
+                    <button
+                      type="button"
+                      onClick={() => startCameraPreview("")}
+                      style={{
+                        marginTop: 12,
+                        padding: "8px 14px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.24)",
+                        background: "rgba(255,255,255,0.12)",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      카메라 권한 다시 요청
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -531,7 +589,7 @@ export default function InterviewRobby({ role = "mentee" }) {
             overflowY:"auto",
           }}>
             {/* 장치 테스트 안내 배너 */}
-            {(!camStatus === "ok" || !micOk) && (
+            {(camStatus !== "ok" || !micOk) && (
               <div style={{
                 background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)",
                 borderRadius:10, padding:"10px 14px",
@@ -574,7 +632,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                   display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:13, fontWeight:700, color:"#fff", flexShrink:0,
                 }}>
-                  {isMentor ? session.menteeName[0] : session.mentorName[0]}
+                  {(isMentor ? session.menteeName : session.mentorName)?.[0] ?? "?"}
                 </div>
                 <div>
                   <p style={{ fontSize:14, fontWeight:700, color:"#fff" }}>
@@ -791,7 +849,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                                 </span>
                               </div>
                               <textarea
-                                value={item.content}
+                                value={item.content ?? ""}
                                 onChange={event => handleRecommendedQuestionChange(i, event.target.value)}
                                 rows={2}
                                 style={{

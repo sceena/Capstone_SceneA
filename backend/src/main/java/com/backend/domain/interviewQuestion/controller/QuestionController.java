@@ -24,7 +24,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
 
 import java.util.List;
 
@@ -52,6 +55,21 @@ public class QuestionController {
             @RequestBody QuestionCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(questionService.createQuestions(mentorId, id, request));
+    }
+
+    @Operation(summary = "면접 중 멘토 질문 오디오 업로드", description = "멘토가 실제로 말한 질문 오디오를 저장하고 STT로 질문 텍스트를 생성한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "질문 오디오 저장 성공"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "세션 없음")
+    })
+    @PostMapping(value = "/audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<QuestionCreateResponse> uploadQuestionAudio(
+            @AuthenticationPrincipal Long mentorId,
+            @PathVariable Long id,
+            @RequestPart("audio") MultipartFile audio) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(questionService.uploadQuestionAudio(mentorId, id, audio));
     }
 
     @Operation(summary = "AI 추천 질문 생성", description = "지원자 제출 서류를 기반으로 공통 질문과 지원자별 개인 질문을 생성한다.")

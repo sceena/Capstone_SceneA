@@ -45,6 +45,8 @@ class InterviewAnswer(BaseModel):
     question_id: int = Field(validation_alias=AliasChoices("question_id", "questionId"))
     question: str
     answer_id: int | None = Field(default=None, validation_alias=AliasChoices("answer_id", "answerId"))
+    mentee_id: int | None = Field(default=None, validation_alias=AliasChoices("mentee_id", "menteeId"))
+    mentee_name: str | None = Field(default=None, validation_alias=AliasChoices("mentee_name", "menteeName"))
     answer: str | None = None
     audio_url: str | None = Field(default=None, validation_alias=AliasChoices("audio_url", "audioUrl"))
     answer_start: str | None = Field(default=None, validation_alias=AliasChoices("answer_start", "answerStart"))
@@ -96,6 +98,9 @@ class Replay(BaseModel):
 
 class QuestionReport(BaseModel):
     question_id: int
+    answer_id: int | None = None
+    mentee_id: int | None = None
+    mentee_name: str | None = None
     question: str
     answer: str
     score: float
@@ -103,6 +108,8 @@ class QuestionReport(BaseModel):
     strengths: list[str]
     improvements: list[str]
     evaluation_source: str
+    ai_model_name: str
+    prompt_version: str
     replay: Replay
 
 

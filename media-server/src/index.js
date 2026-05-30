@@ -97,6 +97,7 @@ io.on('connection', (socket) => {
       callback({
         rtpCapabilities: room.router.rtpCapabilities,
         existingProducers, // 이미 방에 있는 참여자의 producer 목록
+        activeQuestion: room.activeQuestion,
       });
     } catch (err) {
       console.error('join error:', err);
@@ -227,6 +228,19 @@ io.on('connection', (socket) => {
     currentRoom.getOtherPeers(currentPeerId).forEach(({ socket: otherSocket }) => {
       otherSocket.emit('reportSync', { index });
     });
+  });
+
+  // 8. 면접 중 실제 질문 공유 (멘토가 직접 말한 질문 텍스트 기준)
+  socket.on('activeQuestion', ({ question }, callback) => {
+    if (!currentRoom || !currentPeerId) {
+      if (callback) callback({ error: '방에 먼저 입장하세요.' });
+      return;
+    }
+    currentRoom.activeQuestion = question || null;
+    currentRoom.getOtherPeers(currentPeerId).forEach(({ socket: otherSocket }) => {
+      otherSocket.emit('activeQuestion', { question: currentRoom.activeQuestion });
+    });
+    if (callback) callback({ ok: true });
   });
 
   // 연결 해제

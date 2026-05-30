@@ -6,7 +6,7 @@ const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
 const CARD = "#FFFFFF";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://54.116.176.242:8080";
 const USE_MOCK_REPORT =
   import.meta.env.VITE_USE_MOCK_REPORT === "false"
     ? false

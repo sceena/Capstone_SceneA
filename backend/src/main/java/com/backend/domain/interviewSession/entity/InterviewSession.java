@@ -54,6 +54,15 @@ public class InterviewSession extends BaseEntity {
         }
     }
 
+    public void markPending() {
+        this.status = SessionStatus.PENDING;
+    }
+
+    public void confirmSchedule(LocalDateTime scheduledAt) {
+        this.status = SessionStatus.SCHEDULED;
+        this.scheduledAt = scheduledAt;
+    }
+
     public void reschedule(LocalDateTime scheduledAt) {
         this.scheduledAt = scheduledAt;
     }

@@ -104,7 +104,7 @@ public class ReservationService {
                         .build();
                 interviewSessionRepository.save(session);
             } else {
-                session.reschedule(reservation.getMentorAvailability().getStartTime());
+                session.confirmSchedule(reservation.getMentorAvailability().getStartTime());
             }
         } else {
             reservation.cancel();

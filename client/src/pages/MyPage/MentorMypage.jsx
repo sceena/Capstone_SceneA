@@ -415,13 +415,21 @@ export default function MentorMyPage() {
           </div>
           <div style={{ display:"flex", gap:10 }}>
             <button onClick={()=>navigate("/mentor/register")} style={{
-              padding:"10px 18px", background:C.white, color:C.text,
-              border:`1.5px solid ${C.border}`, borderRadius:8,
-              fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+              padding:"12px 24px", background:C.navy, color:C.white,
+              border:"none", borderRadius:10,
+              fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
+              display:"flex", alignItems:"center", gap:8,
+              boxShadow:"0 2px 8px rgba(13,34,68,0.18)",
+              transition:"background 0.18s, transform 0.15s",
             }}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-            >가능 시간 관리</button>
+              onMouseEnter={e=>{ e.currentTarget.style.background=C.accent; e.currentTarget.style.transform="translateY(-1px)"; }}
+              onMouseLeave={e=>{ e.currentTarget.style.background=C.navy; e.currentTarget.style.transform="translateY(0)"; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/>
+              </svg>
+              멘토 등록 / 가능 시간 관리
+            </button>
             <button onClick={()=>setShowEdit(true)} style={{
               padding:"10px 18px", background:C.white, color:C.text,
               border:`1.5px solid ${C.border}`, borderRadius:8,

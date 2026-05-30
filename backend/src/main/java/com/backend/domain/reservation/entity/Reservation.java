@@ -43,6 +43,10 @@ public class Reservation extends BaseEntity {
         this.status = ReservationStatus.CONFIRMED;
     }
 
+    public void linkSession(InterviewSession session) {
+        this.interviewSession = session;
+    }
+
     public void cancel() {
         this.status = ReservationStatus.CANCELLED;
         this.mentorAvailability.unbook();

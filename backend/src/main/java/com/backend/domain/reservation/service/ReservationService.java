@@ -109,6 +109,13 @@ public class ReservationService {
                         .scheduledAt(reservation.getMentorAvailability().getStartTime())
                         .build();
                 interviewSessionRepository.save(session);
+                reservation.linkSession(session);
+
+                SessionParticipant participant = SessionParticipant.builder()
+                        .interviewSession(session)
+                        .member(reservation.getMentee())
+                        .build();
+                participantRepository.save(participant);
             } else {
                 session.confirmSchedule(reservation.getMentorAvailability().getStartTime());
             }

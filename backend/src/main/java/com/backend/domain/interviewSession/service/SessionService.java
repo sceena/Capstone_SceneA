@@ -11,6 +11,9 @@ import com.backend.domain.interviewSession.repository.SessionParticipantReposito
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.reservation.entity.Reservation;
+import com.backend.domain.reservation.entity.ReservationStatus;
+import com.backend.domain.reservation.repository.ReservationRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,7 @@ public class SessionService {
 
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
+    private final ReservationRepository reservationRepository;
     private final MemberRepository memberRepository;
 
     @Transactional
@@ -102,15 +106,28 @@ public class SessionService {
             page = sessionStatus != null
                     ? sessionRepository.findAllByMentorAndStatus(member, sessionStatus, pageable).map(this::toSummary)
                     : sessionRepository.findAllByMentor(member, pageable).map(this::toSummary);
+            return SessionListResponse.from(page);
         } else {
-            page = sessionStatus != null
-                    ? participantRepository.findAllByMemberAndInterviewSession_Status(member, sessionStatus, pageable)
-                        .map(p -> toSummary(p.getInterviewSession()))
-                    : participantRepository.findAllByMember(member, pageable)
-                        .map(p -> toSummary(p.getInterviewSession()));
-        }
+            // 멘티: 참여자 목록 + 확정된 예약의 세션 합산
+            List<InterviewSession> participantSessions = participantRepository.findAllByMember(member)
+                    .stream().map(SessionParticipant::getInterviewSession).toList();
 
-        return SessionListResponse.from(page);
+            List<InterviewSession> reservationSessions = reservationRepository.findAllByMentee(member)
+                    .stream()
+                    .filter(r -> r.getStatus() == ReservationStatus.CONFIRMED)
+                    .map(Reservation::getInterviewSession)
+                    .filter(s -> s != null)
+                    .toList();
+
+            List<SessionSummaryResponse> all = java.util.stream.Stream
+                    .concat(participantSessions.stream(), reservationSessions.stream())
+                    .distinct()
+                    .filter(s -> sessionStatus == null || s.getStatus() == sessionStatus)
+                    .map(this::toSummary)
+                    .toList();
+
+            return new SessionListResponse(all, 0, all.size(), all.size(), 1);
+        }
     }
 
     private SessionSummaryResponse toSummary(InterviewSession session) {

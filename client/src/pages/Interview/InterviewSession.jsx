@@ -11,6 +11,7 @@ import {
 } from "../../utils/mediaDevices";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || undefined;
+const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
 
 /* ── 통합 비디오 타일 ── */
 function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false, micOff = false }) {
@@ -378,6 +379,7 @@ export default function InterviewSession({ role = "mentee" }) {
 
       /* 2. 소켓 연결 (reconnection 활성화) */
       socket = io(MEDIA_SERVER, {
+        path: MEDIA_SERVER_PATH,
         withCredentials: true,
         reconnection: true,
         reconnectionAttempts: 5,

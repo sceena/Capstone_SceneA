@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -141,7 +143,14 @@ public class SessionService {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
 
-        session.progressStatus();
+        SessionStatus requestedStatus = parseSessionStatus(request.status());
+        if (requestedStatus == SessionStatus.IN_PROGRESS) {
+            session.start();
+        } else if (requestedStatus == SessionStatus.COMPLETED) {
+            session.complete();
+        } else {
+            throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
+        }
 
         return SessionStatusResponse.from(session);
     }
@@ -154,8 +163,9 @@ public class SessionService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
 
-        if (participantRepository.existsByInterviewSessionAndMember(session, member)) {
-            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        Optional<SessionParticipant> existing = participantRepository.findByInterviewSessionAndMember(session, member);
+        if (existing.isPresent()) {
+            return SessionJoinResponse.from(existing.get());
         }
 
         AnswerStatus answerStatus = member.getRole() == Role.MENTEE ? AnswerStatus.WAITING : null;
@@ -184,10 +194,34 @@ public class SessionService {
         SessionParticipant participant = participantRepository.findByInterviewSessionAndMember(session, member)
                 .orElseThrow(() -> new CustomException(ErrorCode.INVALID_REQUEST));
 
-        AnswerStatus answerStatus = AnswerStatus.valueOf(request.answerStatus().toUpperCase());
+        AnswerStatus answerStatus = parseAnswerStatus(request.answerStatus());
         participant.updateAnswerStatus(answerStatus);
 
         return ParticipantStatusResponse.from(participant);
+    }
+
+    private SessionStatus parseSessionStatus(String status) {
+        if (status == null || status.isBlank()) {
+            throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
+        }
+        try {
+            return SessionStatus.valueOf(status.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
+        }
+    }
+
+    private AnswerStatus parseAnswerStatus(String status) {
+        if (status == null || status.isBlank()) {
+            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        }
+
+        return switch (status.toLowerCase(Locale.ROOT)) {
+            case "idle", "waiting" -> AnswerStatus.WAITING;
+            case "answering" -> AnswerStatus.ANSWERING;
+            case "done", "answering_done" -> AnswerStatus.ANSWERING_DONE;
+            default -> throw new CustomException(ErrorCode.INVALID_REQUEST);
+        };
     }
 
     private void validateSessionAccess(Long memberId, InterviewSession session) {

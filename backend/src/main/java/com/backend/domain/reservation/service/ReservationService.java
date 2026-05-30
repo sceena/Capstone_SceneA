@@ -17,6 +17,8 @@ import com.backend.domain.reservation.dto.response.ReservationSummaryResponse;
 import com.backend.domain.reservation.entity.Reservation;
 import com.backend.domain.reservation.entity.ReservationStatus;
 import com.backend.domain.reservation.repository.ReservationRepository;
+import com.backend.domain.resume.entity.Resume;
+import com.backend.domain.resume.repository.ResumeRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class ReservationService {
     private final MemberRepository memberRepository;
     private final InterviewSessionRepository interviewSessionRepository;
     private final SessionParticipantRepository participantRepository;
+    private final ResumeRepository resumeRepository;
 
     public List<ReservationSummaryResponse> getMentorReservations(Long mentorId, ReservationStatus status) {
         Member mentor = memberRepository.findById(mentorId)
@@ -85,6 +88,7 @@ public class ReservationService {
                 .mentorAvailability(availability)
                 .mentee(mentee)
                 .interviewSession(session)
+                .resumeContent(request.resumeContent())
                 .build();
 
         return ReservationResponse.from(reservationRepository.save(reservation));
@@ -120,6 +124,7 @@ public class ReservationService {
                 session.confirmSchedule(reservation.getMentorAvailability().getStartTime());
             }
             ensureMenteeParticipant(session, reservation.getMentee());
+            saveResumeIfPresent(session, reservation.getMentee(), reservation.getResumeContent());
         } else {
             reservation.cancel();
         }
@@ -136,6 +141,22 @@ public class ReservationService {
                 .interviewSession(session)
                 .member(mentee)
                 .answerStatus(AnswerStatus.WAITING)
+                .build());
+    }
+
+    private void saveResumeIfPresent(InterviewSession session, Member mentee, String resumeContent) {
+        if (resumeContent == null || resumeContent.isBlank()) {
+            return;
+        }
+
+        if (resumeRepository.findByInterviewSessionAndMember(session, mentee).isPresent()) {
+            return;
+        }
+
+        resumeRepository.save(Resume.builder()
+                .interviewSession(session)
+                .member(mentee)
+                .content(resumeContent)
                 .build());
     }
 }

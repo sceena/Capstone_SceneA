@@ -186,6 +186,7 @@ export default function MentorApply(){
       await requestReservation({
         mentor_id: mentor.id,
         availability_id: selectedSlot.id,
+        resume_content: resumeContent,
       });
     } catch (error) {
       alert(error?.message || "면접 신청에 실패했습니다.");

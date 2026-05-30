@@ -66,5 +66,7 @@ cloud:
       static: us-east-1
 
 ai:
+  server:
+    base-url: ${AI_SERVER_BASE_URL:https://crib-mutilator-uncle.ngrok-free.dev}
   question-generation:
-    allow-missing-resume-fallback: true
+    allow-missing-resume-fallback: false

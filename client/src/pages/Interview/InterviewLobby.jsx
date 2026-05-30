@@ -851,11 +851,11 @@ export default function InterviewRobby({ role = "mentee" }) {
                               <textarea
                                 value={item.content ?? ""}
                                 onChange={event => handleRecommendedQuestionChange(i, event.target.value)}
-                                rows={2}
+                                rows={Math.max(3, Math.ceil(String(item.content ?? "").length / 34))}
                                 style={{
                                   width: "100%",
-                                  resize: "vertical",
-                                  minHeight: 54,
+                                  resize: "none",
+                                  minHeight: 78,
                                   border: "1px solid rgba(255,255,255,0.1)",
                                   borderRadius: 7,
                                   padding: "7px 8px",
@@ -865,6 +865,8 @@ export default function InterviewRobby({ role = "mentee" }) {
                                   fontSize: 12,
                                   lineHeight: 1.55,
                                   outline: "none",
+                                  overflow: "hidden",
+                                  boxSizing: "border-box",
                                 }}
                               />
                             </div>

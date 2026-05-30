@@ -11,6 +11,7 @@ import {
 } from "../../utils/mediaDevices";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
+const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
 
 // ─── 상수 ────────────────────────────────────────────────────────
 const NAVY = "#0D2240";
@@ -530,7 +531,7 @@ export default function MentoringSessionPage() {
       recvTransportReadyRef.current = false;
       pendingProducersRef.current = [];
 
-      socket = io(MEDIA_SERVER, { withCredentials: true });
+      socket = io(MEDIA_SERVER, { path: MEDIA_SERVER_PATH, withCredentials: true });
       socketRef.current = socket;
 
       socket.emit("join", { sessionId, token }, async (res) => {

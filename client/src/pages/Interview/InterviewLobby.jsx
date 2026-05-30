@@ -4,8 +4,10 @@ import {
   createQuestions,
   getQuestions,
   getRecommendedQuestions,
+  getResumeSkills,
   getSession,
   joinSession,
+  saveResume,
   updateSessionStatus,
 } from "../../api/sessions";
 import {
@@ -46,6 +48,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [recommendLoading, setRecommendLoading] = useState(false);
   const [recommendSaving, setRecommendSaving] = useState(false);
   const [recommendError, setRecommendError] = useState("");
+  const [resumeSkills, setResumeSkills] = useState([]);
 
   /* ── 오디오 레벨 분석 ── */
   const [micLevel, setMicLevel] = useState(0);
@@ -62,6 +65,22 @@ export default function InterviewRobby({ role = "mentee" }) {
       getQuestions(id).then(data => {
         setQuestions(normalizeQuestionList(data));
       }).catch(() => {});
+      getResumeSkills(id).then(data => {
+        setResumeSkills(Array.isArray(data) ? data : []);
+      }).catch(() => {});
+    }
+    if (role === "mentee") {
+      const raw = localStorage.getItem("scena_resume_draft");
+      try {
+        const draft = JSON.parse(raw);
+        if (Array.isArray(draft)) {
+          const content = draft
+            .filter(item => item?.content?.trim())
+            .map(item => `[${item.title || "자기소개서"}]\n${item.content.trim()}`)
+            .join("\n\n");
+          if (content) saveResume(id, content).catch(() => {});
+        }
+      } catch {}
     }
   }, [id, role]);
 
@@ -194,39 +213,6 @@ export default function InterviewRobby({ role = "mentee" }) {
     return [];
   };
 
-  const buildMockRecommendedQuestions = () => ([
-    {
-      key: "mock-personal-0",
-      section: "개인 질문",
-      content: "프로젝트에서 사용한 기술을 선택할 때 가장 중요하게 고려한 기준은 무엇인가요?",
-      selected: true,
-    },
-    {
-      key: "mock-personal-1",
-      section: "개인 질문",
-      content: "개발 과정에서 예상하지 못한 문제가 발생했을 때 어떤 순서로 원인을 파악하셨나요?",
-      selected: true,
-    },
-    {
-      key: "mock-personal-2",
-      section: "개인 질문",
-      content: "Spring Boot 기반 프로젝트에서 본인이 맡은 핵심 역할과 구현 범위를 설명해 주세요.",
-      selected: true,
-    },
-    {
-      key: "mock-personal-3",
-      section: "개인 질문",
-      content: "데이터 조회 성능을 개선하기 위해 적용한 방법과 그 근거는 무엇인가요?",
-      selected: true,
-    },
-    {
-      key: "mock-personal-4",
-      section: "개인 질문",
-      content: "프로젝트를 다시 개선한다면 가장 먼저 보완하고 싶은 기술적 요소는 무엇인가요?",
-      selected: true,
-    },
-  ]);
-
   const flattenRecommendedQuestions = (data) => {
     const isGroup = data?.session_type === "GROUP";
     const commonItems = isGroup ? (data?.common_questions ?? []).map((content, index) => ({
@@ -250,12 +236,6 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   const handleLoadRecommendedQuestions = async () => {
     if (!id || recommendLoading) return;
-    if (!/^\d+$/.test(String(id))) {
-      setRecommendedQuestions(buildMockRecommendedQuestions());
-      setRecommendError("데모 세션이라 실제 AI 서버 호출 대신 예시 추천 질문을 표시합니다.");
-      return;
-    }
-
     setRecommendLoading(true);
     setRecommendError("");
     try {
@@ -296,15 +276,6 @@ export default function InterviewRobby({ role = "mentee" }) {
 
     if (contents.length === 0) {
       setRecommendError("저장할 질문을 하나 이상 선택해 주세요.");
-      return;
-    }
-
-    if (!/^\d+$/.test(String(id))) {
-      setQuestions(contents.map((content, index) => ({
-        id: `demo-recommended-${index}`,
-        content,
-      })));
-      setRecommendError("데모 세션이라 서버 저장 없이 화면에만 질문을 반영했습니다.");
       return;
     }
 
@@ -588,7 +559,7 @@ export default function InterviewRobby({ role = "mentee" }) {
             borderLeft:"1px solid rgba(255,255,255,0.08)",
             overflowY:"auto",
           }}>
-            {/* 장치 테스트 안내 배너 */}
+            {/* ⚠️ 장치 테스트 안내 배너 */}
             {(camStatus !== "ok" || !micOk) && (
               <div style={{
                 background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)",
@@ -598,7 +569,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                 <span style={{ fontSize:16, flexShrink:0 }}>⚠️</span>
                 <div>
                   <p style={{ fontSize:12, fontWeight:700, color:"#F59E0B", marginBottom:3 }}>
-                    카메라·오디오 테스트를 먼저 진행해주세요
+                    카메라·마이크 테스트를 먼저 진행해주세요
                   </p>
                   <p style={{ fontSize:11, color:"rgba(255,255,255,0.5)", lineHeight:1.6 }}>
                     왼쪽 화면에서 카메라 영상이 보이고, 마이크 레벨 바가 움직이는 것을 확인한 후 입장하세요.
@@ -607,59 +578,100 @@ export default function InterviewRobby({ role = "mentee" }) {
               </div>
             )}
 
-            {/* 세션 정보 */}
+            {/* 세션 제목 + 면접 종류 */}
             <div>
-              <p style={{ fontSize:10, fontWeight:600, letterSpacing:"0.15em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:10 }}>
-                SESSION BRIEFING
+              <p style={{ fontSize:10, fontWeight:600, letterSpacing:"0.15em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:8 }}>
+                SESSION INFO
               </p>
-              <h2 style={{ fontSize:20, fontWeight:700, color:"#fff", marginBottom:6, letterSpacing:"-0.02em" }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:"#fff", marginBottom:8, letterSpacing:"-0.02em" }}>
                 {session.title}
               </h2>
-              <p style={{ fontSize:12, color:"rgba(255,255,255,0.45)" }}>
-                {session.date} · {session.type}
-              </p>
+              <div style={{ display:"flex", gap:8 }}>
+                <span style={{
+                  fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99,
+                  background: session.type?.includes("그룹") ? "rgba(245,158,11,0.2)" : "rgba(29,158,117,0.2)",
+                  color: session.type?.includes("그룹") ? "#F59E0B" : C_teal,
+                  border: `1px solid ${session.type?.includes("그룹") ? "rgba(245,158,11,0.4)" : "rgba(29,158,117,0.4)"}`,
+                }}>
+                  {session.type?.includes("그룹") ? "그룹 면접" : "1:1 면접"}
+                </span>
+                {session.date && (
+                  <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", display:"flex", alignItems:"center" }}>
+                    {session.date}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* 상대방 정보 */}
-            <div style={{
-              background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px",
-              border:"1px solid rgba(255,255,255,0.1)",
-            }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                <div style={{
-                  width:36, height:36, borderRadius:"50%",
-                  background: isMentor ? "#1B4F7A" : "#0F6E56",
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:13, fontWeight:700, color:"#fff", flexShrink:0,
-                }}>
-                  {(isMentor ? session.menteeName : session.mentorName)?.[0] ?? "?"}
+            {/* 멘토 전용: 멘티 정보 + 자소서 */}
+            {isMentor && (
+              <div style={{
+                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px",
+                border:"1px solid rgba(255,255,255,0.1)",
+              }}>
+                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:10 }}>
+                  멘티 정보
+                </p>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                  <div style={{
+                    width:36, height:36, borderRadius:"50%",
+                    background:"#1B4F7A",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:13, fontWeight:700, color:"#fff", flexShrink:0,
+                  }}>
+                    {session.menteeName?.[0] ?? "?"}
+                  </div>
+                  <div>
+                    <p style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{session.menteeName} 멘티</p>
+                    <p style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>{session.menteeInfo || session.type}</p>
+                  </div>
                 </div>
-                <div>
-                  <p style={{ fontSize:14, fontWeight:700, color:"#fff" }}>
-                    {isMentor ? `${session.menteeName} 멘티` : `${session.mentorName} 멘토`}
+                {resumeSkills.length > 0 ? (
+                  <div>
+                    <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:6 }}>자소서 키워드</p>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                      {resumeSkills.slice(0, 10).map((skill, i) => (
+                        <span key={i} style={{
+                          fontSize:10, padding:"2px 8px", borderRadius:99,
+                          background:"rgba(29,158,117,0.15)", color:C_teal,
+                          border:"1px solid rgba(29,158,117,0.3)",
+                        }}>{skill?.name ?? skill}</span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ fontSize:11, color:"rgba(255,255,255,0.3)", fontStyle:"italic" }}>
+                    자소서 분석 정보가 없습니다
                   </p>
-                  <p style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>
-                    {isMentor ? session.menteeInfo : session.mentorInfo}
-                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 멘티 전용: 멘토 정보 */}
+            {!isMentor && (
+              <div style={{
+                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px",
+                border:"1px solid rgba(255,255,255,0.1)",
+              }}>
+                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:10 }}>
+                  담당 멘토
+                </p>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{
+                    width:36, height:36, borderRadius:"50%",
+                    background:"#0F6E56",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:13, fontWeight:700, color:"#fff", flexShrink:0,
+                  }}>
+                    {session.mentorName?.[0] ?? "?"}
+                  </div>
+                  <div>
+                    <p style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{session.mentorName} 멘토</p>
+                    <p style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>{session.mentorInfo}</p>
+                  </div>
                 </div>
               </div>
-              <p style={{ fontSize:12, color:"rgba(255,255,255,0.6)", lineHeight:1.7, fontStyle:"italic" }}>
-                {isMentor ? session.menteeGoal : `"${session.mentorInfo} 멘토님과 함께하는 1:1 모의 면접입니다."`}
-              </p>
-            </div>
-
-            {/* AI 사전 분석 리포트 */}
-            <div style={{
-              background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px",
-              border:"1px solid rgba(255,255,255,0.1)",
-            }}>
-              <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:8 }}>
-                AI 사전 분석 리포트
-              </p>
-              <p style={{ fontSize:12, color:"rgba(255,255,255,0.65)", lineHeight:1.75 }}>
-                {session.aiReport}
-              </p>
-            </div>
+            )}
 
             {/* ── 멘티 전용: 자소서 등록 확인 ── */}
             {!isMentor && (

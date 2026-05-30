@@ -86,7 +86,7 @@ const formatTimeLabel = (value) => {
   }).format(date);
 };
 
-const buildAvailabilityDates = (items) => {
+const buildAvailabilityDates = (items, sessionTypeFilter) => {
   const groups = new Map();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -95,7 +95,12 @@ const buildAvailabilityDates = (items) => {
     .filter(item => {
       const startTime = item.start_time ?? item.startTime;
       const startDate = new Date(startTime);
-      return !item.is_booked && !item.isBooked && !Number.isNaN(startDate.getTime()) && startDate >= tomorrow;
+      if (item.is_booked || item.isBooked || Number.isNaN(startDate.getTime()) || startDate < tomorrow) return false;
+      // 세션 타입별 필터링
+      const maxP = Number(item.max_participants ?? item.maxParticipants ?? 1);
+      if (sessionTypeFilter === "1:1" && maxP !== 1) return false;
+      if (sessionTypeFilter === "그룹" && maxP <= 1) return false;
+      return true;
     })
     .sort((a, b) => String(a.start_time ?? a.startTime).localeCompare(String(b.start_time ?? b.startTime)))
     .forEach(item => {
@@ -108,11 +113,16 @@ const buildAvailabilityDates = (items) => {
           times: [],
         });
       }
+      const maxP = Number(item.max_participants ?? item.maxParticipants ?? 1);
+      const currentP = Number(item.current_participants ?? item.currentParticipants ?? 0);
       groups.get(key).times.push({
         id: item.id,
         time: formatTimeLabel(startTime),
         startTime,
         endTime: item.end_time ?? item.endTime,
+        maxParticipants: maxP,
+        currentParticipants: currentP,
+        remainingSeats: maxP - currentP,
       });
     });
   return Array.from(groups.values());
@@ -136,10 +146,10 @@ export default function MentorApply(){
     tags: mentorFromState.tags?.map(tag => tag.name ?? tag) ?? MENTOR.tags,
   };
   const [sessType,setSessType]=useState("1:1");
-  const [participants,setParticipants]=useState(2);
   const [selDateIdx,setSelDateIdx]=useState(0);
   const [selTime,setSelTime]=useState("");
   const [availableDates,setAvailableDates]=useState([]);
+  const [rawAvailabilities,setRawAvailabilities]=useState([]);
   const [availabilityLoading,setAvailabilityLoading]=useState(true);
   const [availabilityError,setAvailabilityError]=useState("");
   const [loading,setLoading]=useState(false);
@@ -152,12 +162,14 @@ export default function MentorApply(){
     setAvailabilityError("");
     getMentorAvailabilities(mentor.id)
       .then(data => {
-        const nextDates = buildAvailabilityDates(data);
+        setRawAvailabilities(data);
+        const nextDates = buildAvailabilityDates(data, sessType);
         setAvailableDates(nextDates);
         setSelDateIdx(0);
         setSelTime("");
       })
       .catch(error => {
+        setRawAvailabilities([]);
         setAvailableDates([]);
         setSelTime("");
         setAvailabilityError(error?.message || "예약 가능 시간을 불러오지 못했습니다.");
@@ -165,9 +177,18 @@ export default function MentorApply(){
       .finally(() => setAvailabilityLoading(false));
   }, [mentor.id]);
 
+  // 세션 타입 변경 시 가용 시간 재필터링
+  useEffect(() => {
+    if (rawAvailabilities.length === 0) return;
+    const nextDates = buildAvailabilityDates(rawAvailabilities, sessType);
+    setAvailableDates(nextDates);
+    setSelDateIdx(0);
+    setSelTime("");
+  }, [sessType]);
+
   const selectedDate = availableDates[selDateIdx] ?? null;
   const selectedSlot = selectedDate?.times.find(slot => String(slot.id) === String(selTime)) ?? null;
-  const totalPoint=sessType==="그룹"?Math.round(mentor.point*participants*0.7):mentor.point;
+  const totalPoint=sessType==="그룹"?Math.round(mentor.point*0.7):mentor.point;
   const canSubmit=Boolean(selectedSlot) && !availabilityLoading && !loading;
 
   const handleSubmit=async()=>{
@@ -208,7 +229,7 @@ export default function MentorApply(){
           </div>
           <h2 style={{fontSize:26,fontWeight:700,color:C.text,marginBottom:10}}>신청이 완료됐어요!</h2>
           <p style={{fontSize:16,color:C.textSub,lineHeight:1.7,marginBottom:8}}><strong style={{color:C.navy}}>{mentor.name} 멘토</strong>님의 승인을 기다리고 있어요.</p>
-          <p style={{fontSize:14,color:C.textMuted,marginBottom:32}}>{selectedDate?.date} · {selectedSlot?.time} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
+          <p style={{fontSize:14,color:C.textMuted,marginBottom:32}}>{selectedDate?.date} · {selectedSlot?.time} · {sessType==="그룹"?"그룹 면접 연습":"1:1 집중 면접"}</p>
           <div style={{display:"flex",gap:10}}>
             <button onClick={()=>navigate("/mentor/search")} style={{flex:1,padding:"14px",background:C.white,color:C.text,border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:15,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>다른 멘토 보기</button>
             <button onClick={()=>navigate("/dashboard/mentee")} style={{flex:1,padding:"14px",background:C.navy,color:C.white,border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>대시보드로 이동</button>
@@ -289,23 +310,6 @@ export default function MentorApply(){
                 </div>
               </div>
 
-              {/* 참여 인원 (그룹만) */}
-              {sessType==="그룹"&&(
-                <div style={{padding:"24px 32px",borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
-                    <p style={{fontSize:16,fontWeight:600,color:C.text}}>참여 인원</p>
-                    <p style={{fontSize:16,fontWeight:700,color:C.navy}}>{participants}명 (본인 포함)</p>
-                  </div>
-                  <input type="range" min={2} max={mentor.maxCapacity} value={participants}
-                    onChange={e=>setParticipants(Number(e.target.value))}
-                    style={{width:"100%",accentColor:C.navy,cursor:"pointer"}}/>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
-                    {[2,3,4].map(n=><span key={n} style={{fontSize:13,color:n===participants?C.navy:C.textMuted,fontWeight:n===participants?700:400}}>{n}명{n===4?"(최대)":""}</span>)}
-                  </div>
-                  <p style={{fontSize:13,color:C.textMuted,marginTop:10}}>* 그룹 세션은 1인당 {Math.round(mentor.point*0.7)}P 적용</p>
-                </div>
-              )}
-
               {/* 02 일시 선택 */}
               <div style={{padding:"24px 32px 20px",borderBottom:`1px solid ${C.border}`}}>
                 <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:14}}>02 일시 선택 ({selectedDate?.date || "예약 가능 시간"})</p>
@@ -331,17 +335,27 @@ export default function MentorApply(){
               {/* 시간 선택 */}
               <div style={{padding:"20px 32px 24px",borderBottom:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-                  {(selectedDate?.times ?? []).map(t=>(
+                  {(selectedDate?.times ?? []).map(t=>{
+                    const isGroup = t.maxParticipants > 1;
+                    const isSel = String(selTime)===String(t.id);
+                    return (
                     <button key={t.id} type="button" onClick={()=>setSelTime(t.id)} style={{
-                      padding:"14px 0",flex:"1 0 calc(25% - 8px)",minWidth:72,
-                      background:String(selTime)===String(t.id)?"#111":C.white,
-                      color:String(selTime)===String(t.id)?C.white:C.text,
-                      border:`1.5px solid ${String(selTime)===String(t.id)?"#111":C.border}`,
+                      padding:isGroup?"10px 0":"14px 0",flex:"1 0 calc(25% - 8px)",minWidth:72,
+                      background:isSel?"#111":C.white,
+                      color:isSel?C.white:C.text,
+                      border:`1.5px solid ${isSel?"#111":C.border}`,
                       borderRadius:10,cursor:"pointer",
-                      fontSize:16,fontWeight:String(selTime)===String(t.id)?700:400,fontFamily:"inherit",
-                      transition:"all 0.18s",
-                    }}>{t.time}</button>
-                  ))}
+                      fontSize:16,fontWeight:isSel?700:400,fontFamily:"inherit",
+                      transition:"all 0.18s",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                    }}>
+                      <span>{t.time}</span>
+                      {isGroup && (
+                        <span style={{fontSize:11,color:isSel?"rgba(255,255,255,0.7)":C.teal,fontWeight:600}}>
+                          잔여 {t.remainingSeats}/{t.maxParticipants}석
+                        </span>
+                      )}
+                    </button>
+                  );})}
                 </div>
               </div>
 
@@ -374,7 +388,7 @@ export default function MentorApply(){
                 </div>
                 {selectedSlot&&(
                   <div style={{background:C.teal+"14",border:`1px solid ${C.teal}40`,borderRadius:10,padding:"12px 16px",marginBottom:14}}>
-                    <p style={{fontSize:15,color:C.teal,fontWeight:600}}>✓ {selectedDate?.date} · {selectedSlot.time} · {sessType==="그룹"?`그룹 ${participants}인`:"1:1 집중 면접"}</p>
+                    <p style={{fontSize:15,color:C.teal,fontWeight:600}}>✓ {selectedDate?.date} · {selectedSlot.time} · {sessType==="그룹"?"그룹 면접 연습":"1:1 집중 면접"}</p>
                   </div>
                 )}
                 <button onClick={canSubmit?handleSubmit:undefined} disabled={!canSubmit||loading} style={{

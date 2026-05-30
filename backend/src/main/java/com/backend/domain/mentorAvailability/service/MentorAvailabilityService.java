@@ -84,8 +84,13 @@ public class MentorAvailabilityService {
                 .mentor(mentor)
                 .startTime(request.startTime())
                 .endTime(request.endTime())
+                .maxParticipants(resolveMaxParticipants(request.maxParticipants()))
                 .build();
 
         return AvailabilityResponse.from(availabilityRepository.save(availability));
+    }
+
+    private int resolveMaxParticipants(Integer maxParticipants) {
+        return maxParticipants != null && maxParticipants == 4 ? 4 : 1;
     }
 }

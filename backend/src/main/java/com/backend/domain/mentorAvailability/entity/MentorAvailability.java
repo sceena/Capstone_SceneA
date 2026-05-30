@@ -29,11 +29,15 @@ public class MentorAvailability extends BaseEntity {
     @Column(nullable = false)
     private boolean isBooked = false;
 
+    @Column(nullable = false)
+    private int maxParticipants = 1;
+
     @Builder
-    public MentorAvailability(Member mentor, LocalDateTime startTime, LocalDateTime endTime) {
+    public MentorAvailability(Member mentor, LocalDateTime startTime, LocalDateTime endTime, Integer maxParticipants) {
         this.mentor = mentor;
         this.startTime = startTime;
         this.endTime = endTime;
+        this.maxParticipants = maxParticipants == null ? 1 : maxParticipants;
     }
 
     public void book() {

@@ -39,11 +39,11 @@ export async function getMentorAvailabilities(mentorId) {
   return Array.isArray(data) ? data : [];
 }
 
-export async function createMentorAvailability({ start_time, end_time }) {
+export async function createMentorAvailability({ start_time, end_time, max_participants }) {
   const res = await fetch("/api/availability", {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ start_time, end_time }),
+    body: JSON.stringify({ start_time, end_time, max_participants }),
   });
   if (!res.ok) throw new Error(await errorMessage(res, "예약 가능 시간 등록 실패"));
   return res.json();

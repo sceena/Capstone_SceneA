@@ -248,20 +248,6 @@ const Step2 = ({ data, onChange }) => (
 );
 
 /* ══════════════ STEP 3 — 정원·일정 설정 ══════════════ */
-const CapacityCard = ({ n, label, selected, onClick }) => (
-  <button type="button" onClick={onClick} style={{
-    flex:1, padding:"18px 8px", textAlign:"center",
-    background: selected ? C.white : C.bg,
-    border:`2px solid ${selected ? C.navy : C.border}`,
-    borderRadius:10, cursor:"pointer", fontFamily:"inherit",
-    transition:"all 0.18s",
-    boxShadow: selected ? "0 2px 12px rgba(13,34,68,0.12)" : "none",
-  }}>
-    <p style={{ fontSize:28, fontWeight:700, color: selected?C.navy:C.textMuted, marginBottom:4 }}>{n}</p>
-    <p style={{ fontSize:12, color: selected?C.textSub:C.textMuted }}>{label}</p>
-  </button>
-);
-
 const Step3 = ({ data, onChange }) => {
   const toggleSlot = (day, time) => {
     const key = `${day}-${time}`;
@@ -277,18 +263,29 @@ const Step3 = ({ data, onChange }) => {
         <p style={{ fontSize:13, color:C.textSub }}>최대 동시 예약 인원과 멘토링 가능한 시간대를 설정해주세요</p>
       </div>
 
-      {/* 정원 선택 */}
+      {/* 면접 유형 선택 */}
       <div>
-        <label style={{ fontSize:13, fontWeight:600, color:C.text, display:"block", marginBottom:12 }}>최대 동시 예약 인원</label>
+        <label style={{ fontSize:13, fontWeight:600, color:C.text, display:"block", marginBottom:12 }}>면접 유형</label>
         <div style={{ display:"flex", gap:10 }}>
-          {[{n:"1",l:"1:1 전용"},{n:"2",l:"최대 2인"},{n:"3",l:"최대 3인"},{n:"4",l:"최대 4인"}].map(c=>(
-            <CapacityCard key={c.n} n={c.n} label={c.l}
-              selected={data.capacity===c.n}
-              onClick={()=>onChange("capacity",c.n)}/>
+          {[
+            { v:"1",     l:"1:1 면접",  desc:"멘티 1명과 1대1 면접" },
+            { v:"group", l:"그룹 면접", desc:"2인 이상 동시 면접" },
+          ].map(c => (
+            <button key={c.v} type="button" onClick={() => onChange("capacity", c.v)} style={{
+              flex:1, padding:"20px 16px", textAlign:"center",
+              background: data.capacity===c.v ? C.white : C.bg,
+              border:`2px solid ${data.capacity===c.v ? C.navy : C.border}`,
+              borderRadius:10, cursor:"pointer", fontFamily:"inherit",
+              transition:"all 0.18s",
+              boxShadow: data.capacity===c.v ? "0 2px 12px rgba(13,34,68,0.12)" : "none",
+            }}>
+              <p style={{ fontSize:16, fontWeight:700, color: data.capacity===c.v ? C.navy : C.textMuted, marginBottom:4 }}>{c.l}</p>
+              <p style={{ fontSize:12, color: data.capacity===c.v ? C.textSub : C.textMuted }}>{c.desc}</p>
+            </button>
           ))}
         </div>
-        {parseInt(data.capacity)>=2 && (
-          <p style={{ fontSize:12, color:C.teal, marginTop:8 }}>✓ 2인 이상 선택 시 그룹 면접 모드가 활성화됩니다</p>
+        {data.capacity === "group" && (
+          <p style={{ fontSize:12, color:C.teal, marginTop:8 }}>✓ 그룹 면접 모드가 활성화됩니다</p>
         )}
       </div>
 
@@ -333,11 +330,11 @@ const Step3 = ({ data, onChange }) => {
         <div style={{ display:"flex", gap:16, marginTop:10 }}>
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             <div style={{ width:10, height:10, borderRadius:2, background:"#111" }}/>
-            <span style={{ fontSize:11, color:C.textMuted }}>확정 슬롯</span>
+            <span style={{ fontSize:11, color:C.textMuted }}>선택된 슬롯 (저장됨)</span>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             <div style={{ width:10, height:10, borderRadius:2, background:C.creamDark, border:`1px solid ${C.border}` }}/>
-            <span style={{ fontSize:11, color:C.textMuted }}>임시 가능 슬롯 — 클릭으로 선택/해제</span>
+            <span style={{ fontSize:11, color:C.textMuted }}>미선택 — 클릭으로 추가</span>
           </div>
         </div>
       </div>
@@ -416,7 +413,7 @@ const Step4 = ({ d1, d2, d3 }) => {
       </div>
       <div style={{ background:C.white, borderRadius:14, padding:"20px 24px", border:`1px solid ${C.border}` }}>
         <p style={{ fontSize:12, fontWeight:700, color:C.textMuted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:4 }}>일정·정원</p>
-        <ReviewRow label="최대 인원" value={`${d3.capacity}인`}/>
+        <ReviewRow label="면접 유형" value={d3.capacity === "1" ? "1:1 면접" : "그룹 면접"}/>
         <ReviewRow label="세션 길이" value={d3.duration}/>
         <ReviewRow label="포인트" value={`${d3.point} P / 세션`}/>
         <ReviewRow label="가능 슬롯" value={`${confirmedSlots}개 시간대 선택됨`}/>
@@ -492,8 +489,7 @@ export default function MentorInfoRegister() {
 
       navigate("/dashboard/mentor");
     } catch (err) {
-      console.error("멘토 등록 실패:", err);
-      alert("등록 중 오류가 발생했어요. 다시 시도해주세요.");
+      alert(err?.message || "등록 중 오류가 발생했어요. 다시 시도해주세요.");
     } finally {
       setLoading(false);
     }

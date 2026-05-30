@@ -4,6 +4,7 @@ import { requestReservation } from "../../api/reservations";
 import { createSession, saveJobPosting, saveResume } from "../../api/sessions";
 import useAuthStore from "../../store/authStore";
 import { getAvatar } from "../../utils/avatar";
+import { getMentorAvailabilities } from "../../api/users";
 
 const C = {
   navy:"#0D2240",navyMid:"#1B4F7A",cream:"#F2EDE4",creamDark:"#E8E0D0",
@@ -62,6 +63,7 @@ const getStoredResumeContent = () => {
 export default function MentorApply(){
   const navigate=useNavigate();
   const { state: navState } = useLocation();
+  const { id: mentorId } = useParams();
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
   const mentor=navState?.mentor;
@@ -71,14 +73,26 @@ export default function MentorApply(){
   const [selAvailabilityId,setSelAvailabilityId]=useState(null);
   const [loading,setLoading]=useState(false);
   const [submitted,setSubmitted]=useState(false);
+  const [availabilities, setAvailabilities] = useState(mentor?.availabilities ?? []);
+  const [availLoading, setAvailLoading] = useState(true);
 
-  const groupedAvailabilities = groupAvailabilityByDate(mentor?.availabilities);
+  useEffect(() => {
+    const id = mentorId || mentor?.id;
+    if (!id) { setAvailLoading(false); return; }
+    setAvailLoading(true);
+    getMentorAvailabilities(id)
+      .then(data => setAvailabilities(data))
+      .catch(() => setAvailabilities(mentor?.availabilities ?? []))
+      .finally(() => setAvailLoading(false));
+  }, [mentorId, mentor?.id]);
+
+  const groupedAvailabilities = groupAvailabilityByDate(availabilities);
   const availableDates = Object.keys(groupedAvailabilities).sort();
   const currentDate = selDate || availableDates[0] || "";
   const currentTimeSlots = groupedAvailabilities[currentDate] || [];
   const maxCapacity = mentor?.maxCapacity ?? 4;
   const canSubmit=selAvailabilityId!==null;
-  const selectedAvailability = mentor?.availabilities?.find(a => a.id === selAvailabilityId);
+  const selectedAvailability = availabilities.find(a => a.id === selAvailabilityId);
 
   useEffect(() => {
     if (!selDate && availableDates.length > 0) {
@@ -244,25 +258,32 @@ export default function MentorApply(){
               {/* 02 일시 선택 */}
               <div style={{padding:"24px 32px 20px",borderBottom:`1px solid ${C.border}`}}>
                 <p style={{fontSize:13,fontWeight:700,color:C.textMuted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:14}}>02 일시 선택</p>
-                <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-                  {availableDates.map((date)=>(
-                    <button key={date} type="button" onClick={()=>{setSelDate(date);setSelAvailabilityId(null);}} style={{
-                      padding:"10px 18px",
-                      background:currentDate===date?C.navy:C.bg,
-                      color:currentDate===date?C.white:C.textSub,
-                      border:`1px solid ${currentDate===date?C.navy:C.border}`,
-                      borderRadius:8,cursor:"pointer",
-                      fontSize:14,fontWeight:currentDate===date?700:400,fontFamily:"inherit",transition:"all 0.15s",
-                    }}>{date}</button>
-                  ))}
-                </div>
+                {availLoading ? (
+                  <p style={{fontSize:14,color:C.textMuted}}>가용 시간 불러오는 중...</p>
+                ) : availableDates.length === 0 ? (
+                  <p style={{fontSize:14,color:C.textMuted}}>현재 예약 가능한 시간이 없어요.</p>
+                ) : (
+                  <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+                    {availableDates.map((date)=>(
+                      <button key={date} type="button" onClick={()=>{setSelDate(date);setSelAvailabilityId(null);}} style={{
+                        padding:"10px 18px",
+                        background:currentDate===date?C.navy:C.bg,
+                        color:currentDate===date?C.white:C.textSub,
+                        border:`1px solid ${currentDate===date?C.navy:C.border}`,
+                        borderRadius:8,cursor:"pointer",
+                        fontSize:14,fontWeight:currentDate===date?700:400,fontFamily:"inherit",transition:"all 0.15s",
+                      }}>{date}</button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 시간 선택 */}
+              {!availLoading && currentTimeSlots.length > 0 && (
               <div style={{padding:"20px 32px 24px",borderBottom:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
                   {currentTimeSlots.map(slot=>(
-                    <button key={slot.id} type="button" onClick={()=>setSelAvailabilityId(slot.id)} style={{
+                    <button key={slot.id} type="button" onClick={()=>!slot.is_booked&&setSelAvailabilityId(slot.id)} style={{
                       padding:"14px 0",flex:"1 0 calc(25% - 8px)",minWidth:72,
                       background:selAvailabilityId===slot.id?"#111":C.white,
                       color:selAvailabilityId===slot.id?C.white:C.text,
@@ -270,11 +291,12 @@ export default function MentorApply(){
                       borderRadius:10,cursor:slot.is_booked?"not-allowed":"pointer",
                       fontSize:16,fontWeight:selAvailabilityId===slot.id?700:400,fontFamily:"inherit",
                       transition:"all 0.18s",
-                      opacity:slot.is_booked?0.5:1,
+                      opacity:slot.is_booked?0.4:1,
                     }} disabled={slot.is_booked}>{new Date(slot.start_time).toLocaleTimeString('ko-KR',{hour:"2-digit",minute:"2-digit"})}</button>
                   ))}
                 </div>
               </div>
+              )}
 
               {/* 포인트 + 신청 버튼 */}
               <div style={{padding:"24px 32px",background:C.bg}}>

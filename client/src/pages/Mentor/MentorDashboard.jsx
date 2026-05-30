@@ -440,8 +440,6 @@ export default function MentorDashboard() {
   }, []);
   useEffect(() => {
     loadReservationRequests();
-    const intervalId = setInterval(loadReservationRequests, 5000);
-    return () => clearInterval(intervalId);
   }, [loadReservationRequests]);
 
   const upcoming = rawSessions

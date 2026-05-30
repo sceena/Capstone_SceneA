@@ -28,10 +28,21 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             join fetch r.mentee
             left join fetch r.interviewSession
             where a.mentor = :mentor
-              and (:status is null or r.status = :status)
             order by a.startTime asc
             """)
-    List<Reservation> findMentorReservations(
+    List<Reservation> findMentorReservations(@Param("mentor") Member mentor);
+
+    @Query("""
+            select r
+            from Reservation r
+            join fetch r.mentorAvailability a
+            join fetch r.mentee
+            left join fetch r.interviewSession
+            where a.mentor = :mentor
+              and r.status = :status
+            order by a.startTime asc
+            """)
+    List<Reservation> findMentorReservationsByStatus(
             @Param("mentor") Member mentor,
             @Param("status") ReservationStatus status
     );

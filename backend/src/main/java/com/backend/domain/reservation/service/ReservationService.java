@@ -1,5 +1,6 @@
 package com.backend.domain.reservation.service;
 
+import com.backend.domain.interviewSession.entity.AnswerStatus;
 import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.interviewSession.entity.SessionParticipant;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
@@ -118,10 +119,23 @@ public class ReservationService {
             } else {
                 session.confirmSchedule(reservation.getMentorAvailability().getStartTime());
             }
+            ensureMenteeParticipant(session, reservation.getMentee());
         } else {
             reservation.cancel();
         }
 
         return ReservationAcceptResponse.from(reservation);
+    }
+
+    private void ensureMenteeParticipant(InterviewSession session, Member mentee) {
+        if (participantRepository.existsByInterviewSessionAndMember(session, mentee)) {
+            return;
+        }
+
+        participantRepository.save(SessionParticipant.builder()
+                .interviewSession(session)
+                .member(mentee)
+                .answerStatus(AnswerStatus.WAITING)
+                .build());
     }
 }

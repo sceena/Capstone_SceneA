@@ -44,13 +44,37 @@ public class InterviewSession extends BaseEntity {
 
     public void progressStatus() {
         if (this.status == SessionStatus.SCHEDULED) {
-            this.status = SessionStatus.IN_PROGRESS;
-            this.startedAt = LocalDateTime.now();
+            start();
         } else if (this.status == SessionStatus.IN_PROGRESS) {
-            this.status = SessionStatus.COMPLETED;
-            this.endedAt = LocalDateTime.now();
+            complete();
         } else {
             throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
+        }
+    }
+
+    public void start() {
+        if (this.status == SessionStatus.IN_PROGRESS) {
+            return;
+        }
+        if (this.status != SessionStatus.SCHEDULED) {
+            throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
+        }
+        this.status = SessionStatus.IN_PROGRESS;
+        if (this.startedAt == null) {
+            this.startedAt = LocalDateTime.now();
+        }
+    }
+
+    public void complete() {
+        if (this.status == SessionStatus.COMPLETED) {
+            return;
+        }
+        if (this.status != SessionStatus.IN_PROGRESS) {
+            throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
+        }
+        this.status = SessionStatus.COMPLETED;
+        if (this.endedAt == null) {
+            this.endedAt = LocalDateTime.now();
         }
     }
 

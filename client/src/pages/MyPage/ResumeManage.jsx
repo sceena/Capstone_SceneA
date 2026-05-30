@@ -166,15 +166,32 @@ export default function ResumeManage() {
 
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
+  const validateItems = () => {
+    const missingTitleIndex = items.findIndex(it => it.content.trim() && !it.title.trim());
+    if (missingTitleIndex >= 0) {
+      alert(`${missingTitleIndex + 1}번 자기소개서 문항의 제목을 입력해 주세요.`);
+      return false;
+    }
+    return true;
+  };
+
+  const getFilledItems = () =>
+    items
+      .filter(it => it.content.trim())
+      .map(it => ({ title: it.title.trim(), content: it.content.trim() }));
+
   const handleSave = () => {
+    if (!validateItems()) return;
     localStorage.setItem(draftKey, JSON.stringify(items));
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
 
   const handleComplete = () => {
+    if (!validateItems()) return;
+    const filledItems = getFilledItems();
     localStorage.setItem(draftKey, JSON.stringify(items));
-    const resumeContent = items.map(it => `[${it.title}]\n${it.content}`).join("\n\n");
+    const resumeContent = filledItems.map(it => `[${it.title}]\n${it.content}`).join("\n\n");
     navigate("/mentor/search", {
       state: {
         jobPosting: { jobPostingUrl: jobUrl, rawText: jobUrl },

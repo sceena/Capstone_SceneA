@@ -195,10 +195,6 @@ export default function MentorApply(){
         sessionId = session?.id;
       } catch {}
 
-      if (!sessionId) {
-        throw new Error("세션 생성에 실패했습니다.");
-      }
-
       if (sessionId && jobPosting?.company) {
         try {
           const jp = await saveJobPosting(sessionId, {

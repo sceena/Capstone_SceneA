@@ -5,6 +5,7 @@ class Room {
     // peerId -> { socket, sendTransport, recvTransports, producers, consumers }
     this.peers = new Map();
     this.activeQuestion = null;
+    this.activeRecorder = null;
   }
 
   addPeer(peerId, socket) {
@@ -58,6 +59,27 @@ class Room {
 
   isEmpty() {
     return this.peers.size === 0;
+  }
+
+  startRecording(peerId, payload = {}) {
+    if (this.activeRecorder && this.activeRecorder.peerId !== peerId) {
+      return { ok: false, activeRecorder: this.activeRecorder };
+    }
+
+    this.activeRecorder = {
+      peerId,
+      recordingType: payload.recordingType || 'UNKNOWN',
+      targetMenteeId: payload.targetMenteeId || null,
+      startedAt: new Date().toISOString(),
+    };
+    return { ok: true, activeRecorder: this.activeRecorder };
+  }
+
+  stopRecording(peerId) {
+    if (this.activeRecorder?.peerId === peerId) {
+      this.activeRecorder = null;
+    }
+    return this.activeRecorder;
   }
 }
 

@@ -7,10 +7,7 @@ const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
 const CARD = "#FFFFFF";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-const USE_MOCK_REPORT =
-  import.meta.env.VITE_USE_MOCK_REPORT === "false"
-    ? false
-    : import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_REPORT === "true";
+const USE_MOCK_REPORT = import.meta.env.VITE_USE_MOCK_REPORT === "true";
 const LOADING_STEPS = [
   "음성 데이터 분석 중...",
   "WPM · 침묵 구간 측정 중...",

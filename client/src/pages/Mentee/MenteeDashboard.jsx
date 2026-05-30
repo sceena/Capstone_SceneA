@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
-import { getMySessions } from "../../api/sessions";
+import { getMySessions, joinSession } from "../../api/sessions";
 
 /* ============================================================
    멘티 대시보드  (pages/Dashboard/MenteeDashboard.jsx)
@@ -294,6 +294,20 @@ export default function MenteeDashboard() {
 
   const [sessions, setSessions] = useState([]);
   const [unreadFinals, setUnreadFinals] = useState([]);
+  const [joinId, setJoinId] = useState("");
+  const [joining, setJoining] = useState(false);
+
+  const handleJoin = async () => {
+    if (!joinId.trim()) return;
+    setJoining(true);
+    try {
+      await joinSession(joinId.trim());
+      navigate(`/interview/ready/${joinId.trim()}`);
+    } catch {
+      alert("세션을 찾을 수 없거나 참여할 수 없습니다.");
+      setJoining(false);
+    }
+  };
 
   useEffect(() => {
     getMySessions()
@@ -405,6 +419,40 @@ export default function MenteeDashboard() {
             </button>
           </div>
         ))}
+
+        {/* ── 세션 ID로 참여 ── */}
+        <div style={{
+          background:C.white, border:`1.5px solid ${C.navy}`,
+          borderRadius:14, padding:"20px 24px", marginBottom:24,
+          display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
+        }}>
+          <div style={{ flex:1, minWidth:200 }}>
+            <p style={{ fontSize:15, fontWeight:700, color:C.navy, marginBottom:4 }}>세션 ID로 바로 참여하기</p>
+            <p style={{ fontSize:12, color:C.textMuted }}>멘토에게 받은 세션 ID를 입력하세요</p>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <input
+              value={joinId}
+              onChange={e => setJoinId(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleJoin()}
+              placeholder="세션 ID 입력"
+              style={{
+                padding:"10px 14px", borderRadius:8, border:`1.5px solid ${C.border}`,
+                fontSize:14, fontFamily:"inherit", outline:"none", width:140,
+              }}
+              onFocus={e => e.target.style.borderColor=C.navy}
+              onBlur={e => e.target.style.borderColor=C.border}
+            />
+            <button onClick={handleJoin} disabled={joining || !joinId.trim()} style={{
+              padding:"10px 20px", background:C.navy, color:C.white,
+              border:"none", borderRadius:8, fontSize:14, fontWeight:700,
+              cursor:"pointer", fontFamily:"inherit",
+              opacity: joining || !joinId.trim() ? 0.5 : 1,
+            }}>
+              {joining ? "참여 중..." : "참여하기"}
+            </button>
+          </div>
+        </div>
 
         {/* ── 자소서 업로드 안내 배너 (면접 확정 시) ── */}
         {scheduledSessions.length > 0 && (

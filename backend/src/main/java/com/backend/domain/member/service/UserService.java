@@ -14,6 +14,7 @@ import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
 import com.backend.domain.tag.dto.TagRequest;
 import com.backend.domain.tag.entity.MemberTag;
 import com.backend.domain.tag.entity.Tag;
@@ -42,6 +43,7 @@ public class UserService {
     private final MemberRepository memberRepository;
     private final TagRepository tagRepository;
     private final MemberTagRepository memberTagRepository;
+    private final MentorAvailabilityRepository mentorAvailabilityRepository;
     private final S3Service s3Service;
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
@@ -50,7 +52,7 @@ public class UserService {
 
     public MentorListResponse.PageResponse getMentors(String keyword, Pageable pageable) {
         Page<MentorListResponse> page = memberRepository.findMentors(Role.MENTOR, keyword, pageable)
-                .map(m -> MentorListResponse.of(m, memberTagRepository.findAllByMember(m)));
+                .map(m -> MentorListResponse.of(m, memberTagRepository.findAllByMember(m), mentorAvailabilityRepository.findAllByMentor(m)));
         return MentorListResponse.PageResponse.of(page);
     }
 

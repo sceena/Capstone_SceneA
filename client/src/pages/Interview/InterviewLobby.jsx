@@ -329,12 +329,12 @@ export default function InterviewRobby({ role = "mentee" }) {
   const handleEnter = async () => {
     setEntering(true);
     const isRealSession = id && /^\d+$/.test(id);
-    try {
-      if (isRealSession) {
-        await joinSession(id);
-        if (role === "mentor") await updateSessionStatus(id, "in_progress");
+    if (isRealSession) {
+      try { await joinSession(id); } catch {}
+      if (role === "mentor") {
+        try { await updateSessionStatus(id, "in_progress"); } catch {}
       }
-    } catch {}
+    }
     navigate(role === "mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
   };
 
@@ -842,7 +842,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                                 </span>
                               </div>
                               <textarea
-                                value={item.content}
+                                value={item.content ?? ""}
                                 onChange={event => handleRecommendedQuestionChange(i, event.target.value)}
                                 rows={2}
                                 style={{

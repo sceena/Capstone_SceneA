@@ -26,6 +26,11 @@ export default defineConfig({
         target: 'http://54.116.176.242:8080',
         changeOrigin: false,
       },
+      '/socket.io': {
+        target: 'http://54.116.176.242:4000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

@@ -110,8 +110,7 @@ export default function Login() {
   const [oauthTarget, setOauthTarget]     = useState(null); // "google"|"kakao"|"naver"
 
   const handleOAuthRole = (role) => {
-    document.cookie = `oauth_role=${role}; path=/; max-age=300`;
-    window.location.href = `/oauth2/authorization/${oauthTarget}`;
+    window.location.href = `https://dooong.site/api/auth/oauth2/${oauthTarget}?role=${role}`;
   };
 
   const parseTokenRole = (token) => {

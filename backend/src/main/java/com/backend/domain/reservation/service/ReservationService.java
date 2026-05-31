@@ -64,6 +64,12 @@ public class ReservationService {
             throw new CustomException(ErrorCode.RESERVATION_SLOT_TAKEN);
         }
 
+        boolean alreadyReserved = reservationRepository.findAllByMentorAvailability(availability).stream()
+                .anyMatch(r -> r.getMentee().getId().equals(menteeId) && r.getStatus() != ReservationStatus.CANCELLED);
+        if (alreadyReserved) {
+            throw new CustomException(ErrorCode.RESERVATION_SLOT_TAKEN);
+        }
+
         InterviewSession session = null;
         if (request.sessionId() != null) {
             session = interviewSessionRepository.findById(request.sessionId())
@@ -82,8 +88,6 @@ public class ReservationService {
             }
         }
 
-        availability.book();
-
         Reservation reservation = Reservation.builder()
                 .mentorAvailability(availability)
                 .mentee(mentee)
@@ -91,7 +95,14 @@ public class ReservationService {
                 .resumeContent(request.resumeContent())
                 .build();
 
-        return ReservationResponse.from(reservationRepository.save(reservation));
+        Reservation saved = reservationRepository.save(reservation);
+
+        long activeCount = reservationRepository.countByMentorAvailabilityAndStatusNot(availability, ReservationStatus.CANCELLED);
+        if (activeCount >= availability.getMaxParticipants()) {
+            availability.book();
+        }
+
+        return ReservationResponse.from(saved);
     }
 
     @Transactional
@@ -108,19 +119,19 @@ public class ReservationService {
             reservation.confirm();
             InterviewSession session = reservation.getInterviewSession();
             if (session == null) {
-                session = InterviewSession.builder()
-                        .mentor(mentor)
-                        .scheduledAt(reservation.getMentorAvailability().getStartTime())
-                        .build();
-                interviewSessionRepository.save(session);
+                session = reservationRepository.findAllByMentorAvailability(reservation.getMentorAvailability()).stream()
+                        .filter(r -> r.getInterviewSession() != null && r.getStatus() != ReservationStatus.CANCELLED)
+                        .map(Reservation::getInterviewSession)
+                        .findFirst()
+                        .orElse(null);
+                if (session == null) {
+                    session = InterviewSession.builder()
+                            .mentor(mentor)
+                            .scheduledAt(reservation.getMentorAvailability().getStartTime())
+                            .build();
+                    interviewSessionRepository.save(session);
+                }
                 reservation.linkSession(session);
-
-                SessionParticipant participant = SessionParticipant.builder()
-                        .interviewSession(session)
-                        .member(reservation.getMentee())
-                        .answerStatus(AnswerStatus.WAITING)
-                        .build();
-                participantRepository.save(participant);
             } else {
                 session.confirmSchedule(reservation.getMentorAvailability().getStartTime());
             }
@@ -128,6 +139,13 @@ public class ReservationService {
             saveResumeIfPresent(session, reservation.getMentee(), reservation.getResumeContent());
         } else {
             reservation.cancel();
+            MentorAvailability availability = reservation.getMentorAvailability();
+            if (availability.isBooked()) {
+                long activeCount = reservationRepository.countByMentorAvailabilityAndStatusNot(availability, ReservationStatus.CANCELLED);
+                if (activeCount < availability.getMaxParticipants()) {
+                    availability.unbook();
+                }
+            }
         }
 
         return ReservationAcceptResponse.from(reservation);

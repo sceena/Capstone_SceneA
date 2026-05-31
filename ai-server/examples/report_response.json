@@ -35,15 +35,8 @@
       }
     },
     "fit_gap": {
-      "matched_requirements": [
-        "Java",
-        "Spring Boot",
-        "Redis"
-      ],
-      "missing_requirements": [
-        "AWS",
-        "모니터링"
-      ],
+      "matched_requirements": ["Java", "Spring Boot", "Redis"],
+      "missing_requirements": ["AWS", "모니터링"],
       "recommendations": [
         "AWS 배포 경험을 답변에서 구체적인 상황, 행동, 결과로 연결하세요.",
         "모니터링 지표를 기반으로 문제를 발견하고 개선한 경험을 보완하세요."
@@ -74,7 +67,7 @@
       {
         "question_id": 102,
         "question": "Redis 캐싱을 적용해 성능을 개선한 경험을 설명해주세요.",
-        "answer": "상품 목록 조회 API에서 동일한 조건의 요청이 반복되어 DB 부하가 커지는 문제가 있었습니다. 조회 조건을 기준으로 Redis 캐시 키를 설계하고 TTL을 5분으로 설정했습니다. 적용 후 평균 응답 시간이 650ms에서 180ms로 줄었고, 피크 시간대 DB 조회량도 약 40% 감소했습니다.",
+        "answer": "상품 목록 조회 API에서 동일한 조건의 요청이 반복되어 DB 부하가 커지는 문제가 있었습니다. 조회 조건을 기준으로 Redis 캐시 키를 설계하고 TTL을 5분으로 설정했습니다. 적용 후 평균 응답 시간이 650ms에서 ms로 줄었고, 피크 시간대 DB 조회량도 약 40% 감소했습니다.",
         "score": 8.5,
         "reasoning": "문제 상황, 본인이 수행한 행동, 수치 기반 결과가 모두 드러나 답변의 설득력이 높습니다. 캐시 무효화 전략까지 보완하면 더 완성도 높은 답변이 됩니다.",
         "strengths": [
@@ -97,9 +90,7 @@
         "answer": "N+1 문제는 연관된 엔티티를 조회할 때 추가 쿼리가 많이 발생하는 문제입니다. fetch join이나 EntityGraph를 사용해서 해결할 수 있습니다. 상황에 따라 batch size 설정도 사용할 수 있습니다.",
         "score": 6.5,
         "reasoning": "N+1 문제의 정의와 대표 해결 방법은 맞게 설명했습니다. 다만 어떤 상황에서 어떤 해결 방법을 선택해야 하는지, 실제 쿼리 개선 결과가 부족합니다.",
-        "strengths": [
-          "N+1 문제의 기본 개념과 주요 해결 방법을 알고 있습니다."
-        ],
+        "strengths": ["N+1 문제의 기본 개념과 주요 해결 방법을 알고 있습니다."],
         "improvements": [
           "fetch join, EntityGraph, batch size의 선택 기준을 비교해 설명하세요.",
           "실제 발생한 쿼리 수 변화나 성능 개선 결과를 함께 말하면 좋습니다."

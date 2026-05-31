@@ -7,6 +7,7 @@ import com.backend.domain.mentorAvailability.dto.request.AvailabilityCreateReque
 import com.backend.domain.mentorAvailability.dto.response.AvailabilityResponse;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
+import com.backend.domain.reservation.entity.ReservationStatus;
 import com.backend.domain.reservation.repository.ReservationRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
@@ -39,8 +40,10 @@ public class MentorAvailabilityService {
 
         return availabilityRepository.findAllByMentorAndIsBookedFalse(mentor).stream()
                 .peek(availability -> rollForwardIfExpired(availability, tomorrow))
-                .filter(availability -> !reservationRepository.existsByMentorAvailability(availability))
-                .map(AvailabilityResponse::from)
+                .map(availability -> {
+                    long count = reservationRepository.countByMentorAvailabilityAndStatusNot(availability, ReservationStatus.CANCELLED);
+                    return AvailabilityResponse.from(availability, count);
+                })
                 .toList();
     }
 
@@ -67,7 +70,8 @@ public class MentorAvailabilityService {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
 
-        if (availability.isBooked() || reservationRepository.existsByMentorAvailability(availability)) {
+        long activeCount = reservationRepository.countByMentorAvailabilityAndStatusNot(availability, ReservationStatus.CANCELLED);
+        if (activeCount > 0) {
             throw new CustomException(ErrorCode.RESERVATION_SLOT_TAKEN);
         }
 
@@ -87,8 +91,13 @@ public class MentorAvailabilityService {
                 .mentor(mentor)
                 .startTime(request.startTime())
                 .endTime(request.endTime())
+                .maxParticipants(resolveMaxParticipants(request.maxParticipants()))
                 .build();
 
         return AvailabilityResponse.from(availabilityRepository.save(availability));
+    }
+
+    private int resolveMaxParticipants(Integer maxParticipants) {
+        return maxParticipants != null && maxParticipants == 4 ? 4 : 1;
     }
 }

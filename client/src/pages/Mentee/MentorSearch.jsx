@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMentors } from "../../api/users";
@@ -236,6 +236,56 @@ const MentorCard = ({ m, onClick }) => {
   );
 };
 
+/* ── 직무 대분류 · 소분류 트리 ── */
+const JOB_TREE = [
+  {
+    major: "개발자",
+    keywords: ["백엔드", "프론트엔드", "풀스택", "ios", "android", "모바일", "웹 개발", "flutter", "개발", "java", "python", "react", "spring", "node"],
+    subs: ["백엔드 개발", "프론트엔드 개발", "풀스택 개발", "iOS 개발", "Android 개발", "모바일 개발"],
+  },
+  {
+    major: "클라우드·인프라",
+    keywords: ["클라우드", "인프라", "devops", "sre", "aws", "gcp", "azure", "서버", "kubernetes", "docker"],
+    subs: ["DevOps", "클라우드 엔지니어", "SRE", "인프라 엔지니어"],
+  },
+  {
+    major: "데이터·AI",
+    keywords: ["데이터", "data", "ml", "ai", "머신러닝", "딥러닝", "분석", "analytics", "llm", "mlops"],
+    subs: ["데이터 엔지니어", "ML 엔지니어", "데이터 분석가", "AI 연구원", "MLOps"],
+  },
+  {
+    major: "디자이너",
+    keywords: ["디자인", "ux", "ui", "그래픽", "브랜드", "figma"],
+    subs: ["UX 디자이너", "UI 디자이너", "그래픽 디자이너", "브랜드 디자이너"],
+  },
+  {
+    major: "PM·기획",
+    keywords: ["pm", "기획", "프로덕트", "product", "po", "서비스 기획"],
+    subs: ["프로덕트 매니저", "서비스 기획자", "프로젝트 매니저"],
+  },
+];
+
+const CAREER_OPTIONS = ["1년 미만", "1~3년", "3~5년", "5~7년", "7~10년", "10년 이상"];
+const SESSION_OPTIONS = ["1:1 면접", "그룹 면접"];
+
+function matchesJobFilter(tags, jobFilter) {
+  if (!jobFilter) return true;
+  const allJobTags = tags
+    .filter(t => t.category === "직무" || t.category === "기술스택")
+    .map(t => t.name.toLowerCase());
+
+  // 소분류 직접 매칭
+  const subMatch = allJobTags.some(tag => tag.includes(jobFilter.toLowerCase()));
+  if (subMatch) return true;
+
+  // 대분류 키워드 매칭
+  const majorCat = JOB_TREE.find(c => c.major === jobFilter);
+  if (majorCat) {
+    return majorCat.keywords.some(kw => allJobTags.some(tag => tag.includes(kw.toLowerCase())));
+  }
+  return false;
+}
+
 /* ════════════════════════════════════════ */
 export default function MentorSearch() {
   const navigate = useNavigate();
@@ -243,12 +293,15 @@ export default function MentorSearch() {
   const { user } = useAuthStore();
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
-  const [mentors, setMentors]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState("");
-  const [search, setSearch]     = useState("");
-  const [focused, setFocused]   = useState(false);
-  const [filters, setFilters]   = useState({ job: "", career: "", sessType: "" });
+  const [mentors, setMentors]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState("");
+  const [search, setSearch]       = useState("");
+  const [focused, setFocused]     = useState(false);
+  const [openPanel, setOpenPanel] = useState("");
+  const [hoverMajor, setHoverMajor] = useState(JOB_TREE[0].major);
+  const [filters, setFilters]     = useState({ job: "", career: "", sessionType: "" });
+  const filterRef = useRef(null);
 
   const fetchMentors = (kw = "") => {
     setLoading(true); setError("");
@@ -258,26 +311,49 @@ export default function MentorSearch() {
   };
 
   useEffect(() => { fetchMentors(); }, []);
-  const handleSearch = () => fetchMentors(search);
+
+  // 외부 클릭 시 패널 닫기
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setOpenPanel("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSearch = () => { fetchMentors(search); setOpenPanel(""); };
 
   const filtered = mentors.filter(m => {
     const tags = m.tags || [];
-    if (filters.job) {
-      const jobTag = tags.find(t => t.category === "직무");
-      if (!jobTag || !jobTag.name.includes(filters.job)) return false;
-    }
+    if (filters.job && !matchesJobFilter(tags, filters.job)) return false;
     if (filters.career) {
       const careerTag = tags.find(t => t.category === "경력" || t.category === "근속년수");
       if (!careerTag || !careerTag.name.includes(filters.career)) return false;
     }
-    if (filters.sessType) {
-      const techTags = tags.filter(t => t.category === "기술스택").map(t => t.name);
-      if (!techTags.some(n => n.toLowerCase().includes(filters.sessType.toLowerCase()))) return false;
+    if (filters.sessionType) {
+      const sessTag = tags.find(t => t.category === "면접유형" || t.category === "세션유형");
+      if (!sessTag || !sessTag.name.includes(filters.sessionType)) return false;
     }
     return true;
   });
 
-  const hasFilter = filters.job || filters.career || filters.sessType;
+  const hasFilter = filters.job || filters.career || filters.sessionType;
+
+  const togglePanel = (name) => setOpenPanel(p => p === name ? "" : name);
+
+  // 대분류 클릭: 소분류 목록만 보여줌 (패널 유지)
+  const selectMajor = (major) => {
+    setHoverMajor(major);
+    setFilters(p => ({ ...p, job: major }));
+  };
+
+  // 소분류 클릭: 선택 후 패널 닫기
+  const selectJob = (val) => { setFilters(p => ({ ...p, job: val })); setOpenPanel(""); };
+  const selectCareer = (val) => { setFilters(p => ({ ...p, career: val })); setOpenPanel(""); };
+  const selectSession = (val) => { setFilters(p => ({ ...p, sessionType: val })); setOpenPanel(""); };
+  const resetAll = () => { setSearch(""); fetchMentors(""); setFilters({ job: "", career: "", sessionType: "" }); setOpenPanel(""); };
 
   return (
     <>
@@ -302,70 +378,196 @@ export default function MentorSearch() {
           <p style={{ fontSize: 14, color: C.textMuted }}>나에게 맞는 현직자 멘토를 찾아 면접을 준비해보세요</p>
         </div>
 
-        {/* 검색 + 필터 바 */}
-        <div style={{
-          background: C.white, borderRadius: 16, padding: "16px 20px",
-          boxShadow: C.shadow, marginBottom: 24,
-          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-        }}>
-          {/* 검색창 */}
-          <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-              <circle cx="6" cy="6" r="4.5" stroke={C.textMuted} strokeWidth="1.4"/>
-              <path d="M9.5 9.5l3 3" stroke={C.textMuted} strokeWidth="1.4" strokeLinecap="round"/>
+        {/* 검색바 */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+              <circle cx="6.5" cy="6.5" r="5" stroke={C.textMuted} strokeWidth="1.5"/>
+              <path d="M10.5 10.5l3.5 3.5" stroke={C.textMuted} strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
             <input
-              placeholder="이름, 태그, 소개 검색"
+              placeholder="멘토 이름, 태그, 소개로 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleSearch()}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               style={{
-                padding: "10px 16px 10px 36px", width: "100%",
-                background: focused ? C.white : C.bg,
+                width: "100%", padding: "13px 16px 13px 42px",
+                background: C.white,
                 border: `1.5px solid ${focused ? C.primary : C.border}`,
-                borderRadius: 10, fontSize: 14, color: C.text,
-                outline: "none", fontFamily: "inherit", transition: "all 0.18s",
+                borderRadius: 12, fontSize: 14, color: C.text,
+                outline: "none", fontFamily: "inherit", transition: "border-color 0.18s",
+                boxShadow: C.shadow,
               }}
             />
           </div>
           <button onClick={handleSearch} style={{
-            padding: "10px 22px", borderRadius: 10,
+            padding: "0 28px", borderRadius: 12,
             background: C.primaryGrad, color: C.white, border: "none",
-            fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+            fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
             boxShadow: "0 4px 12px rgba(13,34,64,0.2)", whiteSpace: "nowrap",
           }}>검색</button>
+        </div>
 
-          <div style={{ width: 1, height: 28, background: C.border }}/>
+        {/* 필터 탭 바 + 패널 */}
+        <div
+          ref={filterRef}
+          style={{
+            marginBottom: openPanel ? 220 : 24,
+            position: "relative", width: "100%",
+            transition: "margin-bottom 0.2s",
+          }}
+        >
 
-          {/* 3단 필터 */}
-          <Dropdown
-            label="직무"
-            options={["백엔드","프론트엔드","풀스택","모바일","데이터","인프라","기획/PM","디자인"]}
-            value={filters.job}
-            onChange={v => setFilters(p => ({ ...p, job: v }))}
-          />
-          <Dropdown
-            label="경력"
-            options={["1년","2년","3년","4년","5년","6년","7년","8년","9년","10년"]}
-            value={filters.career}
-            onChange={v => setFilters(p => ({ ...p, career: v }))}
-          />
-          <Dropdown
-            label="기술스택"
-            options={["Java","Python","JavaScript","TypeScript","React","Spring","Node.js","Swift","Kotlin","Flutter","AWS","Docker"]}
-            value={filters.sessType}
-            onChange={v => setFilters(p => ({ ...p, sessType: v }))}
-          />
+          {/* 탭 헤더 */}
+          <div style={{
+            background: C.white, borderRadius: openPanel ? "12px 12px 0 0" : 12,
+            boxShadow: openPanel ? "0 1px 3px rgba(0,0,0,0.06)" : C.shadow,
+            display: "flex", alignItems: "center", width: "100%",
+            borderBottom: openPanel ? `1px solid ${C.border}` : "none",
+          }}>
+            {[
+              { key: "job",     label: "직무",      value: filters.job },
+              { key: "career",  label: "경력",      value: filters.career },
+              { key: "session", label: "면접 유형", value: filters.sessionType },
+            ].map(({ key, label, value }, i) => (
+              <button key={key} onClick={() => togglePanel(key)} style={{
+                flex: 1, padding: "14px 20px",
+                background: "transparent", border: "none",
+                borderRight: i < 2 ? `1px solid ${C.border}` : "none",
+                fontSize: 14, fontWeight: openPanel === key || value ? 700 : 400,
+                color: value ? C.primary : openPanel === key ? C.text : C.textSub,
+                cursor: "pointer", fontFamily: "inherit",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                transition: "color 0.15s",
+                borderRadius: i === 0 ? "12px 0 0 0" : i === 2 ? "0 12px 0 0" : 0,
+              }}>
+                <span>
+                  {value
+                    ? <><span style={{ fontSize: 11, color: C.textMuted, fontWeight: 400, marginRight: 6 }}>{label}</span>{value}</>
+                    : label
+                  }
+                </span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: openPanel === key ? "rotate(180deg)" : "none", transition: "transform 0.2s", marginLeft: 6, flexShrink: 0 }}>
+                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            ))}
+            {hasFilter && (
+              <button onClick={resetAll} style={{
+                padding: "14px 20px", background: "transparent", border: "none",
+                borderLeft: `1px solid ${C.border}`,
+                fontSize: 13, color: C.textMuted, cursor: "pointer", fontFamily: "inherit",
+                whiteSpace: "nowrap", borderRadius: "0 12px 0 0",
+              }}
+                onMouseEnter={e => e.currentTarget.style.color = C.danger}
+                onMouseLeave={e => e.currentTarget.style.color = C.textMuted}
+              >초기화</button>
+            )}
+          </div>
 
-          {(search || hasFilter) && (
-            <button onClick={() => { setSearch(""); fetchMentors(""); setFilters({ job: "", career: "", sessType: "" }); }} style={{
-              padding: "9px 14px", borderRadius: 10,
-              background: "transparent", color: C.textMuted,
-              border: `1px solid ${C.border}`, fontSize: 12,
-              cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
-            }}>초기화</button>
+          {/* 직무 패널 — 대분류 + 소분류 2단 */}
+          {openPanel === "job" && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+              background: C.white, borderRadius: "0 0 12px 12px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+              border: `1px solid ${C.border}`, borderTop: "none",
+              display: "flex", overflow: "hidden", minHeight: 200,
+            }}>
+              {/* 대분류 */}
+              <div style={{ width: 180, borderRight: `1px solid ${C.border}`, flexShrink: 0 }}>
+                {JOB_TREE.map(cat => (
+                  <div key={cat.major}
+                    onMouseEnter={() => setHoverMajor(cat.major)}
+                    onClick={() => selectMajor(cat.major)}
+                    style={{
+                      padding: "13px 20px",
+                      background: hoverMajor === cat.major ? C.bg : "transparent",
+                      color: filters.job === cat.major ? C.primary : C.text,
+                      fontWeight: filters.job === cat.major ? 700 : 400,
+                      fontSize: 14, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      transition: "background 0.12s",
+                      borderLeft: `3px solid ${hoverMajor === cat.major ? C.primary : "transparent"}`,
+                    }}>
+                    {cat.major}
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                ))}
+              </div>
+
+              {/* 소분류 */}
+              <div style={{ flex: 1, padding: "8px 0", display: "flex", flexWrap: "wrap", alignContent: "flex-start", gap: 0 }}>
+                {JOB_TREE.find(c => c.major === hoverMajor)?.subs.map(sub => (
+                  <div key={sub} onClick={() => selectJob(sub)} style={{
+                    width: "50%", padding: "11px 20px",
+                    fontSize: 14, cursor: "pointer",
+                    color: filters.job === sub ? C.primary : C.textSub,
+                    fontWeight: filters.job === sub ? 700 : 400,
+                    background: filters.job === sub ? C.primaryLight : "transparent",
+                    transition: "all 0.12s",
+                  }}
+                    onMouseEnter={e => { if (filters.job !== sub) { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; } }}
+                    onMouseLeave={e => { if (filters.job !== sub) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; } }}
+                  >{sub}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 경력 패널 */}
+          {openPanel === "career" && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+              background: C.white, borderRadius: "0 0 12px 12px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+              border: `1px solid ${C.border}`, borderTop: "none",
+              padding: "20px 24px", minHeight: 200,
+              display: "flex", flexWrap: "wrap", gap: 8, alignContent: "flex-start",
+            }}>
+              {CAREER_OPTIONS.map(opt => (
+                <div key={opt} onClick={() => selectCareer(opt)} style={{
+                  padding: "9px 20px", borderRadius: 99, cursor: "pointer",
+                  background: filters.career === opt ? C.primaryGrad : C.bg,
+                  color: filters.career === opt ? C.white : C.textSub,
+                  fontSize: 13, fontWeight: filters.career === opt ? 700 : 400,
+                  border: `1.5px solid ${filters.career === opt ? "transparent" : C.border}`,
+                  transition: "all 0.15s",
+                  boxShadow: filters.career === opt ? "0 4px 10px rgba(13,34,64,0.2)" : "none",
+                }}
+                  onMouseEnter={e => { if (filters.career !== opt) { e.currentTarget.style.borderColor = "#CED4DA"; e.currentTarget.style.color = C.text; } }}
+                  onMouseLeave={e => { if (filters.career !== opt) { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSub; } }}
+                >{opt}</div>
+              ))}
+            </div>
+          )}
+
+          {/* 면접 유형 패널 */}
+          {openPanel === "session" && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+              background: C.white, borderRadius: "0 0 12px 12px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+              border: `1px solid ${C.border}`, borderTop: "none",
+              padding: "20px 24px", minHeight: 200,
+              display: "flex", gap: 8, alignItems: "flex-start",
+            }}>
+              {SESSION_OPTIONS.map(opt => (
+                <div key={opt} onClick={() => selectSession(opt)} style={{
+                  padding: "9px 28px", borderRadius: 99, cursor: "pointer",
+                  background: filters.sessionType === opt ? C.primaryGrad : C.bg,
+                  color: filters.sessionType === opt ? C.white : C.textSub,
+                  fontSize: 13, fontWeight: filters.sessionType === opt ? 700 : 400,
+                  border: `1.5px solid ${filters.sessionType === opt ? "transparent" : C.border}`,
+                  transition: "all 0.15s",
+                  boxShadow: filters.sessionType === opt ? "0 4px 10px rgba(13,34,64,0.2)" : "none",
+                }}>{opt}</div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -374,7 +576,7 @@ export default function MentorSearch() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <p style={{ fontSize: 15, color: C.textSub }}>
               <span style={{ fontWeight: 700, color: C.text }}>{filtered.length}명</span>의 멘토
-              {hasFilter && <span style={{ fontSize: 12, color: C.primary, marginLeft: 8, fontWeight: 600 }}>필터 적용 중</span>}
+              {hasFilter && <span style={{ fontSize: 12, color: C.primary, marginLeft: 8, fontWeight: 600 }}>{filters.job || filters.career || filters.sessionType} 필터 적용 중</span>}
             </p>
           </div>
         )}
@@ -465,7 +667,7 @@ export default function MentorSearch() {
               {search || hasFilter ? "다른 검색어나 필터를 시도해보세요" : "멘토로 회원가입하면 여기에 표시돼요"}
             </p>
             {(search || hasFilter) && (
-              <button onClick={() => { setSearch(""); fetchMentors(""); setFilters({ job: "", career: "", sessType: "" }); }} style={{
+              <button onClick={() => { setSearch(""); fetchMentors(""); setCategory(""); setFilters({ career: "", tech: "" }); }} style={{
                 padding: "11px 28px", background: C.primaryGrad, color: C.white,
                 border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600,
                 cursor: "pointer", fontFamily: "inherit",

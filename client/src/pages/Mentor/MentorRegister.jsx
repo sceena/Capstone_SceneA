@@ -10,12 +10,13 @@ import { getMyProfile, updateMyProfile } from "../../api/users";
    ============================================================ */
 
 const C = {
-  navy:    "#0D2240", navyMid:"#1B4F7A",
-  cream:   "#F2EDE4", creamDark:"#E8E0D0",
-  white:   "#FFFFFF", teal:"#1D9E75",
-  text:    "#1A1818", textSub:"#6B6863",
-  textMuted:"#9E9B95", border:"#E8E0D0",
-  bg:      "#FAF8F4", error:"#D94040",
+  navy:     "#0D2240", navyMid:"#1B4F7A",
+  cream:    "#E8EEF6", creamDark:"#E8EEF6",
+  white:    "#FFFFFF", teal:"#0CA678",
+  text:     "#1A1B1E", textSub:"#495057",
+  textMuted:"#868E96", border:"#E9ECEF",
+  bg:       "#F0F4F8", error:"#E03131",
+  primaryGrad: "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)",
 };
 
 const WEEKDAYS = ["일","월","화","수","목","금","토"];
@@ -109,17 +110,25 @@ const LogoIcon = ({ size=26, color=C.white }) => (
 
 /* ── 헤더 ── */
 const Header = ({ userName }) => (
-  <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-    <nav style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
-      <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
-        안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>님
-      </span>
-      <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-        {[{l:"대시보드",to:"/dashboard/mentor"},{l:"멘토 탐색",to:"/mentor/search"},{l:"MyPage",to:"/mentor/mypage"}].map((x,i)=>(
-          <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.l==="MyPage"?700:400, color:C.white, textDecoration:"none", opacity:0.85 }}
-            onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0.85}>{x.l}</Link>
+  <header style={{ background: C.white, padding: "0 5%", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
+    <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: C.primaryGrad, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>Scene<span style={{ color: C.navy }}>A</span></span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+        {[{l:"대시보드",to:"/dashboard/mentor"},{l:"멘토 탐색",to:"/mentor/search"},{l:"마이페이지",to:"/mentor/mypage"}].map((x,i)=>(
+          <Link key={i} to={x.to} style={{ fontSize: 14, color: C.textSub, textDecoration: "none", padding: "6px 14px", borderRadius: 8, transition: "all 0.15s" }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; }}
+          >{x.l}</Link>
         ))}
       </div>
+      <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{userName} 멘토</p>
     </nav>
   </header>
 );
@@ -129,7 +138,7 @@ const Sidebar = ({ current }) => {
   const steps = [
     { n:1, title:"직무·경력",   sub:"기본 프로필 설정" },
     { n:2, title:"면접 강점",   sub:"유형·자기소개" },
-    { n:3, title:"정원·일정 설정", sub:"최대 인원 및 가능 시간" },
+    { n:3, title:"면접 가능 시간", sub:"일정 및 유형 설정" },
     { n:4, title:"최종 확인",   sub:"등록 완료" },
   ];
   return (
@@ -355,8 +364,8 @@ const Step3 = ({ data, onChange }) => {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:28 }}>
       <div>
-        <h3 style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>정원 · 가능 일정 설정</h3>
-        <p style={{ fontSize:13, color:C.textSub }}>최대 동시 예약 인원과 멘토링 가능한 시간대를 설정해주세요</p>
+        <h3 style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>면접 가능 시간 설정</h3>
+        <p style={{ fontSize:13, color:C.textSub }}>면접 유형과 가능한 시간대를 선택해주세요</p>
       </div>
 
       {/* 정원 선택 */}
@@ -608,8 +617,8 @@ export default function MentorInfoRegister() {
       {/* 페이지 타이틀 */}
       <div style={{ background:C.white, borderBottom:`1px solid ${C.border}`, padding:"14px 5%" }}>
         <div style={{ maxWidth:1100, margin:"0 auto" }}>
-          <p style={{ fontSize:15, fontWeight:700, color:C.text }}>멘토 등록</p>
-          <p style={{ fontSize:12, color:C.textMuted, marginTop:2 }}>멘토 프로필을 설정하고 멘티와 만나보세요</p>
+          <p style={{ fontSize:15, fontWeight:700, color:C.text }}>면접 일정 · 정보 관리</p>
+          <p style={{ fontSize:12, color:C.textMuted, marginTop:2 }}>멘토 프로필과 면접 가능 시간을 설정하세요</p>
         </div>
       </div>
 

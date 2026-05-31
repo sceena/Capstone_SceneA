@@ -57,7 +57,7 @@ const Header = ({ userName, accessToken }) => {
           {[
             { label: "대시보드", to: "/dashboard/mentee" },
             { label: "멘토 탐색", to: "/mentor/search", active: true },
-            { label: "마이페이지", to: "/mentee/mypage" },
+            { label: "마이페이지", to: user?.role === "mentor" ? "/mentor/mypage" : "/mentee/mypage" },
           ].map(({ label, to, active }) => (
             <Link key={label} to={to} style={{
               fontSize: 14, fontWeight: active ? 600 : 400,

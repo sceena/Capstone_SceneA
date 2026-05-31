@@ -361,6 +361,7 @@ export default function MentorSearch() {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         body{font-family:'Inter','Noto Sans KR',-apple-system,sans-serif;background:${C.bg}}
+        html { overflow-y: scroll; }
         @keyframes spin{to{transform:rotate(360deg)}}
         @media(max-width:960px){.mgrid{grid-template-columns:repeat(2,1fr)!important}}
         @media(max-width:520px){.mgrid{grid-template-columns:1fr!important}}
@@ -410,166 +411,152 @@ export default function MentorSearch() {
           }}>검색</button>
         </div>
 
-        {/* 필터 탭 바 + 패널 */}
+        {/* 필터 — 헤더 + 패널이 하나의 카드 */}
         <div
           ref={filterRef}
           style={{
-            marginBottom: openPanel ? 220 : 24,
-            position: "relative", width: "100%",
-            transition: "margin-bottom 0.2s",
+            background: C.white,
+            borderRadius: 12,
+            boxShadow: C.shadow,
+            marginBottom: 24,
+            overflow: "hidden",
           }}
         >
-
-          {/* 탭 헤더 */}
-          <div style={{
-            background: C.white, borderRadius: openPanel ? "12px 12px 0 0" : 12,
-            boxShadow: openPanel ? "0 1px 3px rgba(0,0,0,0.06)" : C.shadow,
-            display: "flex", alignItems: "center", width: "100%",
-            borderBottom: openPanel ? `1px solid ${C.border}` : "none",
-          }}>
+          {/* 탭 헤더 — grid로 3등분 고정 */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
             {[
               { key: "job",     label: "직무",      value: filters.job },
               { key: "career",  label: "경력",      value: filters.career },
               { key: "session", label: "면접 유형", value: filters.sessionType },
             ].map(({ key, label, value }, i) => (
               <button key={key} onClick={() => togglePanel(key)} style={{
-                flex: 1, padding: "14px 20px",
-                background: "transparent", border: "none",
+                padding: "15px 20px",
+                background: openPanel === key ? C.bg : "transparent",
+                border: "none",
                 borderRight: i < 2 ? `1px solid ${C.border}` : "none",
+                borderBottom: `2px solid ${openPanel === key ? C.primary : "transparent"}`,
                 fontSize: 14, fontWeight: openPanel === key || value ? 700 : 400,
                 color: value ? C.primary : openPanel === key ? C.text : C.textSub,
                 cursor: "pointer", fontFamily: "inherit",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                transition: "color 0.15s",
-                borderRadius: i === 0 ? "12px 0 0 0" : i === 2 ? "0 12px 0 0" : 0,
+                transition: "all 0.15s",
               }}>
-                <span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {value
-                    ? <><span style={{ fontSize: 11, color: C.textMuted, fontWeight: 400, marginRight: 6 }}>{label}</span>{value}</>
+                    ? <><span style={{ fontSize: 11, color: C.textMuted, fontWeight: 400, marginRight: 5 }}>{label}</span>{value}</>
                     : label
                   }
                 </span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: openPanel === key ? "rotate(180deg)" : "none", transition: "transform 0.2s", marginLeft: 6, flexShrink: 0 }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+                  style={{ transform: openPanel === key ? "rotate(180deg)" : "none", transition: "transform 0.2s", marginLeft: 8, flexShrink: 0 }}>
                   <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
             ))}
-            {hasFilter && (
-              <button onClick={resetAll} style={{
-                padding: "14px 20px", background: "transparent", border: "none",
-                borderLeft: `1px solid ${C.border}`,
-                fontSize: 13, color: C.textMuted, cursor: "pointer", fontFamily: "inherit",
-                whiteSpace: "nowrap", borderRadius: "0 12px 0 0",
-              }}
-                onMouseEnter={e => e.currentTarget.style.color = C.danger}
-                onMouseLeave={e => e.currentTarget.style.color = C.textMuted}
-              >초기화</button>
-            )}
           </div>
 
-          {/* 직무 패널 — 대분류 + 소분류 2단 */}
-          {openPanel === "job" && (
-            <div style={{
-              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
-              background: C.white, borderRadius: "0 0 12px 12px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-              border: `1px solid ${C.border}`, borderTop: "none",
-              display: "flex", overflow: "hidden", minHeight: 200,
-            }}>
-              {/* 대분류 */}
-              <div style={{ width: 180, borderRight: `1px solid ${C.border}`, flexShrink: 0 }}>
-                {JOB_TREE.map(cat => (
-                  <div key={cat.major}
-                    onMouseEnter={() => setHoverMajor(cat.major)}
-                    onClick={() => selectMajor(cat.major)}
-                    style={{
-                      padding: "13px 20px",
-                      background: hoverMajor === cat.major ? C.bg : "transparent",
-                      color: filters.job === cat.major ? C.primary : C.text,
-                      fontWeight: filters.job === cat.major ? 700 : 400,
-                      fontSize: 14, cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      transition: "background 0.12s",
-                      borderLeft: `3px solid ${hoverMajor === cat.major ? C.primary : "transparent"}`,
-                    }}>
-                    {cat.major}
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
+          {/* 패널 — 항상 같은 컨테이너, 높이 고정 */}
+          {openPanel && (
+            <div style={{ borderTop: `1px solid ${C.border}`, height: 240, overflow: "hidden" }}>
+
+              {/* 직무 패널 */}
+              {openPanel === "job" && (
+                <div style={{ display: "flex", height: "100%" }}>
+                  {/* 대분류 — 고정 너비 */}
+                  <div style={{ width: 200, borderRight: `1px solid ${C.border}`, flexShrink: 0, overflowY: "auto" }}>
+                    {JOB_TREE.map(cat => (
+                      <div key={cat.major}
+                        onMouseEnter={() => setHoverMajor(cat.major)}
+                        onClick={() => selectMajor(cat.major)}
+                        style={{
+                          padding: "13px 20px",
+                          background: hoverMajor === cat.major ? C.bg : "transparent",
+                          color: filters.job === cat.major || (JOB_TREE.find(c => c.major === cat.major)?.subs.includes(filters.job)) ? C.primary : C.text,
+                          fontWeight: filters.job === cat.major ? 700 : 400,
+                          fontSize: 14, cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "space-between",
+                          transition: "background 0.1s",
+                          borderLeft: `3px solid ${hoverMajor === cat.major ? C.primary : "transparent"}`,
+                        }}>
+                        {cat.major}
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                  {/* 소분류 — 나머지 전체 차지, 고정 2열 */}
+                  <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", alignContent: "start" }}>
+                    {JOB_TREE.find(c => c.major === hoverMajor)?.subs.map(sub => (
+                      <div key={sub} onClick={() => selectJob(sub)} style={{
+                        padding: "13px 20px", fontSize: 14, cursor: "pointer",
+                        color: filters.job === sub ? C.primary : C.textSub,
+                        fontWeight: filters.job === sub ? 700 : 400,
+                        background: filters.job === sub ? C.primaryLight : "transparent",
+                        transition: "all 0.1s",
+                        borderBottom: `1px solid ${C.border}`,
+                      }}
+                        onMouseEnter={e => { if (filters.job !== sub) { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; } }}
+                        onMouseLeave={e => { if (filters.job !== sub) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; } }}
+                      >{sub}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              {/* 소분류 */}
-              <div style={{ flex: 1, padding: "8px 0", display: "flex", flexWrap: "wrap", alignContent: "flex-start", gap: 0 }}>
-                {JOB_TREE.find(c => c.major === hoverMajor)?.subs.map(sub => (
-                  <div key={sub} onClick={() => selectJob(sub)} style={{
-                    width: "50%", padding: "11px 20px",
-                    fontSize: 14, cursor: "pointer",
-                    color: filters.job === sub ? C.primary : C.textSub,
-                    fontWeight: filters.job === sub ? 700 : 400,
-                    background: filters.job === sub ? C.primaryLight : "transparent",
-                    transition: "all 0.12s",
-                  }}
-                    onMouseEnter={e => { if (filters.job !== sub) { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; } }}
-                    onMouseLeave={e => { if (filters.job !== sub) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; } }}
-                  >{sub}</div>
-                ))}
-              </div>
-            </div>
-          )}
+              {/* 경력 패널 */}
+              {openPanel === "career" && (
+                <div style={{ padding: "20px 24px", display: "flex", flexWrap: "wrap", gap: 8, alignContent: "flex-start" }}>
+                  {CAREER_OPTIONS.map(opt => (
+                    <div key={opt} onClick={() => selectCareer(opt)} style={{
+                      padding: "9px 22px", borderRadius: 99, cursor: "pointer",
+                      background: filters.career === opt ? C.primaryGrad : C.bg,
+                      color: filters.career === opt ? C.white : C.textSub,
+                      fontSize: 13, fontWeight: filters.career === opt ? 700 : 400,
+                      border: `1.5px solid ${filters.career === opt ? "transparent" : C.border}`,
+                      transition: "all 0.15s",
+                      boxShadow: filters.career === opt ? "0 4px 10px rgba(13,34,64,0.2)" : "none",
+                    }}
+                      onMouseEnter={e => { if (filters.career !== opt) { e.currentTarget.style.borderColor = "#CED4DA"; e.currentTarget.style.color = C.text; } }}
+                      onMouseLeave={e => { if (filters.career !== opt) { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSub; } }}
+                    >{opt}</div>
+                  ))}
+                </div>
+              )}
 
-          {/* 경력 패널 */}
-          {openPanel === "career" && (
-            <div style={{
-              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
-              background: C.white, borderRadius: "0 0 12px 12px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-              border: `1px solid ${C.border}`, borderTop: "none",
-              padding: "20px 24px", minHeight: 200,
-              display: "flex", flexWrap: "wrap", gap: 8, alignContent: "flex-start",
-            }}>
-              {CAREER_OPTIONS.map(opt => (
-                <div key={opt} onClick={() => selectCareer(opt)} style={{
-                  padding: "9px 20px", borderRadius: 99, cursor: "pointer",
-                  background: filters.career === opt ? C.primaryGrad : C.bg,
-                  color: filters.career === opt ? C.white : C.textSub,
-                  fontSize: 13, fontWeight: filters.career === opt ? 700 : 400,
-                  border: `1.5px solid ${filters.career === opt ? "transparent" : C.border}`,
-                  transition: "all 0.15s",
-                  boxShadow: filters.career === opt ? "0 4px 10px rgba(13,34,64,0.2)" : "none",
-                }}
-                  onMouseEnter={e => { if (filters.career !== opt) { e.currentTarget.style.borderColor = "#CED4DA"; e.currentTarget.style.color = C.text; } }}
-                  onMouseLeave={e => { if (filters.career !== opt) { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSub; } }}
-                >{opt}</div>
-              ))}
-            </div>
-          )}
-
-          {/* 면접 유형 패널 */}
-          {openPanel === "session" && (
-            <div style={{
-              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
-              background: C.white, borderRadius: "0 0 12px 12px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-              border: `1px solid ${C.border}`, borderTop: "none",
-              padding: "20px 24px", minHeight: 200,
-              display: "flex", gap: 8, alignItems: "flex-start",
-            }}>
-              {SESSION_OPTIONS.map(opt => (
-                <div key={opt} onClick={() => selectSession(opt)} style={{
-                  padding: "9px 28px", borderRadius: 99, cursor: "pointer",
-                  background: filters.sessionType === opt ? C.primaryGrad : C.bg,
-                  color: filters.sessionType === opt ? C.white : C.textSub,
-                  fontSize: 13, fontWeight: filters.sessionType === opt ? 700 : 400,
-                  border: `1.5px solid ${filters.sessionType === opt ? "transparent" : C.border}`,
-                  transition: "all 0.15s",
-                  boxShadow: filters.sessionType === opt ? "0 4px 10px rgba(13,34,64,0.2)" : "none",
-                }}>{opt}</div>
-              ))}
+              {/* 면접 유형 패널 */}
+              {openPanel === "session" && (
+                <div style={{ padding: "20px 24px", display: "flex", gap: 10, alignContent: "flex-start", flexWrap: "wrap" }}>
+                  {SESSION_OPTIONS.map(opt => (
+                    <div key={opt} onClick={() => selectSession(opt)} style={{
+                      padding: "9px 28px", borderRadius: 99, cursor: "pointer",
+                      background: filters.sessionType === opt ? C.primaryGrad : C.bg,
+                      color: filters.sessionType === opt ? C.white : C.textSub,
+                      fontSize: 13, fontWeight: filters.sessionType === opt ? 700 : 400,
+                      border: `1.5px solid ${filters.sessionType === opt ? "transparent" : C.border}`,
+                      transition: "all 0.15s",
+                      boxShadow: filters.sessionType === opt ? "0 4px 10px rgba(13,34,64,0.2)" : "none",
+                    }}>{opt}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* 초기화 버튼 — 필터 바 외부 */}
+        {hasFilter && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -18, marginBottom: 18 }}>
+            <button onClick={resetAll} style={{
+              padding: "6px 14px", borderRadius: 8, border: `1px solid ${C.border}`,
+              background: "transparent", color: C.textMuted, fontSize: 12,
+              cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "#E03131"; e.currentTarget.style.color = "#E03131"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMuted; }}
+            >✕ 필터 초기화</button>
+          </div>
+        )}
 
         {/* 결과 수 */}
         {!loading && !error && (
@@ -640,7 +627,8 @@ export default function MentorSearch() {
           </div>
         )}
 
-        {/* 멘토 그리드 */}
+        {/* 멘토 그리드 — minHeight 고정으로 스크롤바 변동 방지 */}
+        <div style={{ minHeight: 600 }}>
         {!loading && !error && filtered.length > 0 && (
           <div className="mgrid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
             {filtered.map(m => (
@@ -676,6 +664,7 @@ export default function MentorSearch() {
             )}
           </div>
         )}
+        </div> {/* minHeight 래퍼 닫기 */}
 
       </main>
     </>

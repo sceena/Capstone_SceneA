@@ -51,8 +51,8 @@ class MentorAvailabilityControllerTest {
         LocalDateTime start = LocalDateTime.of(2026, 6, 1, 19, 0);
         LocalDateTime end = LocalDateTime.of(2026, 6, 1, 20, 0);
         List<AvailabilityResponse> response = List.of(
-                new AvailabilityResponse(10L, 2L, start, end, false),
-                new AvailabilityResponse(11L, 2L, start.plusDays(1), end.plusDays(1), false)
+                new AvailabilityResponse(10L, 2L, start, end, false, 1, 0),
+                new AvailabilityResponse(11L, 2L, start.plusDays(1), end.plusDays(1), false, 1, 0)
         );
 
         given(availabilityService.getAvailabilities(eq(2L))).willReturn(response);
@@ -140,7 +140,7 @@ class MentorAvailabilityControllerTest {
         LocalDateTime start = LocalDateTime.of(2026, 6, 1, 19, 0);
         LocalDateTime end = LocalDateTime.of(2026, 6, 1, 20, 0);
         AvailabilityCreateRequest request = new AvailabilityCreateRequest(start, end);
-        AvailabilityResponse response = new AvailabilityResponse(10L, 1L, start, end, false);
+        AvailabilityResponse response = new AvailabilityResponse(10L, 1L, start, end, false, 1, 0);
 
         given(availabilityService.create(any(), any())).willReturn(response);
 

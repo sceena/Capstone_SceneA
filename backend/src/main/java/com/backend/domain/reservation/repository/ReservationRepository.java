@@ -9,11 +9,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
-import java.util.Optional;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
 
-    Optional<Reservation> findByMentorAvailability(MentorAvailability mentorAvailability);
+    List<Reservation> findAllByMentorAvailability(MentorAvailability mentorAvailability);
+
+    long countByMentorAvailabilityAndStatusNot(MentorAvailability mentorAvailability, ReservationStatus status);
 
     List<Reservation> findAllByMentee(Member mentee);
 

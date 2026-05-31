@@ -11,26 +11,22 @@ public record AvailabilityResponse(
         @JsonProperty("start_time") LocalDateTime startTime,
         @JsonProperty("end_time") LocalDateTime endTime,
         @JsonProperty("is_booked") boolean isBooked,
-        @JsonProperty("max_participants") int maxParticipants
+        @JsonProperty("max_participants") int maxParticipants,
+        @JsonProperty("current_participants") int currentParticipants
 ) {
-    public AvailabilityResponse(
-            Long id,
-            Long mentorId,
-            LocalDateTime startTime,
-            LocalDateTime endTime,
-            boolean isBooked
-    ) {
-        this(id, mentorId, startTime, endTime, isBooked, 1);
-    }
-
-    public static AvailabilityResponse from(MentorAvailability availability) {
+    public static AvailabilityResponse from(MentorAvailability availability, long currentParticipants) {
         return new AvailabilityResponse(
                 availability.getId(),
                 availability.getMentor().getId(),
                 availability.getStartTime(),
                 availability.getEndTime(),
                 availability.isBooked(),
-                availability.getMaxParticipants()
+                availability.getMaxParticipants(),
+                (int) currentParticipants
         );
+    }
+
+    public static AvailabilityResponse from(MentorAvailability availability) {
+        return from(availability, 0);
     }
 }

@@ -7,6 +7,8 @@ import com.backend.domain.mentorAvailability.dto.request.AvailabilityCreateReque
 import com.backend.domain.mentorAvailability.dto.response.AvailabilityResponse;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
+import com.backend.domain.reservation.entity.ReservationStatus;
+import com.backend.domain.reservation.repository.ReservationRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,9 @@ class MentorAvailabilityServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private ReservationRepository reservationRepository;
 
     @Test
     void 가용시간_조회_성공() {
@@ -198,6 +203,28 @@ class MentorAvailabilityServiceTest {
         )))
                 .isInstanceOf(CustomException.class)
                 .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ACCESS_DENIED));
+    }
+
+    @Test
+    void 가용시간_조회_current_participants_반영() {
+        Member mentor = Member.builder()
+                .email("mentor@test.com").password("enc").name("박지훈").nickname("멘토").role(Role.MENTOR).build();
+        ReflectionTestUtils.setField(mentor, "id", 1L);
+
+        LocalDateTime start = LocalDateTime.of(2026, 6, 1, 19, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 6, 1, 20, 0);
+        MentorAvailability slot = MentorAvailability.builder()
+                .mentor(mentor).startTime(start).endTime(end).maxParticipants(4).build();
+        ReflectionTestUtils.setField(slot, "id", 10L);
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(mentor));
+        given(availabilityRepository.findAllByMentorAndIsBookedFalse(mentor)).willReturn(List.of(slot));
+        given(reservationRepository.countByMentorAvailabilityAndStatusNot(slot, ReservationStatus.CANCELLED)).willReturn(2L);
+
+        List<AvailabilityResponse> result = availabilityService.getAvailabilities(1L);
+
+        assertThat(result.get(0).currentParticipants()).isEqualTo(2);
+        assertThat(result.get(0).maxParticipants()).isEqualTo(4);
     }
 
     @Test

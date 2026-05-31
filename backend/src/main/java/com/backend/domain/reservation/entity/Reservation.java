@@ -16,16 +16,16 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Reservation extends BaseEntity {
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "availability_id", nullable = false, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "availability_id", nullable = false)
     private MentorAvailability mentorAvailability;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "mentee_id", nullable = false)
     private Member mentee;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "session_id", unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "session_id")
     private InterviewSession interviewSession;
 
     @Enumerated(EnumType.STRING)
@@ -53,6 +53,5 @@ public class Reservation extends BaseEntity {
 
     public void cancel() {
         this.status = ReservationStatus.CANCELLED;
-        this.mentorAvailability.unbook();
     }
 }

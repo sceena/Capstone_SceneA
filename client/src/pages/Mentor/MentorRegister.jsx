@@ -136,10 +136,9 @@ const Header = ({ userName }) => (
 /* ── 사이드바 단계 ── */
 const Sidebar = ({ current }) => {
   const steps = [
-    { n:1, title:"직무·경력",   sub:"기본 프로필 설정" },
-    { n:2, title:"면접 강점",   sub:"유형·자기소개" },
-    { n:3, title:"면접 가능 시간", sub:"일정 및 유형 설정" },
-    { n:4, title:"최종 확인",   sub:"등록 완료" },
+    { n:1, title:"직무·경력",     sub:"기본 프로필 설정" },
+    { n:2, title:"면접 가능 시간", sub:"일정 및 유형 설정" },
+    { n:3, title:"최종 확인",     sub:"등록 완료" },
   ];
   return (
     <aside style={{ width:200, flexShrink:0 }}>
@@ -494,7 +493,7 @@ const ReviewRow = ({ label, value }) => (
   </div>
 );
 
-const Step4 = ({ d1, d2, d3 }) => {
+const Step4 = ({ d1, d3 }) => {
   const confirmedSlots = Object.keys(d3.slotModes || {}).length;
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
@@ -507,11 +506,6 @@ const Step4 = ({ d1, d2, d3 }) => {
         <ReviewRow label="기업·직무" value={`${d1.company} / ${d1.job}`}/>
         <ReviewRow label="경력" value={`${d1.years}년차`}/>
         <ReviewRow label="기술 스택" value={d1.techStack.join(", ")}/>
-      </div>
-      <div style={{ background:C.white, borderRadius:14, padding:"20px 24px", border:`1px solid ${C.border}` }}>
-        <p style={{ fontSize:12, fontWeight:700, color:C.textMuted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:4 }}>면접 강점</p>
-        <ReviewRow label="코칭 유형" value={d2.types.join(", ")}/>
-        <ReviewRow label="집중 항목" value={d2.focusItems.join(", ")}/>
       </div>
       <div style={{ background:C.white, borderRadius:14, padding:"20px 24px", border:`1px solid ${C.border}` }}>
         <p style={{ fontSize:12, fontWeight:700, color:C.textMuted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:4 }}>일정·정원</p>
@@ -537,18 +531,23 @@ export default function MentorInfoRegister() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [availabilityIds, setAvailabilityIds] = useState([]);
+  const [preservedTags, setPreservedTags] = useState([]);
 
   const [d1, setD1] = useState({ company:"", job:"", years:"", prevCompany:"", techStack:[], bio:"" });
-  const [d2, setD2] = useState({ types:[], focusItems:[], philosophy:"" });
   const [d3, setD3] = useState({ capacity:"1", slotModes:{}, duration:"60분", point:"50" });
 
   const upd1 = (k,v) => setD1(p=>({...p,[k]:v}));
-  const upd2 = (k,v) => setD2(p=>({...p,[k]:v}));
   const upd3 = (k,v) => setD3(p=>({...p,[k]:v}));
 
   useEffect(() => {
     getMyProfile()
-      .then(profile => getMentorAvailabilities(profile.id))
+      .then(profile => {
+        const kept = (profile.tags || [])
+          .filter(t => t.category === "코칭유형" || t.category === "집중항목")
+          .map(t => ({ name: t.name, category: t.category }));
+        setPreservedTags(kept);
+        return getMentorAvailabilities(profile.id);
+      })
       .then(items => {
         setAvailabilityIds(items.map(item => item.id).filter(Boolean));
         const slotModes = items
@@ -562,7 +561,7 @@ export default function MentorInfoRegister() {
       .catch(() => {});
   }, []);
 
-  const handleNext = () => { if(step<4) setStep(s=>s+1); };
+  const handleNext = () => { if(step<3) setStep(s=>s+1); };
   const handlePrev = () => { if(step>1) setStep(s=>s-1); };
 
   const handleSubmit = async () => {
@@ -573,11 +572,31 @@ export default function MentorInfoRegister() {
     setLoading(true);
     try {
       const typeNameMap = { tech:"기술 면접", culture:"인성 면접", portfolio:"포트폴리오", mock:"모의 면접" };
+
+      const yearsToRange = (years) => {
+        const n = parseInt(years);
+        if (isNaN(n)) return null;
+        if (n < 1) return "1년 미만";
+        if (n <= 3) return "1~3년";
+        if (n <= 5) return "3~5년";
+        if (n <= 7) return "5~7년";
+        if (n <= 10) return "7~10년";
+        return "10년 이상";
+      };
+
+      const slotValues = Object.values(d3.slotModes || {});
+      const has1on1 = slotValues.some(v => Number(v) === 1);
+      const hasGroup = slotValues.some(v => Number(v) === 4);
+
       const tags = [
+        d1.company?.trim() ? { name: d1.company.trim(), category: "소속기업" } : null,
+        d1.job?.trim()     ? { name: d1.job.trim(),     category: "직무" }     : null,
+        yearsToRange(d1.years) ? { name: yearsToRange(d1.years), category: "경력" } : null,
         ...d1.techStack.map(t => ({ name: t, category: "기술스택" })),
-        ...d2.types.map(t => ({ name: typeNameMap[t] || t, category: "코칭유형" })),
-        ...d2.focusItems.map(t => ({ name: t, category: "집중항목" })),
-      ];
+        ...preservedTags,
+        has1on1 ? { name: "1:1 면접", category: "면접유형" } : null,
+        hasGroup ? { name: "그룹 면접", category: "면접유형" } : null,
+      ].filter(Boolean);
 
       const bio = d1.bio?.trim() || null;
       if (bio || tags.length > 0) {
@@ -639,9 +658,8 @@ export default function MentorInfoRegister() {
             }}>
               <div style={{ flex:1 }}>
                 {step===1 && <Step1 data={d1} onChange={upd1}/>}
-                {step===2 && <Step2 data={d2} onChange={upd2}/>}
-                {step===3 && <Step3 data={d3} onChange={upd3}/>}
-                {step===4 && <Step4 d1={d1} d2={d2} d3={d3}/>}
+                {step===2 && <Step3 data={d3} onChange={upd3}/>}
+                {step===3 && <Step4 d1={d1} d3={d3}/>}
               </div>
 
               {/* 버튼 */}
@@ -658,7 +676,7 @@ export default function MentorInfoRegister() {
                     이전
                   </button>
                 )}
-                <button onClick={step===4?handleSubmit:handleNext} disabled={loading} style={{
+                <button onClick={step===3?handleSubmit:handleNext} disabled={loading} style={{
                   padding:"12px 36px",
                   background:C.navy, color:C.white,
                   border:"none", borderRadius:8,
@@ -671,7 +689,7 @@ export default function MentorInfoRegister() {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" style={{animation:"spin 0.8s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                         처리 중...
                       </span>
-                    : step===4 ? "등록 완료하기" : "다음 단계"
+                    : step===3 ? "등록 완료하기" : "다음 단계"
                   }
                 </button>
               </div>

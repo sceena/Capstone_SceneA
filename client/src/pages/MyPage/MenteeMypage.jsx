@@ -598,21 +598,27 @@ export default function MenteeMyPage() {
                 {profile?.bio && <p style={{ fontSize: 12, color: C.textSub, marginTop: 8, lineHeight: 1.6 }}>{profile.bio}</p>}
               </div>
 
-              {/* 관심 직무 */}
-              {profile?.tags?.some(t => t.category === "관심직무" || t.category === "목표기업") && (
-                <div style={{ background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
-                  {profile.tags.find(t => t.category === "관심직무") && (
-                    <p style={{ fontSize: 13, fontWeight: 700, color: C.primary, marginBottom: 2 }}>
-                      {profile.tags.find(t => t.category === "관심직무").name}
-                    </p>
-                  )}
-                  {profile.tags.find(t => t.category === "목표기업") && (
-                    <p style={{ fontSize: 11, color: C.textSub }}>
-                      {profile.tags.find(t => t.category === "목표기업").name}
-                    </p>
-                  )}
-                </div>
-              )}
+              {/* 학교 · 전공 · 관심직무 · 목표기업 */}
+              {(() => {
+                const rows = [
+                  { label: "관심 직무", cat: "관심직무" },
+                  { label: "목표 기업", cat: "목표기업" },
+                  { label: "학교",     cat: "학교" },
+                  { label: "전공",     cat: "전공" },
+                ].map(r => ({ ...r, value: profile?.tags?.find(t => t.category === r.cat)?.name }))
+                  .filter(r => r.value);
+                if (!rows.length) return null;
+                return (
+                  <div style={{ background: C.bg, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+                    {rows.map((r, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+                        <span style={{ fontSize: 11, color: C.textMuted }}>{r.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{r.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* 스탯 */}
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 0 }}>

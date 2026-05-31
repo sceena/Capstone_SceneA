@@ -272,10 +272,6 @@ export default function MentorMyPage() {
               </svg>
               면접 일정 관리
             </button>
-            <button onClick={() => setShowEdit(true)} style={{ padding: "11px 18px", background: C.white, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s", boxShadow: C.shadow }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text; }}
-            >프로필 수정</button>
           </div>
         </div>
 
@@ -285,7 +281,8 @@ export default function MentorMyPage() {
           <div className="mp-sidebar" style={{ width: 230, flexShrink: 0, display: "flex", flexDirection: "column", gap: 16 }}>
 
             <Card>
-              <div style={{ textAlign: "center", marginBottom: 18 }}>
+              {/* 아바타 + 이름 */}
+              <div style={{ textAlign: "center", marginBottom: 16 }}>
                 {profileImage
                   ? <img src={profileImage} alt="profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px", display: "block", border: `2px solid ${C.border}` }}/>
                   : <JobAvatar jobStr={jobStr} size={72} style={{ margin: "0 auto 12px" }}/>
@@ -294,6 +291,28 @@ export default function MentorMyPage() {
                 <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: C.primaryLight, color: C.primary }}>멘토</span>
                 {profile?.bio && <p style={{ fontSize: 12, color: C.textSub, marginTop: 8, lineHeight: 1.6 }}>{profile.bio}</p>}
               </div>
+
+              {/* 현 소속 기업 · 직무 · 경력 */}
+              {(() => {
+                const company = profile?.tags?.find(t => t.category === "소속기업")?.name;
+                const job     = profile?.tags?.find(t => t.category === "직무")?.name;
+                const career  = profile?.tags?.find(t => t.category === "경력" || t.category === "근속년수")?.name;
+                if (!company && !job && !career) return null;
+                return (
+                  <div style={{ background: C.bg, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+                    {[
+                      { label: "소속 기업", value: company },
+                      { label: "직무",     value: job },
+                      { label: "경력",     value: career },
+                    ].filter(r => r.value).map((r, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+                        <span style={{ fontSize: 11, color: C.textMuted }}>{r.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{r.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {tags.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center", marginBottom: 16 }}>
@@ -329,6 +348,11 @@ export default function MentorMyPage() {
               ))}
             </Card>
 
+            {/* 프로필 수정 · 회원탈퇴 */}
+            <button onClick={() => setShowEdit(true)} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.white, color: C.text, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s", boxShadow: C.shadow }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text; }}
+            >프로필 수정</button>
             <button onClick={handleWithdraw} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 12, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = C.danger; e.currentTarget.style.color = C.danger; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMuted; }}

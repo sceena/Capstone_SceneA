@@ -313,13 +313,6 @@ export default function MentorApply() {
                 )}
               </div>
 
-              {/* bio */}
-              {mentor.bio && (
-                <p style={{ fontSize: 13, color: C.textSub, lineHeight: 1.75, marginBottom: 18, padding: "14px 16px", background: C.bg, borderRadius: 12 }}>
-                  {mentor.bio}
-                </p>
-              )}
-
               {/* 태그 */}
               {mentor.tags.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>

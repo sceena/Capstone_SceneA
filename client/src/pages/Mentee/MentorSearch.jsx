@@ -20,7 +20,7 @@ const C = {
 };
 
 /* ── 헤더 ── */
-const Header = ({ userName, accessToken }) => {
+const Header = ({ userName, accessToken, role }) => {
   const navigate = useNavigate();
   const handleLogout = async () => {
     try { await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } }); } catch {}
@@ -57,7 +57,7 @@ const Header = ({ userName, accessToken }) => {
           {[
             { label: "대시보드", to: "/dashboard/mentee" },
             { label: "멘토 탐색", to: "/mentor/search", active: true },
-            { label: "마이페이지", to: user?.role === "mentor" ? "/mentor/mypage" : "/mentee/mypage" },
+            { label: "마이페이지", to: role === "mentor" ? "/mentor/mypage" : "/mentee/mypage" },
           ].map(({ label, to, active }) => (
             <Link key={label} to={to} style={{
               fontSize: 14, fontWeight: active ? 600 : 400,
@@ -367,7 +367,7 @@ export default function MentorSearch() {
         @media(max-width:520px){.mgrid{grid-template-columns:1fr!important}}
       `}</style>
 
-      <Header userName={userName} accessToken={user?.accessToken}/>
+      <Header userName={userName} accessToken={user?.accessToken} role={user?.role}/>
 
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 5% 72px" }}>
 

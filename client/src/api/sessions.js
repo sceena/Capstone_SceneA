@@ -31,7 +31,16 @@ export async function createSession(data) {
     headers: authHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("세션 생성 실패");
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body?.message || body?.detail || body?.error || "";
+    } catch {
+      detail = await res.text().catch(() => "");
+    }
+    throw new Error(`세션 생성 실패 (${res.status})${detail ? `: ${detail}` : ""}`);
+  }
   return res.json();
 }
 
@@ -148,6 +157,14 @@ function authHeadersNoBody() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function audioFilename(prefix, audioBlob) {
+  const type = audioBlob?.type || "";
+  if (type.includes("mp4")) return `${prefix}.mp4`;
+  if (type.includes("mpeg")) return `${prefix}.mp3`;
+  if (type.includes("wav")) return `${prefix}.wav`;
+  return `${prefix}.webm`;
+}
+
 /**
  * GET /api/sessions/{id}/report
  * 세션 리포트 조회. report_status: "first" | "final"
@@ -233,7 +250,7 @@ export async function saveMentorAnswerEvaluation(sessionId, answerId, evaluation
  */
 export async function uploadAnswerAudio(sessionId, questionId, audioBlob, { answerStart, answerEnd, menteeId }) {
   const formData = new FormData();
-  formData.append("audio", audioBlob, "answer.webm");
+  formData.append("audio", audioBlob, audioFilename("answer", audioBlob));
   const params = new URLSearchParams({
     answer_start: answerStart,
     answer_end: answerEnd,
@@ -260,7 +277,7 @@ export async function uploadQuestionAudio(sessionId, audioBlob) {
     throw new Error("데모 세션에서는 질문 오디오를 저장할 수 없습니다. 실제 생성된 면접 세션으로 테스트해 주세요.");
   }
   const formData = new FormData();
-  formData.append("audio", audioBlob, "question.webm");
+  formData.append("audio", audioBlob, audioFilename("question", audioBlob));
   const res = await fetch(`/api/sessions/${sessionId}/questions/audio`, {
     method: "POST",
     headers: authHeadersNoBody(),

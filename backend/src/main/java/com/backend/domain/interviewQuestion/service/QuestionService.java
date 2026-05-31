@@ -1,6 +1,7 @@
 package com.backend.domain.interviewQuestion.service;
 
 import com.backend.domain.ai.client.AiSttClient;
+import com.backend.domain.ai.client.SttTranscriptNormalizer;
 import com.backend.domain.ai.dto.response.AiSttResponse;
 import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewQuestion.dto.request.QuestionCreateRequest;
@@ -45,6 +46,7 @@ public class QuestionService {
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
     private final AiSttClient aiSttClient;
+    private final SttTranscriptNormalizer sttTranscriptNormalizer;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
@@ -188,7 +190,7 @@ public class QuestionService {
         try {
             AiSttResponse response = aiSttClient.transcribe(audio);
             question.completeStt(
-                    response.text(),
+                    sttTranscriptNormalizer.normalize(response.text()),
                     response.model(),
                     response.durationSec(),
                     response.audioQualityStatus(),

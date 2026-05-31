@@ -98,6 +98,7 @@ io.on('connection', (socket) => {
         rtpCapabilities: room.router.rtpCapabilities,
         existingProducers, // 이미 방에 있는 참여자의 producer 목록
         activeQuestion: room.activeQuestion,
+        activeRecorder: room.activeRecorder,
       });
     } catch (err) {
       console.error('join error:', err);
@@ -243,6 +244,38 @@ io.on('connection', (socket) => {
     if (callback) callback({ ok: true });
   });
 
+  // 9. 리포트용 발화 녹음 lock (질문/답변 동시 녹음 방지)
+  socket.on('recordingStart', ({ recordingType, targetMenteeId } = {}, callback) => {
+    if (!currentRoom || !currentPeerId) {
+      if (callback) callback({ error: '방에 먼저 입장하세요.' });
+      return;
+    }
+
+    const result = currentRoom.startRecording(currentPeerId, { recordingType, targetMenteeId });
+    if (!result.ok) {
+      if (callback) callback({ error: '다른 참여자가 녹음 중입니다.', activeRecorder: result.activeRecorder });
+      return;
+    }
+
+    currentRoom.getOtherPeers(currentPeerId).forEach(({ socket: otherSocket }) => {
+      otherSocket.emit('activeRecorder', { activeRecorder: result.activeRecorder });
+    });
+    if (callback) callback({ ok: true, activeRecorder: result.activeRecorder });
+  });
+
+  socket.on('recordingStop', (_payload, callback) => {
+    if (!currentRoom || !currentPeerId) {
+      if (callback) callback({ error: '방에 먼저 입장하세요.' });
+      return;
+    }
+
+    const activeRecorder = currentRoom.stopRecording(currentPeerId);
+    currentRoom.getOtherPeers(currentPeerId).forEach(({ socket: otherSocket }) => {
+      otherSocket.emit('activeRecorder', { activeRecorder });
+    });
+    if (callback) callback({ ok: true, activeRecorder });
+  });
+
   // 연결 해제
   socket.on('disconnect', () => {
     if (!currentRoom || !currentPeerId) return;
@@ -251,7 +284,14 @@ io.on('connection', (socket) => {
       otherSocket.emit('peerLeft', { peerId: currentPeerId });
     });
 
+    const wasRecording = currentRoom.activeRecorder?.peerId === currentPeerId;
     currentRoom.removePeer(currentPeerId);
+    if (wasRecording) {
+      currentRoom.stopRecording(currentPeerId);
+      currentRoom.getOtherPeers(currentPeerId).forEach(({ socket: otherSocket }) => {
+        otherSocket.emit('activeRecorder', { activeRecorder: currentRoom.activeRecorder });
+      });
+    }
     if (currentRoom.isEmpty()) rooms.delete(currentRoom.roomId);
   });
 });

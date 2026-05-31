@@ -56,7 +56,7 @@ public class InterviewSession extends BaseEntity {
         if (this.status == SessionStatus.IN_PROGRESS) {
             return;
         }
-        if (this.status != SessionStatus.SCHEDULED) {
+        if (this.status != SessionStatus.SCHEDULED && this.status != SessionStatus.COMPLETED) {
             throw new CustomException(ErrorCode.INVALID_SESSION_STATUS);
         }
         this.status = SessionStatus.IN_PROGRESS;

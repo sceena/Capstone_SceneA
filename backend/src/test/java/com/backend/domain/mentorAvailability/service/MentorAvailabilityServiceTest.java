@@ -145,9 +145,9 @@ class MentorAvailabilityServiceTest {
                 .endTime(LocalDateTime.of(2026, 6, 1, 20, 0))
                 .build();
         ReflectionTestUtils.setField(slot, "id", 10L);
-        slot.book();
 
         given(availabilityRepository.findById(10L)).willReturn(Optional.of(slot));
+        given(reservationRepository.countByMentorAvailabilityAndStatusNot(slot, ReservationStatus.CANCELLED)).willReturn(1L);
 
         assertThatThrownBy(() -> availabilityService.delete(1L, 10L))
                 .isInstanceOf(CustomException.class)

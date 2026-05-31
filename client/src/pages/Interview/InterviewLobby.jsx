@@ -37,7 +37,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [camStatus, setCamStatus] = useState("idle"); // idle | loading | ok | denied
   const [camError, setCamError] = useState("");
   const [entering, setEntering] = useState(false);
-  const [checklist, setChecklist] = useState([false, false, false]);
+  const [checklist, setChecklist] = useState([false, false, false, false]);
   const [sessionData, setSessionData] = useState(null);
   const [videoDevices, setVideoDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
@@ -51,6 +51,16 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [resumeOpen, setResumeOpen] = useState(false);
   const [resumeError, setResumeError] = useState("");
   const [openResumeIndex, setOpenResumeIndex] = useState(null);
+
+  const cacheRecommendedQuestions = useCallback((items) => {
+    if (!id || !Array.isArray(items)) return;
+    const contents = items
+      .map(item => item?.content?.trim?.() || "")
+      .filter(Boolean);
+    if (contents.length > 0) {
+      sessionStorage.setItem(`scena_session_recommendations_${id}`, JSON.stringify(contents));
+    }
+  }, [id]);
 
   /* ── 오디오 레벨 분석 ── */
   const [micLevel, setMicLevel] = useState(0);
@@ -264,6 +274,7 @@ export default function InterviewRobby({ role = "mentee" }) {
       const data = await getRecommendedQuestions(id);
       const nextQuestions = flattenRecommendedQuestions(data);
       setRecommendedQuestions(nextQuestions);
+      cacheRecommendedQuestions(nextQuestions);
       if (nextQuestions.length === 0) {
         setRecommendError("추천 질문이 없습니다. 지원자 서류가 등록되어 있는지 확인해 주세요.");
       }
@@ -308,9 +319,12 @@ export default function InterviewRobby({ role = "mentee" }) {
       const savedQuestions = normalizeQuestionList(data);
       if (savedQuestions.length > 0) {
         setQuestions(savedQuestions);
+        cacheRecommendedQuestions(savedQuestions);
       } else {
         const latest = await getQuestions(id);
-        setQuestions(normalizeQuestionList(latest));
+        const latestQuestions = normalizeQuestionList(latest);
+        setQuestions(latestQuestions);
+        cacheRecommendedQuestions(latestQuestions);
       }
     } catch (error) {
       setRecommendError(error?.message || "선택한 질문을 저장하지 못했습니다.");
@@ -323,6 +337,22 @@ export default function InterviewRobby({ role = "mentee" }) {
     setEntering(true);
     const isRealSession = id && /^\d+$/.test(id);
     if (isRealSession) {
+      if (role === "mentor" && questions.length === 0 && recommendedQuestions.length > 0) {
+        const contents = recommendedQuestions
+          .filter(item => item.selected !== false)
+          .map(item => item.content.trim())
+          .filter(Boolean);
+        if (contents.length > 0) {
+          try {
+            const data = await createQuestions(id, contents);
+            const savedQuestions = normalizeQuestionList(data);
+            setQuestions(savedQuestions);
+            cacheRecommendedQuestions(savedQuestions.length > 0 ? savedQuestions : recommendedQuestions);
+          } catch {
+            cacheRecommendedQuestions(recommendedQuestions);
+          }
+        }
+      }
       try { await joinSession(id); } catch {}
       if (role === "mentor") {
         try { await updateSessionStatus(id, "in_progress"); } catch {}

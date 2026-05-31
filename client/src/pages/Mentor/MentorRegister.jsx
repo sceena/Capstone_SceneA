@@ -577,7 +577,11 @@ export default function MentorInfoRegister() {
 
       const payloads = buildAvailabilityPayloads(d3.slotModes, d3.duration);
       await Promise.all(payloads.map(createMentorAvailability));
-      await Promise.all(availabilityIds.map(deleteMentorAvailability));
+      const deleteResults = await Promise.allSettled(availabilityIds.map(deleteMentorAvailability));
+      const failedDeletes = deleteResults.filter(result => result.status === "rejected");
+      if (failedDeletes.length > 0) {
+        console.warn("[MentorRegister] 일부 기존 예약 가능 시간은 신청/예약 이력이 있어 삭제하지 않았습니다.", failedDeletes);
+      }
       navigate("/dashboard/mentor");
     } catch (error) {
       alert(error?.message || "예약 가능 시간 저장에 실패했습니다.");

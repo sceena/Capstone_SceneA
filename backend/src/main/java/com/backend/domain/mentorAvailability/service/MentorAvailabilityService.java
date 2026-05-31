@@ -70,7 +70,8 @@ public class MentorAvailabilityService {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
 
-        if (availability.isBooked()) {
+        long activeCount = reservationRepository.countByMentorAvailabilityAndStatusNot(availability, ReservationStatus.CANCELLED);
+        if (activeCount > 0) {
             throw new CustomException(ErrorCode.RESERVATION_SLOT_TAKEN);
         }
 

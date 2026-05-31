@@ -20,6 +20,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 
 import java.io.IOException;
+import java.time.Duration;
 
 @Component
 @Slf4j
@@ -30,9 +31,13 @@ public class FastApiAiSttClient implements AiSttClient {
     public FastApiAiSttClient(
             RestClient.Builder restClientBuilder,
             @Value("${ai.server.base-url:http://localhost:8000}") String baseUrl) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(5));
+        requestFactory.setReadTimeout(Duration.ofSeconds(45));
+
         this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
-                .requestFactory(new SimpleClientHttpRequestFactory())
+                .requestFactory(requestFactory)
                 .build();
     }
 

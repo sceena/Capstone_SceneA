@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
-import { getMentors } from "../../api/users";
+import { getMentors, getMyProfile } from "../../api/users";
 import JobAvatar from "../../components/JobAvatar";
 
 const C = {
@@ -296,6 +296,7 @@ export default function MentorSearch() {
   const [mentors, setMentors]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
+  const [isRegistered, setIsRegistered] = useState(false);
   const [search, setSearch]       = useState("");
   const [focused, setFocused]     = useState(false);
   const [openPanel, setOpenPanel] = useState("");
@@ -310,7 +311,14 @@ export default function MentorSearch() {
       .catch(() => { setError("멘토 목록을 불러오지 못했어요."); setLoading(false); });
   };
 
-  useEffect(() => { fetchMentors(); }, []);
+  useEffect(() => {
+    fetchMentors();
+    if (user?.role === "mentor") {
+      getMyProfile()
+        .then(profile => setIsRegistered((profile.tags?.length > 0) || Boolean(profile.bio)))
+        .catch(() => {});
+    }
+  }, []);
 
   // 외부 클릭 시 패널 닫기
   useEffect(() => {
@@ -601,7 +609,7 @@ export default function MentorSearch() {
         )}
 
         {/* 멘토 유도 배너 */}
-        {!loading && !error && user?.role === "mentor" && (
+        {!loading && !error && user?.role === "mentor" && !isRegistered && (
           <div style={{
             background: C.primaryGrad, borderRadius: 16, padding: "24px 32px", marginBottom: 20,
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20,

@@ -4,67 +4,30 @@ import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMySessions } from "../../api/sessions";
 import { getMentorReservationRequests, respondReservation } from "../../api/reservations";
 
-/* ============================================================
-   멘토 대시보드  (pages/Dashboard/MentorDashboard.jsx)
-   ============================================================ */
-
 const C = {
-  navy:      "#0D2240",
-  navyMid:   "#1B4F7A",
-  cream:     "#F2EDE4",
-  creamDark: "#E8E0D0",
-  white:     "#FFFFFF",
-  teal:      "#1D9E75",
-  text:      "#1A1818",
-  textSub:   "#6B6863",
-  textMuted: "#9E9B95",
-  border:    "#E8E0D0",
-  bg:        "#FAF8F4",
+    primary:      "#0D2240",
+  primaryDark:  "#081828",
+  primaryLight: "#E8EEF6",
+  primaryGrad:  "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)",
+  success:      "#0CA678",
+  successLight: "#E6FCF5",
+  successGrad:  "linear-gradient(135deg, #0CA678 0%, #38D9A9 100%)",
+  warning:      "#E67700",
+  warningLight: "#FFF3BF",
+  warningGrad:  "linear-gradient(135deg, #F76707 0%, #FFA94D 100%)",
+  danger:       "#E03131",
+  dangerLight:  "#FFF5F5",
+  text:         "#1A1B1E",
+  textSub:      "#495057",
+  textMuted:    "#868E96",
+  white:        "#FFFFFF",
+  bg:           "#F0F4F8",
+  border:       "#E9ECEF",
+  navy:         "#1C3A5C",
+  navyGrad:     "linear-gradient(135deg, #1C3A5C 0%, #2D5A8E 100%)",
+  shadow:       "0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05)",
+  shadowLg:     "0 4px 12px rgba(0,0,0,0.08), 0 20px 48px rgba(0,0,0,0.07)",
 };
-
-/* ── 로고 ── */
-const LogoIcon = ({ size = 26, color = C.white }) => (
-  <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-    <circle cx="14" cy="14" r="2" fill={color}/>
-    {[0,45,90,135,180,225,270,315].map((deg, i) => {
-      const r = deg * Math.PI / 180;
-      return <line key={i}
-        x1={14+2.5*Math.cos(r)} y1={14+2.5*Math.sin(r)}
-        x2={14+10 *Math.cos(r)} y2={14+10 *Math.sin(r)}
-        stroke={color} strokeWidth="1.5" strokeLinecap="round"/>;
-    })}
-    {[0,90,180,270].map((deg, i) => {
-      const r=deg*Math.PI/180, mx=14+7*Math.cos(r), my=14+7*Math.sin(r), o=r+Math.PI/2;
-      return <g key={i}>
-        <line x1={mx} y1={my} x2={mx+3*Math.cos(o)} y2={my+3*Math.sin(o)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/>
-        <line x1={mx} y1={my} x2={mx-3*Math.cos(o)} y2={my-3*Math.sin(o)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/>
-      </g>;
-    })}
-  </svg>
-);
-
-/* ── 섹션 헤더 아이콘 ── */
-const SectionIcon = () => (
-  <div style={{
-    width:36, height:36, borderRadius:"50%",
-    border:`1.5px solid ${C.border}`,
-    display:"flex", alignItems:"center", justifyContent:"center",
-    flexShrink:0,
-  }}>
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="2.5" stroke={C.teal} strokeWidth="1.5"/>
-      <path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14" stroke={C.teal} strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M3.76 3.76l1.06 1.06M11.18 11.18l1.06 1.06M11.18 4.82l-1.06 1.06M4.82 11.18l-1.06 1.06" stroke={C.teal} strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  </div>
-);
-
-/* ── 따옴표 아이콘 ── */
-const QuoteIcon = () => (
-  <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
-    <path d="M0 20V12C0 5.373 4.48 1.28 13.44 0l1.12 2.08C10.293 3.12 8 5.653 8 9.6V11h5V20H0zm15 0V12C15 5.373 19.48 1.28 28.44 0l1.12 2.08C25.293 3.12 23 5.653 23 9.6V11h5V20H15z" fill={C.border}/>
-  </svg>
-);
 
 /* ── 헤더 ── */
 const Header = ({ userName, accessToken }) => {
@@ -79,40 +42,97 @@ const Header = ({ userName, accessToken }) => {
     clearAuthUser();
     navigate("/");
   };
+  const initials = userName ? userName.slice(0, 2) : "멘";
   return (
     <header style={{
-      background: C.navy, padding:"0 5%",
-      position:"sticky", top:0, zIndex:100,
+      background: C.white,
+      padding: "0 5%",
+      position: "sticky",
+      top: 0,
+      zIndex: 100,
+      boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)",
     }}>
       <nav style={{
-        display:"flex", alignItems:"center",
-        justifyContent:"space-between", height:64,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        height: 64,
+        maxWidth: 1200,
+        margin: "0 auto",
       }}>
-        <span style={{ fontSize:15, fontWeight:600, color:C.white }}>
-          안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>{userName}</span>멘토님
-        </span>
-        <div style={{ display:"flex", alignItems:"center", gap:24 }}>
-          {[{ label:"대시보드", to:"/dashboard/mentor" }, { label:"멘토 탐색", to:"/mentor/search" }, { label:"MyPage", to:"/mentor/mypage" }].map(({ label, to }) => (
+        {/* 로고 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: C.primaryGrad,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 4px 12px rgba(66,99,235,0.3)",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>
+            Scene<span style={{ color: C.primary }}>A</span>
+          </span>
+        </div>
+
+        {/* 네비게이션 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {[
+            { label: "대시보드", to: "/dashboard/mentor", active: true },
+            { label: "멘토 탐색", to: "/mentor/search" },
+            { label: "마이페이지", to: "/mentor/mypage" },
+          ].map(({ label, to, active }) => (
             <Link key={label} to={to} style={{
-              fontSize:14, fontWeight: label==="MyPage" ? 700 : 400,
-              color: C.white, textDecoration:"none",
-              opacity: 0.85, transition:"opacity 0.15s",
+              fontSize: 14,
+              fontWeight: active ? 600 : 400,
+              color: active ? C.primary : C.textSub,
+              textDecoration: "none",
+              padding: "6px 14px",
+              borderRadius: 8,
+              background: active ? C.primaryLight : "transparent",
+              transition: "all 0.15s",
             }}
-              onMouseEnter={e => e.target.style.opacity=1}
-              onMouseLeave={e => e.target.style.opacity=0.85}
+              onMouseEnter={e => { if (!active) { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; } }}
+              onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; } }}
             >
               {label}
             </Link>
           ))}
+        </div>
+
+        {/* 유저 영역 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: "50%",
+              background: C.primaryGrad,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(66,99,235,0.3)",
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.white }}>{initials}</span>
+            </div>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3, margin: 0 }}>{userName} 멘토</p>
+              <p style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.3, margin: 0 }}>Mentor</p>
+            </div>
+          </div>
+          <div style={{ width: 1, height: 24, background: C.border }} />
           <button onClick={handleLogout} style={{
-            padding:"7px 16px", borderRadius:8,
-            border:"1px solid rgba(255,255,255,0.3)",
-            background:"transparent", color:"rgba(255,255,255,0.85)",
-            fontSize:13, fontWeight:500, cursor:"pointer",
-            fontFamily:"inherit", transition:"background 0.15s, border-color 0.15s",
+            padding: "7px 16px",
+            borderRadius: 8,
+            border: `1px solid ${C.border}`,
+            background: "transparent",
+            color: C.textSub,
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            transition: "all 0.15s",
           }}
-            onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.6)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.3)"; }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = "#CED4DA"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; e.currentTarget.style.borderColor = C.border; }}
           >
             로그아웃
           </button>
@@ -122,87 +142,134 @@ const Header = ({ userName, accessToken }) => {
   );
 };
 
-/* ── 면접 세션 카드 (검정 배경) ── */
+/* ── 통계 카드 ── */
+const StatCard = ({ label, value, sub, gradient, shadowColor, icon }) => (
+  <div style={{
+    background: gradient,
+    borderRadius: 20,
+    padding: "24px 26px",
+    position: "relative",
+    overflow: "hidden",
+    boxShadow: `0 8px 24px ${shadowColor}`,
+    flex: 1,
+  }}>
+    <div style={{ position: "absolute", top: -24, right: -24, width: 110, height: 110, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
+    <div style={{ position: "absolute", bottom: -32, right: 18, width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }} />
+    <div style={{ position: "relative" }}>
+      <div style={{
+        width: 40, height: 40, borderRadius: 12,
+        background: "rgba(255,255,255,0.18)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 16,
+      }}>
+        {icon}
+      </div>
+      <p style={{ fontSize: 32, fontWeight: 800, color: C.white, letterSpacing: "-0.04em", lineHeight: 1, marginBottom: 6 }}>{value}</p>
+      <p style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.88)", marginBottom: 4 }}>{label}</p>
+      {sub && <p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{sub}</p>}
+    </div>
+  </div>
+);
+
+/* ── 대시보드 카드 컨테이너 ── */
+const DashCard = ({ title, sub, children, style, accentColor, iconSvg }) => (
+  <div style={{
+    background: C.white,
+    borderRadius: 20,
+    padding: "24px 24px 28px",
+    boxShadow: C.shadow,
+    ...style,
+  }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {iconSvg && (
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: accentColor ? `${accentColor}15` : C.primaryLight,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            {iconSvg}
+          </div>
+        )}
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.02em", margin: 0 }}>{title}</h2>
+          {sub && <p style={{ fontSize: 12, color: C.textMuted, marginTop: 3, margin: 0 }}>{sub}</p>}
+        </div>
+      </div>
+    </div>
+    {children}
+  </div>
+);
+
+/* ── 면접 세션 카드 ── */
 const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
   <div style={{
-    background:"#0D2240", borderRadius:12,
-    padding:"18px 22px",
-    display:"flex", alignItems:"center",
-    justifyContent:"space-between", gap:16,
-    transition:"transform 0.2s",
+    background: C.navyGrad,
+    borderRadius: 16,
+    padding: "20px 24px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    boxShadow: "0 4px 16px rgba(28,58,92,0.22)",
+    transition: "transform 0.2s, box-shadow 0.2s",
   }}
-    onMouseEnter={e => e.currentTarget.style.transform="translateY(-1px)"}
-    onMouseLeave={e => e.currentTarget.style.transform="translateY(0)"}
+    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(28,58,92,0.3)"; }}
+    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(28,58,92,0.22)"; }}
   >
-    <div style={{ flex:1, minWidth:0 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ marginBottom: 8 }}>
         <span style={{
-          background:"#1D9E7533", color:"#1D9E75",
-          fontSize:9, fontWeight:700, letterSpacing:"0.08em",
-          padding:"2px 8px", borderRadius:3,
-        }}>면접 세션</span>
+          background: "rgba(56,217,169,0.18)",
+          color: "#38D9A9",
+          fontSize: 10, fontWeight: 700, letterSpacing: "0.07em",
+          padding: "3px 10px", borderRadius: 99,
+          border: "1px solid rgba(56,217,169,0.3)",
+        }}>● LIVE 면접 세션</span>
       </div>
-      <p style={{ fontSize:15, fontWeight:700, color:C.white, marginBottom:5 }}>{title}</p>
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", display:"flex", alignItems:"center", gap:4 }}>
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-            <circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
-            <path d="M5.5 3v2.5l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      <p style={{ fontSize: 16, fontWeight: 700, color: C.white, marginBottom: 8 }}>{title}</p>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: 5 }}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M4 1v2M8 1v2M1.5 5h9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
           </svg>
           {date}
         </span>
-        <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", display:"flex", alignItems:"center", gap:4 }}>
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-            <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
-            <circle cx="5.5" cy="5.5" r="1.5" fill="currentColor"/>
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: 5 }}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
+            <circle cx="6" cy="6" r="1.5" fill="currentColor"/>
           </svg>
           {mentor} · {type}
         </span>
       </div>
     </div>
-    <div style={{ display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
-      <div>
-        <span style={{ fontSize:28, fontWeight:700, color:C.white, letterSpacing:"-0.03em" }}>{time}</span>
-        <span style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginLeft:3 }}>KST</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
+      <div style={{ textAlign: "right" }}>
+        <div style={{ fontSize: 32, fontWeight: 800, color: C.white, letterSpacing: "-0.04em", lineHeight: 1 }}>{time}</div>
+        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 3 }}>KST</div>
       </div>
       <button
         onClick={onEnter}
         style={{
-          background:"transparent", color:C.white,
-          border:"1px solid rgba(255,255,255,0.4)",
-          borderRadius:6, padding:"8px 16px",
-          fontSize:12, fontWeight:600, cursor:"pointer",
-          fontFamily:"inherit", transition:"background 0.18s, border-color 0.18s",
+          background: "rgba(255,255,255,0.13)",
+          color: C.white,
+          border: "1px solid rgba(255,255,255,0.28)",
+          borderRadius: 10,
+          padding: "10px 22px",
+          fontSize: 13, fontWeight: 600, cursor: "pointer",
+          fontFamily: "inherit",
+          transition: "all 0.18s",
+          whiteSpace: "nowrap",
         }}
-        onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.1)"; e.currentTarget.style.borderColor="rgba(255,255,255,0.8)"; }}
-        onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="rgba(255,255,255,0.4)"; }}
+        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.24)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.55)"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.13)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.28)"; }}
       >
-        입장하기
+        입장하기 →
       </button>
     </div>
-  </div>
-);
-
-/* ── 카드 컨테이너 ── */
-const DashCard = ({ title, sub, children, style }) => (
-  <div style={{
-    background: C.white,
-    borderRadius:16,
-    padding:"24px 24px 28px",
-    border:`1px solid ${C.border}`,
-    ...style,
-  }}>
-    <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:20 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <SectionIcon/>
-        <div>
-          <h2 style={{ fontSize:18, fontWeight:700, color:C.text, letterSpacing:"-0.02em" }}>{title}</h2>
-          {sub && <p style={{ fontSize:12, color:C.textMuted, marginTop:2 }}>{sub}</p>}
-        </div>
-      </div>
-      <QuoteIcon/>
-    </div>
-    {children}
   </div>
 );
 
@@ -210,114 +277,128 @@ const DashCard = ({ title, sub, children, style }) => (
 const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline, scheduledAt, sessionType, requestedAt, disabled }) => {
   const dateInfo = scheduledAt ? (() => {
     const dt = new Date(scheduledAt);
-    const days = ['일','월','화','수','목','금','토'];
+    const days = ["일","월","화","수","목","금","토"];
     return {
       month: `${dt.getMonth()+1}월`,
       day: String(dt.getDate()).padStart(2, "0"),
       weekday: days[dt.getDay()],
-      time: `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`,
+      time: `${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`,
     };
   })() : null;
   const requestedLabel = requestedAt ? new Date(requestedAt).toLocaleString("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
   }) : null;
 
   return (
     <div style={{
-      background:C.bg,
-      borderRadius:12, padding:"16px 18px",
-      marginBottom:12,
-      border:`1.5px solid ${dateInfo ? C.teal + "66" : C.border}`,
-    }}>
-      <div style={{ display:"flex", gap:14, marginBottom:12 }}>
+      background: C.white,
+      borderRadius: 14,
+      padding: "16px 18px",
+      marginBottom: 10,
+      border: `1px solid ${C.border}`,
+      borderLeft: `4px solid ${C.primary}`,
+      boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+      transition: "box-shadow 0.2s",
+    }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)"; }}
+    >
+      <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+        {/* 날짜 박스 */}
         <div style={{
-          width:58, borderRadius:10, overflow:"hidden", flexShrink:0,
-          background: dateInfo ? C.teal : C.creamDark,
-          textAlign:"center", boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.22)",
+          width: 54, flexShrink: 0,
+          background: dateInfo ? C.primaryGrad : C.bg,
+          borderRadius: 12,
+          textAlign: "center",
+          overflow: "hidden",
+          boxShadow: dateInfo ? "0 4px 12px rgba(66,99,235,0.25)" : "none",
         }}>
-          <div style={{ background:"rgba(0,0,0,0.14)", padding:"3px 0" }}>
-            <span style={{ fontSize:10, color:"rgba(255,255,255,0.9)", fontWeight:700 }}>
+          <div style={{ background: "rgba(0,0,0,0.12)", padding: "3px 0" }}>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.9)", fontWeight: 700 }}>
               {dateInfo?.month || "--"}
             </span>
           </div>
-          <div style={{ padding:"5px 0 2px" }}>
-            <span style={{ fontSize:22, color:C.white, fontWeight:900, lineHeight:1 }}>
+          <div style={{ padding: "5px 0 2px" }}>
+            <span style={{ fontSize: 22, color: C.white, fontWeight: 900, lineHeight: 1 }}>
               {dateInfo?.day || "--"}
             </span>
           </div>
-          <div style={{ padding:"1px 0 6px" }}>
-            <span style={{ fontSize:10, color:"rgba(255,255,255,0.86)", fontWeight:700 }}>
-              {dateInfo ? `${dateInfo.weekday} ${dateInfo.time}` : "시간 미정"}
+          <div style={{ padding: "1px 0 6px" }}>
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>
+              {dateInfo ? `${dateInfo.weekday} ${dateInfo.time}` : "미정"}
             </span>
           </div>
         </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:7 }}>
-        <div style={{
-          width:36, height:36, borderRadius:"50%", flexShrink:0,
-          background: avatarColor,
-          display:"flex", alignItems:"center", justifyContent:"center",
-        }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="5.5" r="2.5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.3"/>
-            <path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.3" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize:15, fontWeight:800, color:C.text }}>{name || "멘티"}</p>
-          <p style={{ fontSize:12, color:C.textMuted }}>{company}</p>
-        </div>
-      </div>
 
-      {/* 날짜·시간·유형 배지 */}
-      {(dateInfo || sessionType || requestedLabel) && (
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
-          {dateInfo && (
-            <span style={{ fontSize:11, fontWeight:700, background:"#E1F5EE", color:C.teal, padding:"3px 10px", borderRadius:99, display:"flex", alignItems:"center", gap:4 }}>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <rect x="1" y="2" width="8" height="7" rx="1" stroke={C.teal} strokeWidth="1.2"/>
-                <path d="M3.5 1v2M6.5 1v2M1 5h8" stroke={C.teal} strokeWidth="1.2" strokeLinecap="round"/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+              background: C.primaryGrad,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(66,99,235,0.3)",
+            }}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="5.5" r="2.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.3"/>
+                <path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
-              면접 {dateInfo.month} {dateInfo.day}일 {dateInfo.time}
-            </span>
-          )}
-          {sessionType && (
-            <span style={{ fontSize:11, fontWeight:600, background:"#E8E5DF", color:"#555", padding:"3px 10px", borderRadius:99 }}>{sessionType}</span>
-          )}
-          {requestedLabel && (
-            <span style={{ fontSize:11, fontWeight:600, background:"#F8EEE2", color:"#8A5A20", padding:"3px 10px", borderRadius:99 }}>신청 {requestedLabel}</span>
-          )}
-        </div>
-      )}
+            </div>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{name || "멘티"}</p>
+              <p style={{ fontSize: 11, color: C.textMuted, margin: 0 }}>{company}</p>
+            </div>
+          </div>
 
-      <p style={{ fontSize:13, color:C.textSub, lineHeight:1.75, marginBottom:14 }}>{message}</p>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>
+            {dateInfo && (
+              <span style={{ fontSize: 11, fontWeight: 600, background: C.primaryLight, color: C.primary, padding: "3px 10px", borderRadius: 99, display: "flex", alignItems: "center", gap: 4 }}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <rect x="1" y="2" width="8" height="7" rx="1" stroke={C.primary} strokeWidth="1.2"/>
+                  <path d="M3.5 1v2M6.5 1v2M1 5h8" stroke={C.primary} strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
+                {dateInfo.month} {dateInfo.day}일 {dateInfo.time}
+              </span>
+            )}
+            {sessionType && (
+              <span style={{ fontSize: 11, fontWeight: 500, background: C.bg, color: C.textSub, padding: "3px 10px", borderRadius: 99 }}>{sessionType}</span>
+            )}
+            {requestedLabel && (
+              <span style={{ fontSize: 11, fontWeight: 500, background: "#FFF3BF", color: "#9C6A00", padding: "3px 10px", borderRadius: 99 }}>신청 {requestedLabel}</span>
+            )}
+          </div>
+
+          <p style={{ fontSize: 12, color: C.textSub, lineHeight: 1.7, margin: 0 }}>{message}</p>
         </div>
       </div>
-      <div style={{ display:"flex", gap:8 }}>
+
+      <div style={{ display: "flex", gap: 8 }}>
         <button onClick={onAccept} disabled={disabled} style={{
-          flex:1, padding:"8px",
-          background: disabled ? C.creamDark : C.navy, color: disabled ? C.textMuted : C.white,
-          border:"none", borderRadius:8,
-          fontSize:12, fontWeight:600, cursor:disabled ? "not-allowed" : "pointer",
-          fontFamily:"inherit", transition:"background 0.18s",
+          flex: 1, padding: "9px",
+          background: disabled ? C.bg : C.primaryGrad,
+          color: disabled ? C.textMuted : C.white,
+          border: "none", borderRadius: 10,
+          fontSize: 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          boxShadow: disabled ? "none" : "0 4px 12px rgba(66,99,235,0.3)",
+          transition: "all 0.18s",
         }}
-          onMouseEnter={e => { if (!disabled) e.currentTarget.style.background=C.navyMid; }}
-          onMouseLeave={e => { if (!disabled) e.currentTarget.style.background=C.navy; }}
+          onMouseEnter={e => { if (!disabled) e.currentTarget.style.opacity = "0.9"; }}
+          onMouseLeave={e => { if (!disabled) e.currentTarget.style.opacity = "1"; }}
         >
           수락
         </button>
         <button onClick={onDecline} disabled={disabled} style={{
-          flex:1, padding:"8px",
-          background:"transparent", color:C.textSub,
-          border:`1px solid ${C.border}`, borderRadius:8,
-          fontSize:12, fontWeight:500, cursor:disabled ? "not-allowed" : "pointer",
-          fontFamily:"inherit", transition:"border-color 0.18s",
+          flex: 1, padding: "9px",
+          background: "transparent",
+          color: C.textSub,
+          border: `1px solid ${C.border}`,
+          borderRadius: 10,
+          fontSize: 13, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          transition: "all 0.18s",
         }}
-          onMouseEnter={e => { if (!disabled) e.currentTarget.style.borderColor=C.text; }}
-          onMouseLeave={e => { if (!disabled) e.currentTarget.style.borderColor=C.border; }}
+          onMouseEnter={e => { if (!disabled) { e.currentTarget.style.borderColor = "#ADB5BD"; e.currentTarget.style.color = C.text; } }}
+          onMouseLeave={e => { if (!disabled) { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSub; } }}
         >
           거절
         </button>
@@ -326,13 +407,15 @@ const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline,
   );
 };
 
-/* ── 다가오는 세션 아이템 (시각화 강화) ── */
+/* ── 다가오는 세션 아이템 ── */
 const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
-  const dotColor = status === "confirmed" ? C.teal : status === "pending" ? "#F59E0B" : C.border;
-  const bgColor  = status === "confirmed" ? "#E8F5EE" : status === "pending" ? "#FEF3C7" : C.bg;
-  const statusLabel = status === "confirmed" ? "확정" : status === "pending" ? "대기 중" : "미확정";
+  const isPrimary  = status === "confirmed";
+  const isPending  = status === "pending";
+  const accentColor = isPrimary ? C.primary : isPending ? C.warning : C.border;
+  const bgColor     = isPrimary ? C.primaryLight : isPending ? C.warningLight : C.bg;
+  const statusLabel = isPrimary ? "확정" : isPending ? "대기 중" : "미확정";
 
-  const [m, d] = (date || "").split('.').map(Number);
+  const [m, d] = (date || "").split(".").map(Number);
   const now = new Date();
   const target = new Date(now.getFullYear(), (m || 1) - 1, d || 1);
   const diff = Math.ceil((target - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
@@ -340,40 +423,48 @@ const UpcomingItem = ({ date, time, title, mentor, type, status }) => {
 
   return (
     <div style={{
-      display:"flex", gap:14, alignItems:"center",
-      padding:"12px 0", borderBottom:`1px solid ${C.border}`,
+      display: "flex", gap: 14, alignItems: "center",
+      padding: "14px 0",
+      borderBottom: `1px solid ${C.border}`,
     }}>
-      {/* 달력 날짜 박스 */}
       <div style={{
-        width:54, flexShrink:0, textAlign:"center",
-        background:bgColor, borderRadius:10, padding:"8px 4px",
-        border:`1px solid ${dotColor}33`,
+        width: 52, flexShrink: 0,
+        textAlign: "center",
+        background: bgColor,
+        borderRadius: 12,
+        padding: "8px 4px",
+        border: `1px solid ${accentColor}33`,
       }}>
-        <p style={{ fontSize:9, fontWeight:700, color:dotColor, letterSpacing:"0.04em", margin:"0 0 2px" }}>{m || "--"}월</p>
-        <p style={{ fontSize:22, fontWeight:800, color:dotColor, lineHeight:1.1, margin:0 }}>{d || "--"}</p>
-        <p style={{ fontSize:9, color:dotColor, fontWeight:600, margin:"2px 0 0" }}>{time}</p>
+        <p style={{ fontSize: 9, fontWeight: 700, color: accentColor, letterSpacing: "0.04em", margin: "0 0 2px" }}>{m || "--"}월</p>
+        <p style={{ fontSize: 22, fontWeight: 800, color: accentColor, lineHeight: 1.1, margin: 0 }}>{d || "--"}</p>
+        <p style={{ fontSize: 9, color: accentColor, fontWeight: 600, margin: "2px 0 0" }}>{time}</p>
       </div>
-      {/* 내용 */}
-      <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{title}</p>
-        <p style={{ fontSize:11, color:C.textMuted }}>{mentor} · {type}</p>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</p>
+        <p style={{ fontSize: 11, color: C.textMuted }}>{mentor} · {type}</p>
       </div>
-      {/* D-day + 상태 */}
-      <div style={{ textAlign:"right", flexShrink:0 }}>
-        <span style={{ fontSize:12, fontWeight:800, color:dotColor, background:bgColor, padding:"3px 9px", borderRadius:6, display:"block", marginBottom:4 }}>{dday}</span>
-        <span style={{ fontSize:10, color:dotColor, fontWeight:600 }}>{statusLabel}</span>
+
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <span style={{
+          fontSize: 12, fontWeight: 800, color: accentColor,
+          background: bgColor, padding: "4px 10px",
+          borderRadius: 8, display: "block", marginBottom: 4,
+          border: `1px solid ${accentColor}33`,
+        }}>{dday}</span>
+        <span style={{ fontSize: 10, color: accentColor, fontWeight: 600 }}>{statusLabel}</span>
       </div>
     </div>
   );
 };
 
-const normalizeStatus = (status) => String(status || "").toLowerCase();
-const getScheduledAt = (session) => session.scheduledAt ?? session.scheduled_at ?? "";
-const getSessionTitle = (session) => session.title ?? (session.job_category ? `${session.job_category} 모의 면접` : "모의 면접");
-const getMenteeName = (session) => session.menteeName ?? session.mentee_name ?? "";
-const getSessionType = (session) => session.sessionType ?? session.session_type ?? "1:1 면접";
-const toDateText = (value) => value ? String(value).slice(5, 10).replace("-", ".") : "";
-const toTimeText = (value) => value ? String(value).slice(11, 16) : "";
+const normalizeStatus   = s => String(s || "").toLowerCase();
+const getScheduledAt    = s => s.scheduledAt ?? s.scheduled_at ?? "";
+const getSessionTitle   = s => s.title ?? (s.job_category ? `${s.job_category} 모의 면접` : "모의 면접");
+const getMenteeName     = s => s.menteeName ?? s.mentee_name ?? "";
+const getSessionType    = s => s.sessionType ?? s.session_type ?? "1:1 면접";
+const toDateText        = v => v ? String(v).slice(5, 10).replace("-", ".") : "";
+const toTimeText        = v => v ? String(v).slice(11, 16) : "";
 
 /* ════════════════════════════════════════
    메인 컴포넌트
@@ -381,7 +472,6 @@ const toTimeText = (value) => value ? String(value).slice(11, 16) : "";
 export default function MentorDashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [allSessions, setAllSessions] = useState([]);
@@ -390,15 +480,9 @@ export default function MentorDashboard() {
       .then(data => setAllSessions(Array.isArray(data) ? data : []))
       .catch(() => setAllSessions([]));
   }, []);
-
-  useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
-
+  useEffect(() => { loadSessions(); }, [loadSessions]);
 
   const rawSessions = allSessions;
-
-  /* API 응답에서 UI 데이터 파생 — 면접 세션만 (멘토링은 면접 종료 후 자동 진입) */
   const sessions = rawSessions
     .filter(s => (normalizeStatus(s.status) === "scheduled" || normalizeStatus(s.status) === "in_progress") && s.kind !== "mentoring")
     .map(s => ({
@@ -424,7 +508,7 @@ export default function MentorDashboard() {
           name: r.mentee_name ?? r.menteeName ?? "",
           company: r.session_id || r.sessionId ? `세션 #${r.session_id ?? r.sessionId}` : "면접 신청",
           message: "면접 신청이 도착했습니다. 신청 일정을 확인한 뒤 수락 또는 거절해주세요.",
-          avatarColor: "#1B4F7A",
+          avatarColor: C.primary,
           scheduledAt: r.scheduled_at ?? r.scheduledAt ?? null,
           sessionType: "1:1 면접",
           requestedAt: r.created_at ?? r.createdAt ?? null,
@@ -435,13 +519,9 @@ export default function MentorDashboard() {
         console.error("[MentorDashboard] 예약 신청 목록 조회 실패", error);
         setRequestsError(error?.message || "예약 신청 목록을 불러오지 못했습니다.");
       })
-      .finally(() => {
-        setRequestsLoading(false);
-      });
+      .finally(() => setRequestsLoading(false));
   }, []);
-  useEffect(() => {
-    loadReservationRequests();
-  }, [loadReservationRequests]);
+  useEffect(() => { loadReservationRequests(); }, [loadReservationRequests]);
 
   const upcoming = rawSessions
     .filter(s => normalizeStatus(s.status) === "scheduled")
@@ -455,53 +535,111 @@ export default function MentorDashboard() {
       status: "confirmed",
     }));
 
-  const handleAccept = async (id) => {
+  const handleAccept = async id => {
     try {
       await respondReservation({ reservationId: id, accepted: true });
       setRequests(r => r.filter(x => x.id !== id));
       loadSessions();
-    } catch (error) {
-      alert(error?.message || "예약 수락에 실패했습니다.");
-    }
+    } catch (error) { alert(error?.message || "예약 수락에 실패했습니다."); }
   };
-  const handleDecline = async (id) => {
+  const handleDecline = async id => {
     try {
       await respondReservation({ reservationId: id, accepted: false });
       setRequests(r => r.filter(x => x.id !== id));
       loadSessions();
-    } catch (error) {
-      alert(error?.message || "예약 거절에 실패했습니다.");
-    }
+    } catch (error) { alert(error?.message || "예약 거절에 실패했습니다."); }
   };
+
+  const now = new Date();
+  const dateLabel = now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Noto Sans KR', sans-serif; background: ${C.bg}; }
+        body { font-family: 'Inter', 'Noto Sans KR', -apple-system, sans-serif; background: ${C.bg}; }
         @media (max-width: 768px) {
+          .dash-stats { flex-direction: column !important; }
           .dash-bottom { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
       <Header userName={userName} accessToken={user?.accessToken}/>
 
-      <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
+      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 5% 72px" }}>
+
+        {/* ── 페이지 타이틀 ── */}
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text, letterSpacing: "-0.04em", marginBottom: 6 }}>
+            안녕하세요, {userName} 멘토님
+          </h1>
+          <p style={{ fontSize: 14, color: C.textMuted }}>{dateLabel} · 오늘도 멋진 면접을 진행해보세요</p>
+        </div>
+
+        {/* ── 통계 카드 ── */}
+        <div className="dash-stats" style={{ display: "flex", gap: 20, marginBottom: 28 }}>
+          <StatCard
+            label="예정된 면접"
+            value={sessions.length}
+            sub={sessions.length > 0 ? `다음: ${sessions[0]?.time} KST` : "현재 예정 없음"}
+            gradient={C.primaryGrad}
+            shadowColor="rgba(66,99,235,0.28)"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+              </svg>
+            }
+          />
+          <StatCard
+            label="수락 대기 요청"
+            value={requestsLoading ? "..." : requests.length}
+            sub={requests.length > 0 ? "확인이 필요한 신청이 있습니다" : "새 신청이 없습니다"}
+            gradient={C.successGrad}
+            shadowColor="rgba(12,166,120,0.28)"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            }
+          />
+          <StatCard
+            label="확정된 일정"
+            value={upcoming.length}
+            sub={upcoming.length > 0 ? `${upcoming[0]?.date} 예정` : "확정된 세션 없음"}
+            gradient={C.warningGrad}
+            shadowColor="rgba(247,103,7,0.28)"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            }
+          />
+        </div>
 
         {/* ── 미완료 피드백 알림 배너 ── */}
         {(() => {
-          const pendingFeedback = rawSessions.filter(s => normalizeStatus(s.status) === "completed" && !s.feedbackSubmitted);
-          if (pendingFeedback.length === 0) return null;
+          const pf = rawSessions.filter(s => normalizeStatus(s.status) === "completed" && !s.feedbackSubmitted);
+          if (pf.length === 0) return null;
           return (
             <div style={{
-              background: "#FEF3C7", border: "1px solid #F59E0B",
-              borderRadius: 14, padding: "18px 24px", marginBottom: 28,
-              display: "flex", alignItems: "center", gap: 16,
+              background: "linear-gradient(135deg, #FFF3BF 0%, #FFE066 100%)",
+              border: "1px solid #FFD43B",
+              borderRadius: 16,
+              padding: "18px 24px",
+              marginBottom: 24,
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              boxShadow: "0 4px 16px rgba(255,193,7,0.2)",
             }}>
               <div style={{
-                width: 40, height: 40, borderRadius: "50%",
-                background: "#F59E0B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                width: 42, height: 42, borderRadius: 12,
+                background: "#F59F00",
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                boxShadow: "0 4px 12px rgba(245,159,0,0.4)",
               }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -510,26 +648,24 @@ export default function MentorDashboard() {
                 </svg>
               </div>
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 14, fontWeight: 700, color: "#92400E", marginBottom: 3 }}>
-                  아직 전송하지 않은 피드백이 {pendingFeedback.length}건 있습니다
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#7A4F00", marginBottom: 3 }}>
+                  미완료 피드백 {pf.length}건이 있습니다
                 </p>
-                <p style={{ fontSize: 12, color: "#B45309" }}>
+                <p style={{ fontSize: 12, color: "#9C6A00" }}>
                   멘티는 멘토의 최종 코멘트를 기다리고 있어요. 세션 종료 후 60분 이내에 전송해주세요.
                 </p>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {pendingFeedback.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => navigate(`/mentor/feedback/${s.id}`)}
-                    style={{
-                      padding: "8px 18px", borderRadius: 8, border: "none",
-                      background: "#92400E", color: "white",
-                      fontSize: 12, fontWeight: 700, cursor: "pointer",
-                      fontFamily: "inherit", whiteSpace: "nowrap",
-                      transition: "opacity 0.15s",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {pf.map(s => (
+                  <button key={s.id} onClick={() => navigate(`/mentor/feedback/${s.id}`)} style={{
+                    padding: "8px 18px", borderRadius: 8, border: "none",
+                    background: "#7A4F00", color: "white",
+                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    fontFamily: "inherit", whiteSpace: "nowrap",
+                    transition: "opacity 0.15s",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "0.82"; }}
                     onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
                   >
                     {s.title || "세션"} 피드백 작성 →
@@ -544,9 +680,15 @@ export default function MentorDashboard() {
         <DashCard
           title="예정된 면접 일정"
           sub={`면접 세션 ${sessions.length}건 · 면접 종료 후 멘토링 세션이 자동 연결됩니다`}
-          style={{ marginBottom:28 }}
+          style={{ marginBottom: 24 }}
+          accentColor={C.primary}
+          iconSvg={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.primary} strokeWidth="2" strokeLinecap="round">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+            </svg>
+          }
         >
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {sessions.map(s => (
               <SessionCard
                 key={s.id}
@@ -559,34 +701,68 @@ export default function MentorDashboard() {
               />
             ))}
             {sessions.length === 0 && (
-              <div style={{ textAlign:"center", padding:"32px 0", color:C.textMuted, fontSize:14 }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.4" style={{ display:"block", margin:"0 auto 12px" }}>
-                  <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
-                </svg>
-                예정된 면접 일정이 없습니다
+              <div style={{
+                textAlign: "center", padding: "40px 0",
+                color: C.textMuted, fontSize: 14,
+              }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: "50%",
+                  background: C.bg,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  margin: "0 auto 14px",
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+                  </svg>
+                </div>
+                <p style={{ fontWeight: 500, marginBottom: 4 }}>예정된 면접 일정이 없습니다</p>
+                <p style={{ fontSize: 12, color: "#ADB5BD" }}>멘티의 예약 신청을 수락하면 일정이 표시됩니다</p>
               </div>
             )}
           </div>
         </DashCard>
 
         {/* ── 하단 2열 ── */}
-        <div className="dash-bottom" style={{
-          display:"grid", gridTemplateColumns:"1fr 1fr", gap:24,
-        }}>
+        <div className="dash-bottom" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
 
           {/* 수락 대기 중인 요청 */}
-          <DashCard title="수락 대기 중인 요청" sub="멘티가 신청한 면접 일정을 확인하고 확정하세요">
+          <DashCard
+            title="수락 대기 중인 요청"
+            sub="멘티가 신청한 면접 일정을 확인하고 확정하세요"
+            accentColor={C.success}
+            iconSvg={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.success} strokeWidth="2" strokeLinecap="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            }
+          >
             {requestsError && (
               <div style={{
-                background:"#FEF2F2", border:"1px solid #FCA5A5", color:"#B91C1C",
-                borderRadius:10, padding:"10px 12px", fontSize:12, marginBottom:12,
+                background: C.dangerLight,
+                border: `1px solid #FCA5A5`,
+                color: C.danger,
+                borderRadius: 10,
+                padding: "10px 14px",
+                fontSize: 12,
+                marginBottom: 12,
               }}>
                 {requestsError}
               </div>
             )}
             {requestsLoading ? (
-              <div style={{ textAlign:"center", padding:"40px 0", color:C.textMuted, fontSize:14 }}>
-                예약 신청을 불러오는 중입니다...
+              <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontSize: 14 }}>
+                <div style={{
+                  width: 36, height: 36,
+                  border: `3px solid ${C.border}`,
+                  borderTop: `3px solid ${C.primary}`,
+                  borderRadius: "50%",
+                  margin: "0 auto 12px",
+                  animation: "spin 0.8s linear infinite",
+                }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                불러오는 중...
               </div>
             ) : requests.length > 0 ? (
               requests.map(r => (
@@ -599,42 +775,74 @@ export default function MentorDashboard() {
                   scheduledAt={r.scheduledAt}
                   sessionType={r.sessionType}
                   requestedAt={r.requestedAt}
-                  onAccept={()  => handleAccept(r.id)}
+                  onAccept={() => handleAccept(r.id)}
                   onDecline={() => handleDecline(r.id)}
                 />
               ))
             ) : (
-              <div style={{ textAlign:"center", padding:"40px 0", color:C.textMuted, fontSize:14 }}>
-                대기 중인 요청이 없습니다.
+              <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontSize: 14 }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: "50%",
+                  background: C.bg,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  margin: "0 auto 14px",
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                  </svg>
+                </div>
+                <p style={{ fontWeight: 500, marginBottom: 4 }}>대기 중인 요청이 없습니다</p>
+                <p style={{ fontSize: 12, color: "#ADB5BD" }}>새 신청이 오면 이곳에 표시됩니다</p>
               </div>
             )}
           </DashCard>
 
           {/* 다가오는 면접 세션 */}
-          <DashCard title="다가오는 면접 세션" sub="확정된 일정을 확인하세요">
+          <DashCard
+            title="다가오는 면접 세션"
+            sub="확정된 일정을 확인하세요"
+            accentColor={C.warning}
+            iconSvg={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.warning} strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            }
+          >
             <div>
               {upcoming.length > 0 ? (
                 upcoming.map((u, i) => <UpcomingItem key={i} {...u}/>)
               ) : (
-                <div style={{ textAlign:"center", padding:"32px 0", color:C.textMuted, fontSize:14 }}>
-                  예정된 면접 세션이 없습니다.
+                <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontSize: 14 }}>
+                  <div style={{
+                    width: 56, height: 56, borderRadius: "50%",
+                    background: C.bg,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    margin: "0 auto 14px",
+                  }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5">
+                      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                  </div>
+                  <p style={{ fontWeight: 500, marginBottom: 4 }}>예정된 면접 세션이 없습니다</p>
+                  <p style={{ fontSize: 12, color: "#ADB5BD" }}>확정된 세션이 생기면 여기에 표시됩니다</p>
                 </div>
               )}
             </div>
 
-            {/* 범례 */}
-            <div style={{ display:"flex", gap:16, marginTop:16, flexWrap:"wrap" }}>
-              {[
-                { color:C.teal,    label:"확정" },
-                { color:"#F59E0B", label:"대기 중" },
-                { color:C.border,  label:"미확정" },
-              ].map((leg, i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <div style={{ width:7, height:7, borderRadius:"50%", background:leg.color }}/>
-                  <span style={{ fontSize:11, color:C.textMuted }}>{leg.label}</span>
-                </div>
-              ))}
-            </div>
+            {upcoming.length > 0 && (
+              <div style={{ display: "flex", gap: 14, marginTop: 16, flexWrap: "wrap" }}>
+                {[
+                  { color: C.primary,  label: "확정" },
+                  { color: C.warning,  label: "대기 중" },
+                  { color: C.border,   label: "미확정" },
+                ].map((leg, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: leg.color }} />
+                    <span style={{ fontSize: 11, color: C.textMuted }}>{leg.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </DashCard>
 
         </div>

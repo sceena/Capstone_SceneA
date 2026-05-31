@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
 import { getSessionReport } from "../../api/sessions";
-import { getAvatar } from "../../utils/avatar";
+import JobAvatar from "../../components/JobAvatar";
 
 const C = {
   navy:"#0D2240", navyMid:"#1B4F7A",
@@ -635,9 +635,13 @@ export default function MenteeMyPage() {
               <div style={{ textAlign: "center", marginBottom: 16 }}>
                 {profileImage ? (
                   <img src={profileImage} alt="profile" style={{ width: 68, height: 68, borderRadius: "50%", objectFit: "cover", margin: "0 auto 10px", display: "block", border: `2px solid ${C.border}` }} />
-                ) : (() => { const av = getAvatar(user?.email); return (
-                  <div style={{ width: 68, height: 68, borderRadius: "50%", background: av.color, margin: "0 auto 10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>{av.animal}</div>
-                ); })()}
+                ) : (
+                  <JobAvatar
+                    jobStr={profile?.tags?.find(t => t.category === "관심직무")?.name || ""}
+                    size={68}
+                    style={{ margin: "0 auto 10px" }}
+                  />
+                )}
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 2 }}>{displayName}</p>
                 <p style={{ fontSize: 12, color: C.textSub }}>멘티</p>
                 {profile?.bio && (

@@ -9,17 +9,17 @@ import { Link, useNavigate } from "react-router-dom";
 const C = {
   navy:      "#0D2240",
   navyMid:   "#1B4F7A",
-  cream:     "#F4F2EE",
-  creamDark: "#EDEAE4",
+  cream:     "#F0F4F8",
+  creamDark: "#E8EEF6",
   white:     "#FFFFFF",
   teal:      "#1D9E75",
-  text:      "#1A1818",
-  textSub:   "#6B6863",
-  textMuted: "#9E9B95",
-  border:    "#DDD9D3",
-  inputBg:   "#F4F2EE",
+  text:      "#1A1B1E",
+  textSub:   "#495057",
+  textMuted: "#868E96",
+  border:    "#E9ECEF",
+  inputBg:   "#F0F4F8",
   error:     "#D94040",
-  errorBg:   "#FCF0F0",
+  errorBg:   "#FFF5F5",
 };
 
 /* ──────────────────── 아이콘 모음 ──────────────────── */
@@ -119,7 +119,7 @@ const PwStrength = ({ pw }) => {
   ];
   const score = checks.filter(Boolean).length;
   const labels = ["", "약함", "보통", "좋음", "강함"];
-  const colors = ["#E8E0D0","#EF4444","#F59E0B","#1D9E75","#0F6E56"];
+  const colors = ["#E9ECEF","#EF4444","#F59E0B","#1D9E75","#0F6E56"];
   if (!pw) return null;
   return (
     <div style={{ marginTop:-4 }}>
@@ -127,7 +127,7 @@ const PwStrength = ({ pw }) => {
         {[1,2,3,4].map(i => (
           <div key={i} style={{
             flex:1, height:3, borderRadius:999,
-            background: i <= score ? colors[score] : "#DDD9D3",
+            background: i <= score ? colors[score] : "#E9ECEF",
             transition:"background 0.3s",
           }}/>
         ))}
@@ -323,24 +323,14 @@ const Step2 = ({ data, onChange, errors }) => (
       <p style={{ fontSize:12, fontWeight:600, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:14 }}>
         기본 정보
       </p>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <Field label="이름">
-          <TextInput
-            placeholder="홍길동"
-            value={data.name}
-            onChange={e => onChange("name", e.target.value)}
-            error={errors.name}
-          />
-        </Field>
-        <Field label="생년월일">
-          <TextInput
-            placeholder="YYYY.MM.DD"
-            value={data.birth}
-            onChange={e => onChange("birth", e.target.value)}
-            error={errors.birth}
-          />
-        </Field>
-      </div>
+      <Field label="이름">
+        <TextInput
+          placeholder="홍길동"
+          value={data.name}
+          onChange={e => onChange("name", e.target.value)}
+          error={errors.name}
+        />
+      </Field>
     </div>
   </div>
 );
@@ -350,18 +340,21 @@ const Step3Mentee = ({ data, onChange }) => (
   <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
 
     {/* 헤더 */}
-    <div style={{ paddingBottom:4 }}>
-      <p style={{ fontSize:15, fontWeight:700, color:C.text, marginBottom:4 }}>
-        편하게 알려주세요 :)
+    <div style={{
+      paddingBottom: 14, marginBottom: 4,
+      borderBottom: `1px solid ${C.border}`,
+    }}>
+      <p style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+        멘티 프로필
       </p>
-      <p style={{ fontSize:12, color:C.textSub, lineHeight:1.6 }}>
-        아는 만큼만 적어도 돼요 — 나중에 언제든 수정할 수 있어요
+      <p style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+        입력하지 않은 항목은 가입 후 마이페이지에서 언제든 수정할 수 있습니다.
       </p>
     </div>
 
     {/* 학교 · 전공 */}
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-      <Field label="학교" hint="재학 중인 곳">
+      <Field label="학교">
         <TextInput
           placeholder="예) 한양대학교"
           value={data.school || ""}
@@ -378,34 +371,34 @@ const Step3Mentee = ({ data, onChange }) => (
     </div>
 
     {/* 관심 직무 */}
-    <Field label="관심 직무" hint="어떤 일을 해보고 싶어요?">
+    <Field label="관심 직무">
       <TextInput
-        placeholder="예) 백엔드 개발, 데이터 분석, UX 디자인..."
+        placeholder="예) 백엔드 개발, 데이터 분석, UX 디자인"
         value={data.position}
         onChange={e => onChange("position", e.target.value)}
       />
     </Field>
 
     {/* 목표 기업 */}
-    <Field label="목표 기업 · 업계" hint="없어도 전혀 괜찮아요!">
+    <Field label="목표 기업 · 업계">
       <TextInput
-        placeholder="예) 네이버, 카카오, IT 스타트업 등"
+        placeholder="예) 네이버, 카카오, IT 스타트업"
         value={data.targetCompany}
         onChange={e => onChange("targetCompany", e.target.value)}
       />
     </Field>
 
     {/* 기술 도구 */}
-    <Field label="다룰 줄 아는 기술 · 도구" hint="없으면 비워도 돼요 — 진짜로요!">
+    <Field label="기술 스택">
       <TextInput
-        placeholder="예) Python, Figma, Excel, Git... 뭐든"
+        placeholder="예) Python, Figma, Excel, Git"
         value={data.techStack}
         onChange={e => onChange("techStack", e.target.value)}
       />
     </Field>
 
     {/* 자기소개 */}
-    <Field label="한 줄 소개" hint="자소서 아니에요, 자유롭게 :)">
+    <Field label="한 줄 소개">
       <textarea
         placeholder="예) 개발에 관심 생긴 지 1년 된 컴공 3학년입니다!"
         value={data.bio}
@@ -427,9 +420,17 @@ const Step3Mentee = ({ data, onChange }) => (
 
 const Step3Mentor = ({ data, onChange, errors }) => (
   <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-    <p style={{ fontSize:12, fontWeight:600, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
-      멘토 프로필
-    </p>
+    <div style={{
+      paddingBottom: 14,
+      borderBottom: `1px solid ${C.border}`,
+    }}>
+      <p style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+        멘토 프로필
+      </p>
+      <p style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+        입력하지 않은 항목은 가입 후 마이페이지에서 언제든 수정할 수 있습니다.
+      </p>
+    </div>
 
     <Field label="현 소속 기업">
       <TextInput
@@ -468,7 +469,7 @@ const Step3Mentor = ({ data, onChange, errors }) => (
       />
     </Field>
 
-    <Field label="멘토 소개" hint="멘티가 나를 더 잘 이해할 수 있도록 작성해주세요">
+    <Field label="멘토 소개">
       <textarea
         placeholder="면접에서 자주 나오는 포인트나 나만의 코칭 방식을 알려주세요."
         value={data.bio}
@@ -496,7 +497,7 @@ export default function Register() {
 
   /* 폼 데이터 */
   const [account, setAccount] = useState({ email:"", password:"", confirm:"" });
-  const [roleInfo, setRoleInfo] = useState({ role:"", name:"", birth:"" });
+  const [roleInfo, setRoleInfo] = useState({ role:"", name:"" });
   const [profile, setProfile] = useState({
     /* 멘티 */
     school:"", major:"", targetCompany:"", position:"", techStack:"", bio:"",
@@ -528,9 +529,14 @@ export default function Register() {
 
   const validateStep2 = () => {
     const errs = {};
-    if (!roleInfo.role)   errs.role  = "역할을 선택해주세요.";
-    if (!roleInfo.name)   errs.name  = "이름을 입력해주세요.";
-    if (!roleInfo.birth)  errs.birth = "생년월일을 입력해주세요.";
+    if (!roleInfo.role) errs.role = "역할을 선택해주세요.";
+
+    if (!roleInfo.name) {
+      errs.name = "이름을 입력해주세요.";
+    } else if (!/^[가-힣]{2,10}$/.test(roleInfo.name)) {
+      errs.name = "이름은 한글 2~10자로 입력해주세요.";
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -542,6 +548,28 @@ export default function Register() {
     setStep(s => s + 1);
     /* 폼 카드 스크롤 상단으로 */
     document.getElementById("register-card")?.scrollTo({ top:0, behavior:"smooth" });
+  };
+
+  const buildTags = () => {
+    const tags = [];
+    const add = (name, category) => { if (name?.trim()) tags.push({ name: name.trim(), category }); };
+    const addList = (str, category) => {
+      str?.split(",").forEach(v => add(v, category));
+    };
+
+    if (roleInfo.role === "mentee") {
+      add(profile.school,        "학교");
+      add(profile.major,         "전공");
+      add(profile.position,      "관심직무");
+      add(profile.targetCompany, "목표기업");
+      addList(profile.techStack, "기술스택");
+    } else {
+      add(profile.company,   "소속기업");
+      add(profile.jobTitle,  "직무");
+      if (profile.years) add(`${profile.years}년`, "경력");
+      addList(profile.techStack, "기술스택");
+    }
+    return tags;
   };
 
   const handleSubmit = async (e) => {
@@ -556,7 +584,9 @@ export default function Register() {
           password: account.password,
           name: roleInfo.name,
           nickname: roleInfo.name,
+          bio: profile.bio || "",
           role: roleInfo.role.toUpperCase(),
+          tags: buildTags(),
         }),
       });
       if (!res.ok) throw new Error("signup failed");
@@ -573,15 +603,15 @@ export default function Register() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { height: 100%; }
-        body { font-family: 'Noto Sans KR', sans-serif; }
+        body { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 
         input:-webkit-autofill,
         input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0 1000px #F4F2EE inset !important;
-          -webkit-text-fill-color: #1A1818 !important;
+          -webkit-box-shadow: 0 0 0 1000px #F0F4F8 inset !important;
+          -webkit-text-fill-color: #1A1B1E !important;
         }
 
         .reg-btn-primary {

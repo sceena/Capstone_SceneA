@@ -37,6 +37,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [camStatus, setCamStatus] = useState("idle"); // idle | loading | ok | denied
   const [camError, setCamError] = useState("");
   const [entering, setEntering] = useState(false);
+  const [step, setStep] = useState(1); // 1: 정보 확인  2: 장치 확인
   const [checklist, setChecklist] = useState([false, false, false, false]);
   const [sessionData, setSessionData] = useState(null);
   const [videoDevices, setVideoDevices] = useState([]);
@@ -361,27 +362,61 @@ export default function InterviewRobby({ role = "mentee" }) {
     navigate(role === "mentor" ? `/interview/mentor/${id}` : `/interview/mentee/${id}`);
   };
 
+  const [selectedMenteeIdx, setSelectedMenteeIdx] = useState(0);
+
   const scheduledAt = sessionData?.scheduledAt ?? sessionData?.scheduled_at ?? "";
-  const mentorName = sessionData?.mentorName ?? sessionData?.mentor_name ?? "멘토";
-  const menteeFromParticipants = sessionData?.participants?.find?.(p => p.role === "mentee");
-  const menteeName = sessionData?.menteeName ?? sessionData?.mentee_name ?? menteeFromParticipants?.name ?? "멘티";
-  const mentorInfo = sessionData?.mentorInfo ?? sessionData?.mentor_info ?? "면접 준비를 함께 진행합니다.";
-  const menteeGoal = sessionData?.menteeGoal ?? sessionData?.mentee_goal ?? "멘토에게 전달한 자소서와 지원 정보를 바탕으로 면접을 준비합니다.";
+  const mentorName  = sessionData?.mentorName ?? sessionData?.mentor_name ?? "멘토";
+  const mentorInfo  = sessionData?.mentorInfo ?? sessionData?.mentor_info ?? "면접 준비를 함께 진행합니다.";
+  const menteeGoal  = sessionData?.menteeGoal ?? sessionData?.mentee_goal ?? "멘토에게 전달한 자소서와 지원 정보를 바탕으로 면접을 준비합니다.";
+
+  /* 참여자 목록에서 멘티들 추출 (그룹 면접 대응) */
+  const allParticipants = sessionData?.participants ?? [];
+  const menteeParticipants = allParticipants.filter(p =>
+    (p.role ?? p.memberRole ?? "").toLowerCase() === "mentee"
+  );
+  const fallbackMenteeName = sessionData?.menteeName ?? sessionData?.mentee_name ?? allParticipants.find(p => (p.role ?? "").toLowerCase() === "mentee")?.name ?? "멘티";
+  const mentees = menteeParticipants.length > 0
+    ? menteeParticipants
+    : [{ name: fallbackMenteeName, role: "mentee" }];
+  const selectedMentee = mentees[selectedMenteeIdx] ?? mentees[0];
 
   /* API 데이터 우선, 없으면 fallback */
   const session = {
-    title:       sessionData?.title ?? (sessionData?.job_category ? `${sessionData.job_category} 모의 면접` : "세션 로딩 중..."),
-    date:        scheduledAt,
-    type:        sessionData?.sessionType ?? sessionData?.session_type ?? "1:1 개인 세션",
-    menteeName,
-    menteeInfo:  sessionData?.menteeInfo ?? sessionData?.mentee_info ?? "",
+    title:      sessionData?.title ?? (sessionData?.job_category ? `${sessionData.job_category} 모의 면접` : "세션 로딩 중..."),
+    date:       scheduledAt,
+    type:       sessionData?.sessionType ?? sessionData?.session_type ?? "1:1 개인 세션",
+    menteeName: selectedMentee?.name ?? fallbackMenteeName,
+    menteeInfo: sessionData?.menteeInfo ?? sessionData?.mentee_info ?? "",
     menteeGoal,
-    aiReport:    sessionData?.aiReport ?? sessionData?.ai_report ?? "멘티의 자기소개서와 지원 정보를 기반으로 추천 질문을 확인하세요.",
+    aiReport:   sessionData?.aiReport ?? sessionData?.ai_report ?? "",
     mentorName,
     mentorInfo,
   };
 
   const isMentor = role === "mentor";
+  const isGroup  = mentees.length > 1 || session.type?.includes("그룹");
+
+  /* ── 아코디언 헬퍼 ── */
+  const Accordion = ({ title, accentColor = "rgba(255,255,255,0.5)", defaultOpen = false, children }) => {
+    const [open, setOpen] = useState(defaultOpen);
+    return (
+      <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }}>
+        <button type="button" onClick={() => setOpen(v => !v)} style={{
+          width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.05)",
+          border: "none", cursor: "pointer", fontFamily: "inherit",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: "0.08em", textTransform: "uppercase" }}>{title}</span>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>
+            <path d="M2 5l5 5 5-5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        {open && <div style={{ padding: "14px 16px", background: "rgba(0,0,0,0.15)" }}>{children}</div>}
+      </div>
+    );
+  };
+
+  const deviceReady = camStatus === "ok" && micOk;
 
   return (
     <>
@@ -390,697 +425,529 @@ export default function InterviewRobby({ role = "mentee" }) {
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         html,body{height:100%;margin:0;overflow:hidden}
         #root{height:100%;width:100%;max-width:100%;margin:0;min-height:0;display:block;text-align:left}
-        body{font-family:'Noto Sans KR',sans-serif;background:#F2EDE4;color:white}
+        body{font-family:'Noto Sans KR',sans-serif;background:#0a1628;color:white}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
-        @media(max-width:820px){.ready-layout{flex-direction:column!important}.ready-left,.ready-right{width:100%!important}}
       `}</style>
 
-      <div style={{
-        width:"100%", height:"100vh",
-        background:"#F2EDE4",
-        display:"flex", flexDirection:"column",
-        alignItems:"stretch",
-        padding:"32px",
-        overflow:"hidden", boxSizing:"border-box",
-      }}>
-        <div className="ready-layout" style={{
-          display:"flex", gap:0,
-          width:"100%", height:"100%",
-          borderRadius:20, overflow:"hidden",
-          background:"#0D2240",
-          boxShadow:"0 24px 64px rgba(13,34,68,0.25)",
-        }}>
+      <div style={{ width:"100%", height:"100vh", background:"#0a1628", display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
-          {/* ════ 왼쪽: 카메라 영역 ════ */}
-          <div className="ready-left" style={{
-            flex:1, background:"#0a1628",
-            display:"flex", flexDirection:"column",
-            alignItems:"center", justifyContent:"center",
-            padding:"36px 28px", gap:24,
-            position:"relative",
-          }}>
-            {/* 카메라 프리뷰 */}
-            <div style={{
-              width:"100%", maxWidth:460,
-              aspectRatio:"4/3",
-              background:"#0d1f3c",
-              borderRadius:12, overflow:"hidden",
-              position:"relative",
-              display:"flex", alignItems:"center", justifyContent:"center",
-            }}>
-              {/* 항상 DOM에 존재 - CSS로 표시/숨김 제어 */}
-              <video
-                ref={videoRef}
-                autoPlay playsInline muted
-                style={{
-                  position:"absolute", inset:0, width:"100%", height:"100%",
-                  objectFit:"cover", transform:"scaleX(-1)",
-                  display: (camOn && camStatus==="ok") ? "block" : "none",
-                }}
-              />
-              {!(camOn && camStatus==="ok") && (
-                <div style={{ textAlign:"center" }}>
-                  <div style={{
-                    width:72, height:72, borderRadius:"50%",
-                    background:"#1a3060", margin:"0 auto 12px",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                  }}>
-                    {camStatus==="loading"
-                      ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" style={{animation:"spin 1s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                      : <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="11" r="5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/><path d="M5 24c0-4.97 4.03-9 9-9s9 4.03 9 9" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                    }
-                  </div>
-                  <p style={{ fontSize:12, color:"rgba(255,255,255,0.35)" }}>
-                    {camStatus==="denied" ? (camError || "카메라 권한이 거부됐어요") : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
-                  </p>
-                  {camStatus==="denied" && (
-                    <button
-                      type="button"
-                      onClick={() => startCameraPreview("")}
-                      style={{
-                        marginTop: 12,
-                        padding: "8px 14px",
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.24)",
-                        background: "rgba(255,255,255,0.12)",
-                        color: "#fff",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      카메라 권한 다시 요청
-                    </button>
+        {/* ── 헤더 ── */}
+        <div style={{
+          height: 64, padding: "0 32px", flexShrink: 0,
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "#0D2240",
+        }}>
+          {/* 로고 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#0D2240,#1B4F7A)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </div>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>Scene<span style={{ color: C_teal }}>A</span></span>
+          </div>
+
+          {/* 스텝 인디케이터 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {[{ n: 1, l: "정보 확인" }, { n: 2, l: "장치 확인" }].map((s, i) => (
+              <div key={s.n} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+                  background: step >= s.n ? C_teal : "rgba(255,255,255,0.08)",
+                  border: `1.5px solid ${step >= s.n ? C_teal : "rgba(255,255,255,0.2)"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 11, fontWeight: 700,
+                  color: step >= s.n ? "#fff" : "rgba(255,255,255,0.35)",
+                  transition: "all 0.3s",
+                }}>
+                  {step > s.n ? "✓" : s.n}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: step === s.n ? 700 : 400, color: step === s.n ? "#fff" : "rgba(255,255,255,0.4)", transition: "all 0.3s" }}>{s.l}</span>
+                {i < 1 && <div style={{ width: 36, height: 1, background: step > s.n ? C_teal : "rgba(255,255,255,0.15)", transition: "background 0.3s", margin: "0 4px" }} />}
+              </div>
+            ))}
+          </div>
+
+          {/* 세션 제목 */}
+          <div style={{ textAlign: "right" }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{session.title}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                background: session.type?.includes("그룹") ? "rgba(245,158,11,0.2)" : "rgba(29,158,117,0.2)",
+                color: session.type?.includes("그룹") ? "#F59E0B" : C_teal,
+              }}>{session.type?.includes("그룹") ? "그룹" : "1:1"}</span>
+              {session.date && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{session.date}</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 메인 콘텐츠 ── */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", padding: "24px 32px", gap: 24 }}>
+
+          {/* ════════════════════════════════
+              STEP 1 — 정보 확인
+          ════════════════════════════════ */}
+          <div style={{ display: step === 1 ? "contents" : "none" }}>
+
+            {/* 왼쪽: 세션 정보 + 내 프로필 (좁게 고정) */}
+            <div style={{ width: 270, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", paddingRight: 4 }}>
+
+              {/* 세션 참여자 카드 */}
+              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: "20px 22px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>참여자</p>
+                  {isGroup && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#F59E0B", background: "rgba(245,158,11,0.18)", padding: "2px 10px", borderRadius: 99, border: "1px solid rgba(245,158,11,0.3)" }}>
+                      그룹 면접 · 멘티 {mentees.length}명
+                    </span>
                   )}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+                  {/* 멘토 */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1px solid ${isMentor ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.07)"}`, background: isMentor ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#0F6E56", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                      {session.mentorName?.[0] ?? "M"}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{session.mentorName}</p>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: C_teal, background: "rgba(29,158,117,0.18)", padding: "2px 8px", borderRadius: 99 }}>멘토</span>
+                        {isMentor && <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.08)", padding: "2px 8px", borderRadius: 99 }}>나</span>}
+                      </div>
+                      {session.mentorInfo && <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.mentorInfo}</p>}
+                    </div>
+                  </div>
+
+                  {/* 멘티들 (클릭 가능) */}
+                  {mentees.map((mentee, i) => {
+                    const isSelected = isMentor && selectedMenteeIdx === i;
+                    const isMe = !isMentor && mentees.length === 1;
+                    return (
+                      <div key={i}
+                        onClick={() => isMentor && setSelectedMenteeIdx(i)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+                          borderRadius: 12,
+                          border: `1px solid ${isSelected ? "rgba(165,180,252,0.5)" : isMe ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.07)"}`,
+                          background: isSelected ? "rgba(165,180,252,0.12)" : isMe ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
+                          cursor: isMentor ? "pointer" : "default",
+                          transition: "all 0.18s",
+                          position: "relative",
+                        }}
+                        onMouseEnter={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "rgba(165,180,252,0.07)"; e.currentTarget.style.borderColor = "rgba(165,180,252,0.3)"; } }}
+                        onMouseLeave={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; } }}
+                      >
+                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: isSelected ? "#3730A3" : "#1B4F7A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0, transition: "background 0.18s" }}>
+                          {mentee.name?.[0] ?? "M"}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{mentee.name}</p>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#A5B4FC", background: "rgba(165,180,252,0.15)", padding: "2px 8px", borderRadius: 99 }}>멘티</span>
+                            {isMe && <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.08)", padding: "2px 8px", borderRadius: 99 }}>나</span>}
+                            {isGroup && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>지원자 {i + 1}</span>}
+                          </div>
+                          {mentee.info && <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mentee.info}</p>}
+                        </div>
+                        {isMentor && (
+                          <div style={{ flexShrink: 0 }}>
+                            {isSelected
+                              ? <span style={{ fontSize: 11, fontWeight: 700, color: "#A5B4FC" }}>확인 중 ●</span>
+                              : <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)" }}>클릭</span>
+                            }
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 면접 진행 가이드 (멘토만) */}
+              {isMentor && (
+                <div style={{ background: "rgba(29,158,117,0.07)", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(29,158,117,0.2)" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: C_teal, textTransform: "uppercase", marginBottom: 14 }}>면접 진행 가이드</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {[
+                      { icon: "⏱", text: "질문당 답변 시간은 2~3분을 권장합니다" },
+                      { icon: "⭐", text: "STAR 기법(상황→과제→행동→결과)으로 구체적 답변을 유도하세요" },
+                      { icon: "🎯", text: "AI 추천 질문을 참고하되 자유롭게 응용하세요" },
+                      { icon: "💬", text: "면접 종료 후 멘토링 세션에서 심층 피드백이 진행됩니다" },
+                    ].map((item, i) => (
+                      <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <span style={{ fontSize: 14, flexShrink: 0, lineHeight: 1.5 }}>{item.icon}</span>
+                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 1.65 }}>{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* 이름 레이블 */}
-              <div style={{
-                position:"absolute", bottom:12, left:12,
-                background:"rgba(0,0,0,0.6)", borderRadius:6,
-                padding:"4px 10px",
-              }}>
-                <span style={{ fontSize:12, color:C_white, fontWeight:500 }}>
-                  {isMentor ? session.mentorName : session.menteeName} (나)
-                </span>
-              </div>
-            </div>
-
-            {/* 컨트롤 버튼 */}
-            <div style={{ display:"flex", gap:14 }}>
-              {[
-                {
-                  active:micOn, setActive:setMicOn,
-                  onIcon:<MicOnIcon/>, offIcon:<MicOffIcon/>, label: micOn?"마이크 ON":"마이크 OFF",
-                },
-                {
-                  active:camOn, setActive:setCamOn,
-                  onIcon:<CamOnIcon/>, offIcon:<CamOffIcon/>, label: camOn?"카메라 ON":"카메라 OFF",
-                },
-                {
-                  active:true, setActive:()=>{},
-                  onIcon:<SettingIcon/>, offIcon:<SettingIcon/>, label:"설정",
-                },
-              ].map((btn,i)=>(
-                <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
-                  <button onClick={()=>btn.setActive(v=>!v)} style={{
-                    width:48, height:48, borderRadius:"50%",
-                    background: btn.active ? "#333" : "#555",
-                    border:`1px solid ${btn.active?"#444":"rgba(239,68,68,0.5)"}`,
-                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                    transition:"all 0.18s",
-                  }}
-                    onMouseEnter={e=>e.currentTarget.style.background="#444"}
-                    onMouseLeave={e=>e.currentTarget.style.background=btn.active?"#333":"#555"}
-                  >
-                    {btn.active ? btn.onIcon : btn.offIcon}
-                  </button>
-                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.4)" }}>{btn.label}</span>
+              {/* 목표 / 한마디 (멘티만) */}
+              {!isMentor && session.menteeGoal && (
+                <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(99,102,241,0.2)" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#818CF8", textTransform: "uppercase", marginBottom: 10 }}>오늘의 목표</p>
+                  <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", lineHeight: 1.7 }}>{session.menteeGoal}</p>
                 </div>
-              ))}
+              )}
             </div>
 
-            {/* 카메라 선택 드롭다운 */}
-            {videoDevices.length > 1 && (
-              <div style={{ width:"100%", maxWidth:340 }}>
-                <label style={{ fontSize:11, color:"rgba(255,255,255,0.4)", display:"block", marginBottom:6 }}>
-                  카메라 선택
-                </label>
-                <select
-                  value={selectedDeviceId}
-                  onChange={e => setSelectedDeviceId(e.target.value)}
-                  style={{
-                    width:"100%", padding:"8px 12px",
-                    background:"#1a3060", color:"#fff",
-                    border:"1px solid rgba(255,255,255,0.15)",
-                    borderRadius:8, fontSize:12,
-                    cursor:"pointer", outline:"none",
-                  }}
-                >
-                  {videoDevices.map(d => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `카메라 ${d.deviceId.slice(0, 6)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* 오른쪽: 두 컬럼 가로 배치 */}
+            <div style={{ flex: 1, display: "flex", gap: 14, overflow: "hidden" }}>
 
-            {/* 마이크 레벨 미터 */}
-            <div style={{ width:"100%", maxWidth:360 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", fontWeight:600 }}>🎙 마이크 레벨</span>
-                {!micOn
-                  ? <span style={{ fontSize:11, color:"#EF4444" }}>마이크가 꺼져 있어요</span>
-                  : micOk
-                    ? <span style={{ fontSize:11, color:C_teal, fontWeight:700 }}>✓ 정상 감지됨</span>
-                    : <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>말씀해보세요...</span>
-                }
-              </div>
-              <div style={{ height:8, background:"rgba(255,255,255,0.08)", borderRadius:99, overflow:"hidden" }}>
-                <div style={{
-                  width:`${micOn ? micLevel : 0}%`, height:8, borderRadius:99,
-                  background: micLevel > 70 ? "#EF4444" : micLevel > 20 ? C_teal : "rgba(255,255,255,0.2)",
-                  transition:"width 0.08s ease",
-                }}/>
-              </div>
-              {/* 눈금 */}
-              <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
-                {["낮음","적정","높음"].map((l,i)=>(
-                  <span key={i} style={{ fontSize:9, color:"rgba(255,255,255,0.2)" }}>{l}</span>
-                ))}
-              </div>
-            </div>
-
-            {/* 장치 상태 배지 */}
-            <div style={{ display:"flex", gap:10 }}>
-              <div style={{
-                display:"flex", alignItems:"center", gap:6,
-                padding:"5px 12px", borderRadius:99,
-                background: camStatus==="ok" ? "rgba(29,158,117,0.15)" : "rgba(239,68,68,0.12)",
-                border:`1px solid ${camStatus==="ok" ? "rgba(29,158,117,0.4)" : "rgba(239,68,68,0.3)"}`,
-              }}>
-                <div style={{ width:6, height:6, borderRadius:"50%", background: camStatus==="ok" ? C_teal : "#EF4444" }}/>
-                <span style={{ fontSize:11, color: camStatus==="ok" ? C_teal : "#EF4444", fontWeight:600 }}>
-                  {camStatus==="ok" ? "카메라 정상" : "카메라 확인 필요"}
-                </span>
-              </div>
-              <div style={{
-                display:"flex", alignItems:"center", gap:6,
-                padding:"5px 12px", borderRadius:99,
-                background: micOk ? "rgba(29,158,117,0.15)" : "rgba(255,255,255,0.05)",
-                border:`1px solid ${micOk ? "rgba(29,158,117,0.4)" : "rgba(255,255,255,0.1)"}`,
-              }}>
-                <div style={{ width:6, height:6, borderRadius:"50%", background: micOk ? C_teal : "rgba(255,255,255,0.2)", animation: !micOk && micOn ? "pulse 1.2s ease-in-out infinite" : "none" }}/>
-                <span style={{ fontSize:11, color: micOk ? C_teal : "rgba(255,255,255,0.4)", fontWeight:600 }}>
-                  {micOk ? "마이크 정상" : "마이크 테스트 중"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* ════ 오른쪽: 브리핑 ════ */}
-          <div className="ready-right" style={{
-            width:420, flexShrink:0,
-            background:"#0D2240",
-            padding:"36px 32px",
-            display:"flex", flexDirection:"column", gap:20,
-            borderLeft:"1px solid rgba(255,255,255,0.08)",
-            overflowY:"auto",
-          }}>
-            {/* ⚠️ 장치 테스트 안내 배너 */}
-            {(camStatus !== "ok" || !micOk) && (
-              <div style={{
-                background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)",
-                borderRadius:10, padding:"10px 14px",
-                display:"flex", gap:10, alignItems:"flex-start",
-              }}>
-                <span style={{ fontSize:16, flexShrink:0 }}>⚠️</span>
-                <div>
-                  <p style={{ fontSize:12, fontWeight:700, color:"#F59E0B", marginBottom:3 }}>
-                    카메라·마이크 테스트를 먼저 진행해주세요
-                  </p>
-                  <p style={{ fontSize:11, color:"rgba(255,255,255,0.5)", lineHeight:1.6 }}>
-                    왼쪽 화면에서 카메라 영상이 보이고, 마이크 레벨 바가 움직이는 것을 확인한 후 입장하세요.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* 세션 제목 + 면접 종류 */}
-            <div>
-              <p style={{ fontSize:10, fontWeight:600, letterSpacing:"0.15em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:8 }}>
-                SESSION INFO
-              </p>
-              <h2 style={{ fontSize:18, fontWeight:700, color:"#fff", marginBottom:8, letterSpacing:"-0.02em" }}>
-                {session.title}
-              </h2>
-              <div style={{ display:"flex", gap:8 }}>
-                <span style={{
-                  fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:99,
-                  background: session.type?.includes("그룹") ? "rgba(245,158,11,0.2)" : "rgba(29,158,117,0.2)",
-                  color: session.type?.includes("그룹") ? "#F59E0B" : C_teal,
-                  border: `1px solid ${session.type?.includes("그룹") ? "rgba(245,158,11,0.4)" : "rgba(29,158,117,0.4)"}`,
-                }}>
-                  {session.type?.includes("그룹") ? "그룹 면접" : "1:1 면접"}
-                </span>
-                {session.date && (
-                  <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", display:"flex", alignItems:"center" }}>
-                    {session.date}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* 멘토 전용: 멘티 정보 + 자소서 */}
-            {isMentor && (
-              <div style={{
-                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px",
-                border:"1px solid rgba(255,255,255,0.1)",
-              }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:10 }}>
-                  멘티 정보
-                </p>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-                  <div style={{
-                    width:36, height:36, borderRadius:"50%",
-                    background:"#1B4F7A",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:13, fontWeight:700, color:"#fff", flexShrink:0,
-                  }}>
-                    {session.menteeName?.[0] ?? "?"}
+              {/* ── 멘토: 자소서(왼) | AI질문(오) ── */}
+              {isMentor && (
+                <>
+                  {/* 왼쪽 열: 자소서 */}
+                  <div style={{ flex: 1, overflowY: "auto" }}>
+                    <Accordion title={isGroup ? `${selectedMentee?.name ?? "멘티"} 자기소개서` : "멘티 자기소개서"} accentColor="#818CF8" defaultOpen={true}>
+                      {resumeContent ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          {parseResumeContent(resumeContent).map((item, i) => (
+                            <div key={i} style={{ borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+                              <button type="button" onClick={() => setOpenResumeIndex(openResumeIndex === i ? null : i)} style={{
+                                width: "100%", background: "rgba(255,255,255,0.04)", border: "none", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", gap: 8, fontFamily: "inherit",
+                              }}>
+                                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, textAlign: "left" }}>{item.title}</span>
+                                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", flexShrink: 0 }}>{openResumeIndex === i ? "▼" : "▶"}</span>
+                              </button>
+                              {openResumeIndex === i && (
+                                <div style={{ padding: "10px 12px", background: "rgba(0,0,0,0.25)" }}>
+                                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.75, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>{item.content}</p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", fontStyle: "italic" }}>자기소개서가 없습니다</p>
+                      )}
+                    </Accordion>
                   </div>
-                  <div>
-                    <p style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{session.menteeName} 멘티</p>
-                    <p style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>{session.menteeInfo || session.type}</p>
+
+                  {/* 오른쪽 열: AI 질문 */}
+                  <div style={{ flex: 1, overflowY: "auto" }}>
+                    {(() => {
+                      const sectionKey = isGroup ? `지원자 ${selectedMenteeIdx + 1}` : null;
+                      const shownRecommended = sectionKey
+                        ? recommendedQuestions.filter(q => q.section === "공통" || q.section === sectionKey)
+                        : recommendedQuestions;
+                      const shownSaved = sectionKey
+                        ? questions.filter(q => !q.section || q.section === "공통" || q.section === sectionKey)
+                        : questions;
+                      return (
+                        <Accordion
+                          title={isGroup ? `🎯 AI 질문 — ${selectedMentee?.name ?? "멘티"}` : "🎯 AI 예상 질문 리스트"}
+                          accentColor="#F59E0B"
+                          defaultOpen={true}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button type="button" onClick={handleLoadRecommendedQuestions} disabled={recommendLoading} style={{
+                                flex: 1, padding: "9px 12px", borderRadius: 8,
+                                border: "1px solid rgba(245,158,11,0.4)", background: recommendLoading ? "rgba(245,158,11,0.1)" : "rgba(245,158,11,0.18)",
+                                color: "#F59E0B", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                              }}>
+                                {recommendLoading && (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
+                                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                                  </svg>
+                                )}
+                                {recommendLoading ? "AI 질문 생성 중..." : "AI 추천 질문 불러오기"}
+                              </button>
+                              {shownRecommended.length > 0 && (
+                                <button type="button" onClick={handleSaveRecommendedQuestions} disabled={recommendSaving} style={{
+                                  padding: "9px 12px", borderRadius: 8,
+                                  border: "1px solid rgba(29,158,117,0.4)", background: "rgba(29,158,117,0.18)",
+                                  color: C_teal, cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                                }}>
+                                  {recommendSaving ? "저장 중..." : "선택 저장"}
+                                </button>
+                              )}
+                            </div>
+                            {recommendError && <p style={{ fontSize: 11, color: "#EF4444" }}>{recommendError}</p>}
+                            {shownRecommended.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {shownRecommended.map((item, i) => {
+                                  const globalIdx = recommendedQuestions.indexOf(item);
+                                  return (
+                                    <label key={item.key} style={{
+                                      background: item.selected ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.03)",
+                                      border: `1px solid ${item.selected ? "rgba(245,158,11,0.3)" : "rgba(255,255,255,0.07)"}`,
+                                      borderRadius: 8, padding: "8px 10px", display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer",
+                                    }}>
+                                      <input type="checkbox" checked={item.selected} onChange={() => handleRecommendedQuestionToggle(globalIdx)} style={{ accentColor: "#F59E0B", width: 14, height: 14, marginTop: 6, flexShrink: 0 }} />
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 5 }}>
+                                          <span style={{ fontSize: 10, color: item.section === "공통" ? C_teal : "#F59E0B", fontWeight: 700 }}>{item.section}</span>
+                                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>추천 {i + 1}</span>
+                                        </div>
+                                        <textarea value={item.content ?? ""} onChange={e => handleRecommendedQuestionChange(globalIdx, e.target.value)}
+                                          rows={Math.max(2, Math.ceil(String(item.content ?? "").length / 34))}
+                                          style={{ width: "100%", resize: "none", minHeight: 60, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, padding: "7px 8px", background: "rgba(13,34,64,0.8)", color: "rgba(255,255,255,0.82)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.55, outline: "none", boxSizing: "border-box" }}
+                                        />
+                                      </div>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {shownSaved.length > 0 && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {shownSaved.map((q, i) => (
+                                  <div key={q.id ?? i} style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 8, padding: "9px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", flexShrink: 0, marginTop: 1 }}>Q{i + 1}</span>
+                                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>{q.content ?? q.question ?? q}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </Accordion>
+                      );
+                    })()}
                   </div>
-                </div>
-                {resumeContent ? (
-                  <div>
-                    <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:6 }}>자기소개서</p>
-                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                      {parseResumeContent(resumeContent).map((item, i) => (
-                        <div key={i} style={{ borderRadius:8, overflow:"hidden", border:"1px solid rgba(255,255,255,0.1)" }}>
-                          <button
-                            type="button"
-                            onClick={() => setOpenResumeIndex(openResumeIndex === i ? null : i)}
-                            style={{
-                              width:"100%", background:"rgba(255,255,255,0.05)",
-                              border:"none", cursor:"pointer",
-                              display:"flex", alignItems:"center", justifyContent:"space-between",
-                              padding:"8px 10px", gap:8,
-                            }}
-                          >
-                            <span style={{ fontSize:11, color:"rgba(255,255,255,0.75)", fontWeight:600, textAlign:"left" }}>
-                              {item.title}
-                            </span>
-                            <span style={{ fontSize:10, color:"rgba(255,255,255,0.4)", flexShrink:0 }}>
-                              {openResumeIndex === i ? "▼" : "▶"}
-                            </span>
-                          </button>
-                          {openResumeIndex === i && (
-                            <div style={{ padding:"8px 10px", background:"rgba(0,0,0,0.2)" }}>
-                              <p style={{
-                                fontSize:11, color:"rgba(255,255,255,0.6)", lineHeight:1.7,
-                                whiteSpace:"pre-wrap", wordBreak:"break-word", margin:0,
-                              }}>{item.content}</p>
+                </>
+              )}
+
+              {/* ── 멘티: 멘토소개(왼) | 자소서(오) ── */}
+              {!isMentor && (
+                <>
+                  {/* 왼쪽 열: 멘토 소개 */}
+                  <div style={{ flex: 1, overflowY: "auto" }}>
+                    <Accordion title="담당 멘토 소개" accentColor={C_teal} defaultOpen={true}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: session.mentorInfo ? 12 : 0 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#0F6E56", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                          {session.mentorName?.[0] ?? "?"}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{session.mentorName} 멘토</p>
+                          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{session.type}</p>
+                        </div>
+                      </div>
+                      {session.mentorInfo && (
+                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 1.7 }}>{session.mentorInfo}</p>
+                      )}
+                    </Accordion>
+                  </div>
+
+                  {/* 오른쪽 열: 자소서 */}
+                  <div style={{ flex: 1, overflowY: "auto" }}>
+                    <Accordion title="제출한 자기소개서" accentColor="#818CF8" defaultOpen={true}>
+                      {resumeContent ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {parseResumeContent(resumeContent).map((item, i) => (
+                            <div key={i} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px" }}>
+                              <p style={{ fontSize: 11, fontWeight: 800, color: C_teal, marginBottom: 6 }}>{item.title}</p>
+                              <p style={{ fontSize: 12, lineHeight: 1.75, color: "rgba(255,255,255,0.7)", whiteSpace: "pre-wrap" }}>{item.content}</p>
+                            </div>
+                          ))}
+                          {(sessionData?.jobPosting?.url || sessionData?.jobPostingUrl) && (
+                            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px 12px" }}>
+                              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>채용공고 URL</p>
+                              <p style={{ fontSize: 11, color: C_teal, wordBreak: "break-all" }}>{sessionData?.jobPosting?.url || sessionData?.jobPostingUrl}</p>
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p style={{ fontSize:11, color:"rgba(255,255,255,0.3)", fontStyle:"italic" }}>
-                    자기소개서가 없습니다
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* 멘티 전용: 멘토 정보 */}
-            {!isMentor && (
-              <div style={{
-                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px",
-                border:"1px solid rgba(255,255,255,0.1)",
-              }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:10 }}>
-                  담당 멘토
-                </p>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{
-                    width:36, height:36, borderRadius:"50%",
-                    background:"#0F6E56",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:13, fontWeight:700, color:"#fff", flexShrink:0,
-                  }}>
-                    {session.mentorName?.[0] ?? "?"}
-                  </div>
-                  <div>
-                    <p style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{session.mentorName} 멘토</p>
-                    <p style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>{session.mentorInfo}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── 멘티 전용: 제출한 자소서 보기 ── */}
-            {!isMentor && (
-              <div style={{
-                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"14px 16px",
-                border:"1px solid rgba(255,255,255,0.1)",
-              }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginBottom:12 }}>
-                  제출한 자소서
-                </p>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
-                    <div style={{
-                      width:28, height:28, borderRadius:"50%",
-                      background:"rgba(29,158,117,0.2)", border:"1px solid rgba(29,158,117,0.5)",
-                      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                    }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C_teal} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M7 3h7l4 4v14H7z"/>
-                        <path d="M14 3v5h5M10 13h6M10 17h4"/>
-                      </svg>
-                    </div>
-                    <div style={{ minWidth:0 }}>
-                      <p style={{ fontSize:13, fontWeight:700, color:"#fff" }}>면접 신청 시 제출한 자기소개서</p>
-                      <p style={{ fontSize:11, color:"rgba(255,255,255,0.4)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                        {resumeError || (resumeContent ? "멘토와 AI 추천 질문 생성에 활용됩니다" : "제출한 자기소개서를 불러오는 중입니다")}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={!resumeContent}
-                    onClick={() => setResumeOpen(v => !v)}
-                    style={{
-                      border:`1px solid ${resumeContent ? "rgba(29,158,117,0.7)" : "rgba(255,255,255,0.16)"}`,
-                      background: resumeContent ? "rgba(29,158,117,0.14)" : "rgba(255,255,255,0.04)",
-                      color: resumeContent ? C_teal : "rgba(255,255,255,0.35)",
-                      borderRadius:8,
-                      padding:"8px 12px",
-                      fontSize:12,
-                      fontWeight:700,
-                      cursor: resumeContent ? "pointer" : "not-allowed",
-                      whiteSpace:"nowrap",
-                      fontFamily:"inherit",
-                    }}
-                  >
-                    {resumeOpen ? "접기" : "보기"}
-                  </button>
-                </div>
-                {resumeOpen && resumeContent && (
-                  <div style={{ marginTop:12, display:"flex", flexDirection:"column", gap:10 }}>
-                    {parseResumeContent(resumeContent).map((item, i) => (
-                      <div key={`${item.title}-${i}`} style={{
-                        background:"rgba(255,255,255,0.05)",
-                        border:"1px solid rgba(255,255,255,0.08)",
-                        borderRadius:10,
-                        padding:"12px",
-                      }}>
-                        <p style={{ fontSize:11, fontWeight:800, color:C_teal, marginBottom:6 }}>{item.title}</p>
-                        <p style={{ fontSize:12, lineHeight:1.7, color:"rgba(255,255,255,0.72)", whiteSpace:"pre-wrap" }}>
-                          {item.content}
+                      ) : (
+                        <p style={{ fontSize: 12, color: resumeError ? "#EF4444" : "rgba(255,255,255,0.3)", fontStyle: "italic" }}>
+                          {resumeError || "자기소개서를 불러오는 중입니다..."}
                         </p>
-                      </div>
-                    ))}
-                    {(sessionData?.jobPosting?.url || sessionData?.jobPostingUrl) && (
-                      <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"8px 12px" }}>
-                        <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginBottom:2 }}>채용공고 URL</p>
-                        <p style={{ fontSize:11, color:C_teal, wordBreak:"break-all" }}>
-                          {sessionData?.jobPosting?.url || sessionData?.jobPostingUrl}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── 멘티 전용: 입장 전 체크리스트 ── */}
-            {!isMentor && (
-              <div style={{
-                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"14px 16px",
-                border:"1px solid rgba(255,255,255,0.1)",
-              }}>
-                <p style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.5)", marginBottom:10 }}>입장 전 체크</p>
-                {[
-                  { label:"카메라 화면이 정상으로 보인다", auto: camStatus==="ok" },
-                  { label:"마이크 레벨 바가 움직이는 것을 확인했다", auto: micOk },
-                  { label:"조용하고 밝은 환경에 있다", auto: false },
-                ].map((item,i)=>(
-                  <label key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, cursor:"pointer" }}>
-                    <input type="checkbox"
-                      checked={item.auto || checklist[i]}
-                      onChange={()=>!item.auto && setChecklist(prev=>prev.map((v,j)=>j===i?!v:v))}
-                      style={{ accentColor:C_teal, width:14, height:14 }}
-                      readOnly={item.auto}
-                    />
-                    <span style={{
-                      fontSize:12,
-                      color:(item.auto||checklist[i])?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.45)",
-                      textDecoration:(item.auto||checklist[i])?"line-through":"none",
-                    }}>{item.label}</span>
-                    {item.auto && <span style={{ fontSize:10, color:C_teal, fontWeight:700 }}>자동</span>}
-                  </label>
-                ))}
-              </div>
-            )}
-
-            {/* ── 멘토 전용: AI 예상 질문 리스트 ── */}
-            {isMentor && (
-              <div style={{
-                background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px",
-                border: "1px solid rgba(255,255,255,0.1)",
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setQuestionsOpen(v => !v)}
-                  style={{
-                    width: "100%", background: "none", border: "none", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: 0, marginBottom: questionsOpen ? 12 : 0,
-                  }}
-                >
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#F59E0B", textTransform: "uppercase" }}>
-                    🎯 AI 예상 질문 리스트
-                  </p>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
-                    {questionsOpen ? "▲" : "▼"}
-                  </span>
-                </button>
-                {questionsOpen && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={handleLoadRecommendedQuestions}
-                        disabled={recommendLoading}
-                        style={{
-                          flex: 1,
-                          padding: "9px 12px",
-                          borderRadius: 8,
-                          border: "1px solid rgba(245,158,11,0.35)",
-                          background: recommendLoading ? "rgba(245,158,11,0.12)" : "rgba(245,158,11,0.18)",
-                          color: "#F59E0B",
-                          cursor: recommendLoading ? "default" : "pointer",
-                          fontFamily: "inherit",
-                          fontSize: 12,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {recommendLoading ? "추천 질문 생성 중..." : "AI 추천 질문 불러오기"}
-                      </button>
-                      {recommendedQuestions.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={handleSaveRecommendedQuestions}
-                          disabled={recommendSaving}
-                          style={{
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(29,158,117,0.35)",
-                            background: recommendSaving ? "rgba(29,158,117,0.12)" : "rgba(29,158,117,0.18)",
-                            color: C_teal,
-                            cursor: recommendSaving ? "default" : "pointer",
-                            fontFamily: "inherit",
-                            fontSize: 12,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {recommendSaving ? "저장 중..." : "선택 저장"}
-                        </button>
                       )}
-                    </div>
-
-                    {recommendError && (
-                      <p style={{ fontSize: 11, color: "#EF4444", lineHeight: 1.5 }}>
-                        {recommendError}
-                      </p>
-                    )}
-
-                    {recommendedQuestions.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {recommendedQuestions.map((item, i) => (
-                          <label key={item.key} style={{
-                            background: item.selected ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.04)",
-                            border: `1px solid ${item.selected ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.08)"}`,
-                            borderRadius: 8,
-                            padding: "8px 10px",
-                            display: "flex",
-                            gap: 8,
-                            alignItems: "flex-start",
-                          }}>
-                            <input
-                              type="checkbox"
-                              checked={item.selected}
-                              onChange={() => handleRecommendedQuestionToggle(i)}
-                              style={{ accentColor: "#F59E0B", width: 14, height: 14, marginTop: 6, flexShrink: 0 }}
-                            />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 5 }}>
-                                <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 700 }}>
-                                  {item.section}
-                                </span>
-                                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.28)" }}>
-                                  추천 {i + 1}
-                                </span>
-                              </div>
-                              <textarea
-                                value={item.content ?? ""}
-                                onChange={event => handleRecommendedQuestionChange(i, event.target.value)}
-                                rows={Math.max(3, Math.ceil(String(item.content ?? "").length / 34))}
-                                style={{
-                                  width: "100%",
-                                  resize: "none",
-                                  minHeight: 78,
-                                  border: "1px solid rgba(255,255,255,0.1)",
-                                  borderRadius: 7,
-                                  padding: "7px 8px",
-                                  background: "rgba(13,34,64,0.82)",
-                                  color: "rgba(255,255,255,0.82)",
-                                  fontFamily: "inherit",
-                                  fontSize: 12,
-                                  lineHeight: 1.55,
-                                  outline: "none",
-                                  overflow: "hidden",
-                                  boxSizing: "border-box",
-                                }}
-                              />
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    )}
+                    </Accordion>
                   </div>
-                )}
-                {questionsOpen && (
-                  questions.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {questions.map((q, i) => (
-                        <div key={q.id ?? i} style={{
-                          background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
-                          borderRadius: 8, padding: "8px 12px",
-                          display: "flex", gap: 10, alignItems: "flex-start",
-                        }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", flexShrink: 0, marginTop: 1 }}>
-                            Q{i + 1}
-                          </span>
-                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
-                            {q.content ?? q.question ?? q}
-                          </p>
-                        </div>
-                      ))}
+                </>
+              )}
+
+            </div>
+          </div>
+
+          {/* ════════════════════════════════
+              STEP 2 — 장치 확인
+          ════════════════════════════════ */}
+          <div style={{ display: step === 2 ? "contents" : "none" }}>
+
+            {/* 왼쪽: 카메라 프리뷰 */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+
+              {/* ⚠️ 장치 경고 배너 */}
+              {!deviceReady && (
+                <div style={{ width: "100%", maxWidth: 460, background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "10px 16px", display: "flex", gap: 10, alignItems: "center" }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+                  <p style={{ fontSize: 12, color: "#F59E0B", fontWeight: 600 }}>카메라와 마이크가 정상 작동하는지 확인해주세요</p>
+                </div>
+              )}
+
+              {/* 카메라 프리뷰 박스 */}
+              <div style={{ width: "100%", maxWidth: 460, aspectRatio: "4/3", background: "#0d1f3c", borderRadius: 14, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <video ref={videoRef} autoPlay playsInline muted style={{
+                  position: "absolute", inset: 0, width: "100%", height: "100%",
+                  objectFit: "cover", transform: "scaleX(-1)",
+                  display: (camOn && camStatus === "ok") ? "block" : "none",
+                }} />
+                {!(camOn && camStatus === "ok") && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.06)", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {camStatus === "loading"
+                        ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
+                        : <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="11" r="5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" /><path d="M5 24c0-4.97 4.03-9 9-9s9 4.03 9 9" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                      }
                     </div>
-                  ) : (
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
-                      AI 예상 질문을 불러오는 중입니다. 세션 ID가 유효하면 자동으로 표시됩니다.
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+                      {camStatus === "denied" ? (camError || "카메라 권한이 거부됐어요") : camOn ? "카메라 연결 중..." : "카메라가 꺼져 있어요"}
                     </p>
-                  )
+                    {camStatus === "denied" && (
+                      <button type="button" onClick={() => startCameraPreview("")} style={{ marginTop: 12, padding: "8px 14px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.24)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                        카메라 권한 다시 요청
+                      </button>
+                    )}
+                  </div>
                 )}
+                <div style={{ position: "absolute", bottom: 12, left: 12, background: "rgba(0,0,0,0.6)", borderRadius: 6, padding: "4px 10px" }}>
+                  <span style={{ fontSize: 12, color: "#fff", fontWeight: 500 }}>{isMentor ? session.mentorName : session.menteeName} (나)</span>
+                </div>
               </div>
-            )}
 
-            {/* ── 멘토 전용: 면접 진행 가이드 ── */}
-            {isMentor && (
-              <div style={{
-                background:"rgba(29,158,117,0.07)", borderRadius:12, padding:"14px 16px",
-                border:"1px solid rgba(29,158,117,0.2)",
-              }}>
-                <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:C_teal, textTransform:"uppercase", marginBottom:12 }}>
-                  면접 진행 가이드
-                </p>
+              {/* 컨트롤 버튼 */}
+              <div style={{ display: "flex", gap: 16 }}>
                 {[
-                  { icon:"⏱", text:"질문당 답변 시간은 2~3분을 권장합니다" },
-                  { icon:"📝", text:"답변 중 메모 기능을 활용해 핵심을 기록하세요" },
-                  { icon:"⭐", text:"STAR 기법(상황→과제→행동→결과)으로 구체적 답변을 유도하세요" },
-                  { icon:"🎯", text:"AI 추천 질문을 참고하되 자유롭게 응용하세요" },
-                  { icon:"💬", text:"면접 종료 후 멘토링 세션에서 심층 피드백이 진행됩니다" },
-                ].map((item,i)=>(
-                  <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:i<4?10:0 }}>
-                    <span style={{ fontSize:14, flexShrink:0 }}>{item.icon}</span>
-                    <p style={{ fontSize:12, color:"rgba(255,255,255,0.65)", lineHeight:1.65 }}>{item.text}</p>
+                  { active: micOn, setActive: setMicOn, onIcon: <MicOnIcon />, offIcon: <MicOffIcon />, label: micOn ? "마이크 ON" : "마이크 OFF" },
+                  { active: camOn, setActive: setCamOn, onIcon: <CamOnIcon />, offIcon: <CamOffIcon />, label: camOn ? "카메라 ON" : "카메라 OFF" },
+                ].map((btn, i) => (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                    <button onClick={() => btn.setActive(v => !v)} style={{
+                      width: 52, height: 52, borderRadius: "50%",
+                      background: btn.active ? "rgba(255,255,255,0.1)" : "rgba(239,68,68,0.2)",
+                      border: `1.5px solid ${btn.active ? "rgba(255,255,255,0.2)" : "rgba(239,68,68,0.5)"}`,
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = btn.active ? "rgba(255,255,255,0.16)" : "rgba(239,68,68,0.3)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = btn.active ? "rgba(255,255,255,0.1)" : "rgba(239,68,68,0.2)"; }}
+                    >
+                      {btn.active ? btn.onIcon : btn.offIcon}
+                    </button>
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{btn.label}</span>
                   </div>
                 ))}
               </div>
-            )}
 
-            {/* ── 멘토 전용: 입장 전 체크리스트 ── */}
-            {isMentor && (
-              <div style={{
-                background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"14px 16px",
-                border:"1px solid rgba(255,255,255,0.1)",
-              }}>
-                <p style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.5)", marginBottom:10 }}>입장 전 체크</p>
-                {[
-                  { label:"멘티 자기소개서 및 이력서 검토 완료", auto: false },
-                  { label:"AI 추천 질문 확인 완료", auto: false },
-                  { label:"카메라 화면이 정상으로 보인다", auto: camStatus==="ok" },
-                  { label:"마이크 레벨 바가 움직이는 것을 확인했다", auto: micOk },
-                ].map((item,i)=>(
-                  <label key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, cursor:"pointer" }}>
-                    <input type="checkbox"
-                      checked={item.auto || checklist[i]}
-                      onChange={()=>!item.auto && setChecklist(prev=>prev.map((v,j)=>j===i?!v:v))}
-                      style={{ accentColor:C_teal, width:14, height:14 }}
-                    />
-                    <span style={{
-                      fontSize:12,
-                      color:(item.auto||checklist[i])?"rgba(255,255,255,0.7)":"rgba(255,255,255,0.45)",
-                      textDecoration:(item.auto||checklist[i])?"line-through":"none",
-                    }}>{item.label}</span>
-                    {item.auto && <span style={{ fontSize:10, color:C_teal, fontWeight:700, marginLeft:2 }}>자동</span>}
-                  </label>
-                ))}
+              {/* 카메라 선택 */}
+              {videoDevices.length > 1 && (
+                <div style={{ width: "100%", maxWidth: 360 }}>
+                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 6 }}>카메라 선택</label>
+                  <select value={selectedDeviceId} onChange={e => setSelectedDeviceId(e.target.value)} style={{ width: "100%", padding: "8px 12px", background: "rgba(255,255,255,0.06)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, fontSize: 12, cursor: "pointer", outline: "none" }}>
+                    {videoDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `카메라 ${d.deviceId.slice(0, 6)}`}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* 오른쪽: 장치 상태 + 체크리스트 */}
+            <div style={{ width: 320, flexShrink: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+
+              {/* 마이크 레벨 미터 */}
+              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>마이크 레벨</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>🎙 입력 감지</span>
+                  {!micOn
+                    ? <span style={{ fontSize: 11, color: "#EF4444", fontWeight: 600 }}>마이크 꺼짐</span>
+                    : micOk
+                      ? <span style={{ fontSize: 11, color: C_teal, fontWeight: 700 }}>✓ 정상 감지됨</span>
+                      : <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>말씀해보세요...</span>
+                  }
+                </div>
+                <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden", marginBottom: 6 }}>
+                  <div style={{ width: `${micOn ? micLevel : 0}%`, height: 8, borderRadius: 99, background: micLevel > 20 ? C_teal : "rgba(255,255,255,0.2)", transition: "width 0.08s ease" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  {["낮음", "적정 ✓"].map((l, i) => <span key={i} style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{l}</span>)}
+                </div>
               </div>
+
+              {/* 장치 상태 */}
+              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>장치 상태</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { label: "카메라", ok: camStatus === "ok", okText: "정상 연결됨", failText: "확인 필요" },
+                    { label: "마이크", ok: micOk, okText: "정상 감지됨", failText: "테스트 중", pulse: !micOk && micOn },
+                  ].map((d, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, background: d.ok ? "rgba(29,158,117,0.1)" : "rgba(255,255,255,0.03)", border: `1px solid ${d.ok ? "rgba(29,158,117,0.3)" : "rgba(255,255,255,0.08)"}` }}>
+                      <span style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{d.label}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: d.ok ? C_teal : "rgba(255,255,255,0.25)", animation: d.pulse ? "pulse 1.2s ease-in-out infinite" : "none" }} />
+                        <span style={{ fontSize: 12, color: d.ok ? C_teal : "rgba(255,255,255,0.4)", fontWeight: 600 }}>{d.ok ? d.okText : d.failText}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 체크리스트 */}
+              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.1)", flex: 1 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>입장 전 체크</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {(isMentor ? [
+                    { label: "멘티 자기소개서 검토 완료", auto: false },
+                    { label: "AI 추천 질문 확인 완료", auto: false },
+                    { label: "카메라 화면이 정상으로 보인다", auto: camStatus === "ok" },
+                    { label: "마이크 레벨 바가 움직인다", auto: micOk },
+                  ] : [
+                    { label: "카메라 화면이 정상으로 보인다", auto: camStatus === "ok" },
+                    { label: "마이크 레벨 바가 움직인다", auto: micOk },
+                    { label: "조용하고 밝은 환경에 있다", auto: false },
+                  ]).map((item, i) => (
+                    <label key={i} style={{ display: "flex", alignItems: "center", gap: 10, cursor: item.auto ? "default" : "pointer" }}>
+                      <input type="checkbox" checked={item.auto || checklist[i]} onChange={() => !item.auto && setChecklist(prev => prev.map((v, j) => j === i ? !v : v))} style={{ accentColor: C_teal, width: 15, height: 15, flexShrink: 0 }} readOnly={item.auto} />
+                      <span style={{ fontSize: 12, color: (item.auto || checklist[i]) ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.4)", textDecoration: (item.auto || checklist[i]) ? "line-through" : "none" }}>{item.label}</span>
+                      {item.auto && <span style={{ fontSize: 10, color: C_teal, fontWeight: 700, marginLeft: "auto", flexShrink: 0 }}>자동</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>{/* end main content */}
+
+        {/* ── 푸터 (버튼) ── */}
+        <div style={{
+          height: 72, padding: "0 32px", flexShrink: 0,
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          background: "#0D2240",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            {step === 2 && (
+              <button onClick={() => setStep(1)} style={{ padding: "10px 22px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "rgba(255,255,255,0.65)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all 0.18s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; e.currentTarget.style.color = "#fff"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; e.currentTarget.style.color = "rgba(255,255,255,0.65)"; }}
+              >← 이전</button>
             )}
-
-            {/* 여백 채우기 */}
-            <div style={{ flex:1 }}/>
-
-            {/* 입장 버튼 */}
-            <button onClick={handleEnter} style={{
-              width:"100%", padding:"16px",
-              background:"#F2EDE4", color:"#0D2240",
-              border:"none", borderRadius:12,
-              fontSize:16, fontWeight:700,
-              cursor:"pointer",
-              fontFamily:"inherit", transition:"background 0.2s",
-              letterSpacing:"0.02em",
-            }}
-              onMouseEnter={e=>e.currentTarget.style.background="#E8E0D0"}
-              onMouseLeave={e=>e.currentTarget.style.background="#F2EDE4"}
-            >
-              입장하기
-            </button>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {step === 1 && (
+              <button onClick={() => setStep(2)} style={{ padding: "12px 32px", borderRadius: 10, border: `1.5px solid ${C_teal}`, background: "rgba(29,158,117,0.18)", color: C_teal, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all 0.18s" }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(29,158,117,0.28)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(29,158,117,0.18)"; }}
+              >장치 확인하기 →</button>
+            )}
+            {step === 2 && (
+              <button onClick={handleEnter} disabled={entering} style={{ padding: "12px 36px", borderRadius: 10, border: "none", background: entering ? "rgba(255,255,255,0.2)" : "linear-gradient(135deg,#1D9E75,#0F6E56)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: entering ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "opacity 0.18s", boxShadow: entering ? "none" : "0 4px 16px rgba(29,158,117,0.4)", letterSpacing: "0.02em" }}
+                onMouseEnter={e => { if (!entering) e.currentTarget.style.opacity = "0.88"; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
+              >{entering ? "입장 중..." : "면접 입장하기"}</button>
+            )}
           </div>
         </div>
+
       </div>
     </>
   );

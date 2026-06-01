@@ -68,6 +68,13 @@ export async function getMentorReservationRequests(status = "PENDING") {
   return Array.isArray(data) ? data : [];
 }
 
+export async function getMenteeReservations() {
+  const res = await fetch("/api/reservation/mentee", { headers: authHeaders() });
+  if (!res.ok) throw new Error(await errorMessage(res, "신청 이력 조회 실패"));
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
 export async function respondReservation(reservationIdOrData, acceptedArg) {
   const reservationId = typeof reservationIdOrData === "object"
     ? reservationIdOrData.reservationId

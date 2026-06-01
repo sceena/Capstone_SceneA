@@ -10,15 +10,15 @@ import { setAuthUser } from "../../store/authStore";
 const C = {
   navy:     "#0D2240",
   navyMid:  "#1B4F7A",
-  cream:    "#F4F2EE",
-  creamDark:"#EDEAE4",
+  cream:    "#F0F4F8",
+  creamDark:"#E8EEF6",
   white:    "#FFFFFF",
   teal:     "#1D9E75",
-  text:     "#1A1818",
-  textSub:  "#6B6863",
-  textMuted:"#9E9B95",
-  border:   "#DDD9D3",
-  inputBg:  "#F4F2EE",
+  text:     "#1A1B1E",
+  textSub:  "#495057",
+  textMuted:"#868E96",
+  border:   "#E9ECEF",
+  inputBg:  "#F0F4F8",
   error:    "#D94040",
 };
 
@@ -154,16 +154,17 @@ export default function Login() {
       const { access_token, refresh_token } = await res.json();
       const role = parseTokenRole(access_token) || "mentee";
       let name = email.split("@")[0];
+      let profileData = null;
       try {
         const profileRes = await fetch("/api/users/me", {
           headers: { Authorization: `Bearer ${access_token}` },
         });
         if (profileRes.ok) {
-          const profile = await profileRes.json();
-          if (profile.name) name = profile.name;
+          profileData = await profileRes.json();
+          if (profileData.name) name = profileData.name;
         }
       } catch {}
-      setAuthUser({ role, email, name, accessToken: access_token, refreshToken: refresh_token });
+      setAuthUser({ role, email, name, accessToken: access_token, refreshToken: refresh_token, profileData });
       navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
     } catch {
       setError("서버에 연결할 수 없습니다. 백엔드를 실행한 뒤 다시 로그인해 주세요.");
@@ -175,16 +176,16 @@ export default function Login() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { height: 100%; }
-        body { font-family: 'Noto Sans KR', sans-serif; }
+        body { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 
         /* 인풋 자동완성 배경 제거 */
         input:-webkit-autofill,
         input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0 1000px #F4F2EE inset !important;
-          -webkit-text-fill-color: #1A1818 !important;
+          -webkit-box-shadow: 0 0 0 1000px #F0F4F8 inset !important;
+          -webkit-text-fill-color: #1A1B1E !important;
         }
 
         .social-btn {
@@ -192,18 +193,18 @@ export default function Login() {
           display: flex; align-items: center; justify-content: center;
           gap: 8px; padding: 12px 0;
           background: #FFFFFF;
-          border: 1px solid #E2E6EA;
+          border: 1px solid #E9ECEF;
           border-radius: 12px;
           cursor: pointer;
-          font-family: 'Noto Sans KR', sans-serif;
+          font-family: 'Inter', 'Noto Sans KR', sans-serif;
           font-size: 13px; font-weight: 500;
-          color: #1A1818;
+          color: #1A1B1E;
           transition: background 0.18s, border-color 0.18s, transform 0.15s;
           white-space: nowrap;
         }
         .social-btn:hover {
-          background: #EDEAE4;
-          border-color: #C8C3BB;
+          background: #E8EEF6;
+          border-color: #CED4DA;
           transform: translateY(-1px);
         }
 

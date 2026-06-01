@@ -11,26 +11,26 @@ const C = {
   navy:     "#0D2240",   // Main 딥 네이비
   accent:   "#1B4F7A",   // Accent 미드 블루
   mid:      "#3A7FAF",   // Mid 스틸 블루
-  cream:    "#e8e0d0",   // Cream 크림 베이지
-  light:    "#F2EDE4",   // Light 라이트 크림
-  bg:       "#faf8f4d4",   // BG 백그라운드
+  cream:    "#E9ECEF",   // Border / Divider
+  light:    "#E8EEF6",   // Light tint
+  bg:       "#F0F4F8",   // BG 백그라운드
   white:    "#FFFFFF",
-  text:     "#1A1818",
-  textSub:  "#6B6863",
-  textMuted:"#9E9B95",
+  text:     "#1A1B1E",
+  textSub:  "#495057",
+  textMuted:"#868E96",
 };
 
 /* ── 글로벌 CSS ── */
 const GlobalStyle = () => (
   <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Playfair+Display:wght@700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html { scroll-behavior: smooth; overflow-x: hidden; }
 
     body {
-      font-family: 'Noto Sans KR', sans-serif;
+      font-family: 'Inter', 'Noto Sans KR', -apple-system, sans-serif;
       background: ${C.bg};
       color: ${C.text};
       -webkit-font-smoothing: antialiased;
@@ -359,7 +359,7 @@ const steps = [
     title: "데이터와 경험이 결합된 진화형 리포트",
     desc: "AI 정량적 평가(말하기 속도, 침묵, 논리성)와 멘토의 경험 기반 코칭이 결합된 1차·2차 리포트를 제공합니다. 당신의 약점을 정확하게 알고 강화할 수 있는 가장 완벽한 피드백을 만나보세요.",
     reverse: false,
-    accent: "#EDE5D8",
+    accent: "#DDE6F2",
     tag: "Dual Report",
   },
 ];

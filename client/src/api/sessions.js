@@ -173,6 +173,7 @@ export async function getSessionReport(sessionId) {
   const res = await fetch(`/api/sessions/${sessionId}/report`, {
     headers: authHeaders(),
   });
+  if (res.status === 404) return null; // 리포트 미생성 상태 — 에러 아님
   if (!res.ok) throw new Error("리포트 조회 실패");
   return res.json();
 }

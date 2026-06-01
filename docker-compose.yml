@@ -13,6 +13,7 @@ services:
       AWS_SECRET_KEY: ${AWS_SECRET_KEY}
       AWS_REGION: ${AWS_REGION}
       AI_SERVER_BASE_URL: http://localhost:8000
+      CALLBACK_BASE_URL: ${CALLBACK_BASE_URL:-http://54.116.176.242:8080}
     restart: unless-stopped
 
   ai-server:

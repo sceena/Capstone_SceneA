@@ -6,6 +6,19 @@ import { getAuthUser } from "../../store/authStore";
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
+const COLS = 10;
+const ROWS = 20;
+const CELL = 22;
+
+const PIECES = [
+  { shape: [[1, 1, 1, 1]], color: "#26C6DA" },
+  { shape: [[1, 1], [1, 1]], color: "#FDD835" },
+  { shape: [[0, 1, 0], [1, 1, 1]], color: "#AB47BC" },
+  { shape: [[0, 1, 1], [1, 1, 0]], color: "#66BB6A" },
+  { shape: [[1, 1, 0], [0, 1, 1]], color: "#EF5350" },
+  { shape: [[1, 0, 0], [1, 1, 1]], color: "#42A5F5" },
+  { shape: [[0, 0, 1], [1, 1, 1]], color: "#FFA726" },
+];
 
 const ANALYSIS_STEPS = [
   "답변 음성 STT 변환 확인 중...",
@@ -14,6 +27,181 @@ const ANALYSIS_STEPS = [
   "Fit-Gap 역량 교차 분석 중...",
   "AI 인사이트 생성 중...",
 ];
+
+function createGrid() {
+  return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+}
+
+function randomPiece() {
+  const piece = PIECES[Math.floor(Math.random() * PIECES.length)];
+  return {
+    shape: piece.shape,
+    color: piece.color,
+    x: Math.floor(COLS / 2) - Math.ceil(piece.shape[0].length / 2),
+    y: 0,
+  };
+}
+
+function rotate(shape) {
+  return shape[0].map((_, col) => shape.map(row => row[col]).reverse());
+}
+
+function isValid(grid, shape, x, y) {
+  for (let row = 0; row < shape.length; row++) {
+    for (let col = 0; col < shape[row].length; col++) {
+      if (!shape[row][col]) continue;
+      const nextX = x + col;
+      const nextY = y + row;
+      if (nextX < 0 || nextX >= COLS || nextY >= ROWS) return false;
+      if (nextY >= 0 && grid[nextY][nextX]) return false;
+    }
+  }
+  return true;
+}
+
+function drawCell(ctx, x, y, color) {
+  const px = x * CELL + 1;
+  const py = y * CELL + 1;
+  const size = CELL - 2;
+  ctx.fillStyle = color;
+  ctx.fillRect(px, py, size, size);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.fillRect(px, py, size, 4);
+  ctx.fillRect(px, py, 4, size);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fillRect(px, py + size - 4, size, 4);
+  ctx.fillRect(px + size - 4, py, 4, size);
+}
+
+function drawBoard(canvas, grid, piece) {
+  const ctx = canvas?.getContext("2d");
+  if (!ctx) return;
+  ctx.fillStyle = "#111827";
+  ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      ctx.strokeRect(col * CELL, row * CELL, CELL, CELL);
+      if (grid[row][col]) drawCell(ctx, col, row, grid[row][col]);
+    }
+  }
+  if (!piece) return;
+  piece.shape.forEach((line, row) => {
+    line.forEach((filled, col) => {
+      if (filled) drawCell(ctx, piece.x + col, piece.y + row, piece.color);
+    });
+  });
+}
+
+function TetrisPanel() {
+  const canvasRef = useRef(null);
+  const gameRef = useRef({ grid: createGrid(), piece: randomPiece(), score: 0, over: false });
+  const [score, setScore] = useState(0);
+  const [over, setOver] = useState(false);
+
+  const restart = useCallback(() => {
+    gameRef.current = { grid: createGrid(), piece: randomPiece(), score: 0, over: false };
+    setScore(0);
+    setOver(false);
+    drawBoard(canvasRef.current, gameRef.current.grid, gameRef.current.piece);
+  }, []);
+
+  const lockPiece = useCallback(() => {
+    const game = gameRef.current;
+    const { grid, piece } = game;
+    piece.shape.forEach((line, row) => {
+      line.forEach((filled, col) => {
+        if (filled && piece.y + row >= 0) grid[piece.y + row][piece.x + col] = piece.color;
+      });
+    });
+    const kept = grid.filter(row => row.some(cell => !cell));
+    const cleared = ROWS - kept.length;
+    game.grid = [...Array.from({ length: cleared }, () => Array(COLS).fill(null)), ...kept];
+    game.score += cleared * 100;
+    game.piece = randomPiece();
+    if (!isValid(game.grid, game.piece.shape, game.piece.x, game.piece.y)) {
+      game.over = true;
+      setOver(true);
+    }
+    setScore(game.score);
+  }, []);
+
+  const stepDown = useCallback(() => {
+    const game = gameRef.current;
+    if (game.over) return;
+    const nextY = game.piece.y + 1;
+    if (isValid(game.grid, game.piece.shape, game.piece.x, nextY)) {
+      game.piece.y = nextY;
+    } else {
+      lockPiece();
+    }
+    drawBoard(canvasRef.current, game.grid, game.piece);
+  }, [lockPiece]);
+
+  useEffect(() => {
+    drawBoard(canvasRef.current, gameRef.current.grid, gameRef.current.piece);
+    const timer = window.setInterval(stepDown, 700);
+    return () => window.clearInterval(timer);
+  }, [stepDown]);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      const game = gameRef.current;
+      if (game.over || !game.piece) return;
+      const { piece, grid } = game;
+      if (event.key === "ArrowLeft" && isValid(grid, piece.shape, piece.x - 1, piece.y)) piece.x -= 1;
+      if (event.key === "ArrowRight" && isValid(grid, piece.shape, piece.x + 1, piece.y)) piece.x += 1;
+      if (event.key === "ArrowDown" && isValid(grid, piece.shape, piece.x, piece.y + 1)) piece.y += 1;
+      if (event.key === "ArrowUp") {
+        const rotated = rotate(piece.shape);
+        if (isValid(grid, rotated, piece.x, piece.y)) piece.shape = rotated;
+      }
+      if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        drawBoard(canvasRef.current, game.grid, game.piece);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <div style={{ background: NAVY, borderRadius: 18, padding: 22, boxShadow: "0 18px 50px rgba(13,34,64,0.16)", color: "white" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 17, fontWeight: 800, margin: "0 0 4px" }}>테트리스로 기다려보세요</p>
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", margin: 0 }}>리포트가 완성되면 자동으로 이동합니다.</p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <p style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", margin: "0 0 2px", fontWeight: 700 }}>SCORE</p>
+          <p style={{ fontSize: 20, fontWeight: 900, margin: 0, fontVariantNumeric: "tabular-nums" }}>{score}</p>
+        </div>
+      </div>
+      <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+        <canvas
+          ref={canvasRef}
+          width={COLS * CELL}
+          height={ROWS * CELL}
+          style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", maxWidth: "100%", background: "#111827" }}
+        />
+        {over && (
+          <div style={{
+            position: "absolute", inset: 0, borderRadius: 12, background: "rgba(0,0,0,0.68)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10,
+          }}>
+            <p style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>GAME OVER</p>
+            <button onClick={restart} style={{ border: "none", borderRadius: 9, background: GREEN, color: "white", padding: "9px 18px", fontWeight: 800, cursor: "pointer" }}>
+              다시 시작
+            </button>
+          </div>
+        )}
+      </div>
+      <p style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", margin: "12px 0 0", textAlign: "center" }}>
+        방향키로 이동 · 회전할 수 있어요
+      </p>
+    </div>
+  );
+}
 
 /* ── 메인 페이지 ── */
 export default function ReportGeneratingPage() {
@@ -26,6 +214,7 @@ export default function ReportGeneratingPage() {
   const [error, setError] = useState("");
   const generatingRef = useRef(false);
   const role = String(location.state?.role || getAuthUser()?.role || "mentee").toLowerCase();
+  const isMentorRole = role.includes("mentor");
 
   const goToReport = useCallback(() => {
     navigate(`/report/ai/${sessionId}`, { state: { role } });
@@ -107,6 +296,9 @@ export default function ReportGeneratingPage() {
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @media (max-width: 860px) {
+          .report-generating-grid { grid-template-columns: 1fr !important; }
+        }
       `}</style>
 
       {/* 헤더 */}
@@ -129,7 +321,15 @@ export default function ReportGeneratingPage() {
       {/* 본문 */}
       <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "48px 5%", width: "100%" }}>
 
-        <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 18 }}>
+        <div className="report-generating-grid" style={{
+          width: "100%",
+          maxWidth: isMentorRole ? 720 : 1080,
+          display: "grid",
+          gridTemplateColumns: isMentorRole ? "1fr" : "minmax(0, 1fr) 320px",
+          gap: 20,
+          alignItems: "start",
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ background: "white", borderRadius: 18, border: "1px solid #E8E0D0", padding: "28px 30px", boxShadow: "0 18px 50px rgba(13,34,64,0.08)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
               <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #E8E0D0", borderTopColor: GREEN, animation: "spin 1s linear infinite", flexShrink: 0 }} />
@@ -208,6 +408,8 @@ export default function ReportGeneratingPage() {
           >
             건너뛰고 리포트 보기 →
           </button>
+          </div>
+          {!isMentorRole && <TetrisPanel />}
         </div>
       </div>
     </div>

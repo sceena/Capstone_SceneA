@@ -3,8 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getFitGapAnalysis } from "../../api/sessions";
 
 const NAVY = "#0D2240";
-const GREEN = "#1D9E75";
-const BG = "#FAF8F4";
+const GREEN = "#0CA678";
+const BG = "#F0F4F8";
+const PRIMARY_GRAD = "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)";
+const SUCCESS_GRAD = "linear-gradient(135deg, #0CA678 0%, #38D9A9 100%)";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const VIEWED_KEY = "scena_viewed_finals";
 
@@ -105,9 +107,32 @@ export default function FinalReportPage() {
   const sessionId = reportData?.sessionId;
   const role = reportData?.role || "mentee";
 
-  // 리다이렉트: state 없으면 대시보드로
+  // 리다이렉트: state 없으면 더미 데이터로 대체 (demo 확인용)
   useEffect(() => {
-    if (!reportData) navigate("/dashboard/mentee");
+    if (!reportData) navigate("/report/final", {
+      replace: true,
+      state: {
+        sessionId: "demo",
+        role: "mentee",
+        session: {
+          title: "네이버 백엔드 모의 면접",
+          date: "2026-06-01",
+          type: "1:1",
+          duration: "45분",
+          menteeName: "이멘티",
+          qnas: [
+            { id: 1, question: "Spring Boot N+1 문제 경험", transcript: "LAZY 로딩과 fetch join으로 해결했습니다.", aiScore: 3.5 },
+            { id: 2, question: "대용량 트래픽 처리 설계", transcript: "캐싱과 로드밸런서를 활용하겠습니다.", aiScore: 2.5 },
+          ],
+        },
+        feedbacks: {
+          1: { score: 4, comment: "구체적인 해결 경험이 잘 드러났습니다." },
+          2: { score: 3, comment: "실제 경험 기반 답변을 준비해오세요." },
+        },
+        totalFeedback: "기술 이해도는 탄탄합니다. 다음 세션에는 실무 경험을 수치와 함께 제시해보세요. STAR 구조로 답변을 구성하면 설득력이 높아집니다.",
+        mentorScore: 4,
+      },
+    });
   }, [reportData, navigate]);
 
   // 읽음 표시 (멘티가 열었을 때)
@@ -240,23 +265,26 @@ export default function FinalReportPage() {
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
       {/* ── 헤더 ── */}
-      <header style={{ background: NAVY, padding: "0 32px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={() => navigate(-1)} style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "white", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
-            ← 뒤로
-          </button>
-          <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>최종 리포트</span>
-          <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: GREEN, color: "white", fontWeight: 700 }}>멘토 코멘트 포함</span>
+      <header style={{ background: "#FFFFFF", padding: "0 5%", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: PRIMARY_GRAD, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>Scene<span style={{ color: NAVY }}>A</span></span>
+          <span style={{ fontSize: 12, color: "#868E96" }}>/ 최종 리포트</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: "#E6FCF5", color: GREEN }}>멘토 코멘트 포함</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {role === "mentor" && (
             <button onClick={() => setNotified(true)} disabled={notified}
-              style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: notified ? "#555" : GREEN, color: "white", fontSize: 13, fontWeight: 700, cursor: notified ? "default" : "pointer", fontFamily: "inherit", transition: "background 0.2s" }}>
-              {notified ? "✓ 멘티에게 전송 완료" : "멘티에게 전송하기"}
+              style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: notified ? "#E9ECEF" : SUCCESS_GRAD, color: notified ? "#868E96" : "white", fontSize: 13, fontWeight: 700, cursor: notified ? "default" : "pointer", fontFamily: "inherit", transition: "all 0.2s", boxShadow: notified ? "none" : "0 2px 8px rgba(12,166,120,0.3)" }}>
+              {notified ? "✓ 전송 완료" : "멘티에게 전송하기"}
             </button>
           )}
           <button onClick={() => exportToPDF(resolvedSession, reportData)}
-            style={{ padding: "8px 16px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            style={{ padding: "8px 16px", borderRadius: 9, border: "1.5px solid #E9ECEF", background: "white", color: "#495057", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
             Word 저장
           </button>
         </div>
@@ -508,11 +536,14 @@ export default function FinalReportPage() {
         {/* ── 하단 버튼 ── */}
         <div style={{ marginTop: 24, display: "flex", gap: 10, justifyContent: "center" }}>
           <button onClick={() => navigate("/dashboard/mentee")}
-            style={{ padding: "11px 24px", borderRadius: 10, border: "1px solid #D1D5DB", background: "white", color: "#555", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            style={{ padding: "12px 28px", borderRadius: 10, border: "1.5px solid #E9ECEF", background: "white", color: "#495057", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "border-color 0.18s" }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = NAVY}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "#E9ECEF"}
+          >
             대시보드로 이동
           </button>
           <button onClick={() => exportToPDF(resolvedSession, reportData)}
-            style={{ padding: "11px 24px", borderRadius: 10, border: "none", background: NAVY, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            style={{ padding: "12px 28px", borderRadius: 10, border: "none", background: PRIMARY_GRAD, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(13,34,64,0.2)" }}>
             Word로 저장하기
           </button>
         </div>

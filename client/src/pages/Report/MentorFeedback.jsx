@@ -167,6 +167,23 @@ export default function MentorFeedbackPage() {
 
   useEffect(() => {
     let cancelled = false;
+
+    /* 더미 데이터 (로컬 UI 확인용) */
+    if (!sessionId || !/^\d+$/.test(sessionId)) {
+      setSessionInfo({ title: "네이버 백엔드 모의 면접", date: "2026-06-01 14:00", duration: "45분", type: "1:1" });
+      setMenteeList([{
+        menteeId: "dummy-1",
+        menteeName: "이멘티",
+        menteeTrack: "1차 AI 리포트",
+        qnas: [
+          { id: "q1", questionId: 1, answerId: null, question: "Q1 · Spring Boot와 JPA를 사용하면서 N+1 문제를 경험한 적 있나요?", aiScore: 3.5, aiComment: "문제 인식은 명확하나 해결 방안이 구체적이지 않습니다.", transcript: "네, N+1 문제를 경험했습니다. Fetch 타입을 LAZY로 설정하고 필요 시 fetch join을 사용했습니다.", strengths: ["문제 인식 명확"], improvements: ["해결 방안 수치 근거 부족"] },
+          { id: "q2", questionId: 2, answerId: null, question: "Q2 · 대용량 트래픽 처리를 위한 설계 방식은?", aiScore: 2.5, aiComment: "경험 기반 답변이 부족합니다.", transcript: "캐싱과 로드밸런서를 활용할 것 같습니다.", strengths: ["방향성 적절"], improvements: ["실제 경험 기반 답변 필요", "수치 근거 부족"] },
+        ],
+      }]);
+      setLoading(false);
+      return;
+    }
+
     const fetchData = async () => {
       try {
         const [sessionData, reportData] = await Promise.allSettled([

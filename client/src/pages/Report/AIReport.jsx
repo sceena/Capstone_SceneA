@@ -3,9 +3,11 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import mockAiReport from "./mockAiReport";
 
 const NAVY = "#0D2240";
-const GREEN = "#1D9E75";
-const BG = "#FAF8F4";
+const GREEN = "#0CA678";
+const BG = "#F0F4F8";
 const CARD = "#FFFFFF";
+const PRIMARY_GRAD = "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)";
+const SUCCESS_GRAD = "linear-gradient(135deg, #0CA678 0%, #38D9A9 100%)";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const USE_MOCK_REPORT = import.meta.env.VITE_USE_MOCK_REPORT === "true";
 const LOADING_STEPS = [
@@ -245,23 +247,25 @@ function LoadingScreen({ onDone }) {
 }
 
 // ─── Shared Header ────────────────────────────────────────────────
-function Header({ onExportWord }) {
+function Header({ onExportWord, role }) {
   return (
-    <header style={{ background: NAVY, padding: "0 32px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.12)", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="20" height="20" viewBox="0 0 36 36" fill="none">
-            <rect x="4" y="4" width="12" height="12" rx="2" fill="white" opacity="0.9" />
-            <rect x="20" y="4" width="12" height="12" rx="2" fill="white" opacity="0.6" />
-            <rect x="4" y="20" width="12" height="12" rx="2" fill="white" opacity="0.6" />
-            <rect x="20" y="20" width="12" height="12" rx="2" fill={GREEN} />
-          </svg>
+    <header style={{ background: CARD, padding: "0 5%", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 1200, width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: PRIMARY_GRAD, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>
+            Scene<span style={{ color: NAVY }}>A</span>
+          </span>
+          <span style={{ fontSize: 12, color: "#868E96", marginLeft: 4 }}>/ AI 면접 분석 리포트</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: role === "mentor" ? "#E8EEF6" : "#E6FCF5", color: role === "mentor" ? NAVY : GREEN, marginLeft: 4 }}>
+            {role === "mentor" ? "멘토 보기" : "멘티 보기"}
+          </span>
         </div>
-        <span style={{ color: "white", fontWeight: 600, fontSize: 15 }}>AI 면접 분석 리포트</span>
-      </div>
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={onExportWord} style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: GREEN, color: "white", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+        <button onClick={onExportWord} style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 13, cursor: "pointer", fontWeight: 700, boxShadow: "0 2px 8px rgba(12,166,120,0.3)", whiteSpace: "nowrap" }}>
           Word 내보내기
         </button>
       </div>
@@ -310,25 +314,20 @@ function StarText({ text, highlights }) {
 
 function MetricRows({ metrics, tone }) {
   const isBest = tone === "best";
-  const labelColor = isBest ? "#166534" : "#9B1C1C";
-  const valueColor = isBest ? "#14532D" : "#7F1D1D";
-  const borderColor = isBest ? "#BBF7D0" : "#FED7D7";
-  const bgColor = isBest ? "#F0FDF4" : "#FFF5F5";
   const rows = [
     ["말하기 속도", metrics?.speaking_speed || "미측정"],
     ["침묵", metrics?.silence || "미측정"],
     ["문장 명료도", metrics?.sentence_clarity || "미측정"],
     ["답변 구조", metrics?.star_structure || "미측정"],
   ];
-
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${borderColor}` }}>
-      <p style={{ color: labelColor, fontSize: 11, fontWeight: 700, margin: "0 0 8px" }}>이 답변의 정량 평가</p>
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(13,34,64,0.08)" }}>
+      <p style={{ color: NAVY, fontSize: 11, fontWeight: 700, opacity: 0.6, margin: "0 0 8px", letterSpacing: "0.06em" }}>정량 평가</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
         {rows.map(([label, value]) => (
-          <div key={label} style={{ background: bgColor, borderRadius: 8, padding: "8px 10px" }}>
-            <p style={{ color: labelColor, fontSize: 10, fontWeight: 700, margin: "0 0 4px" }}>{label}</p>
-      <p style={{ color: valueColor, fontSize: 13, fontWeight: 700, margin: 0 }}>{value}</p>
+          <div key={label} style={{ background: isBest ? "rgba(12,166,120,0.06)" : "rgba(13,34,64,0.05)", borderRadius: 10, padding: "9px 12px" }}>
+            <p style={{ color: NAVY, fontSize: 10, fontWeight: 700, opacity: 0.55, margin: "0 0 3px" }}>{label}</p>
+            <p style={{ color: NAVY, fontSize: 13, fontWeight: 700, margin: 0 }}>{value}</p>
           </div>
         ))}
       </div>
@@ -570,14 +569,14 @@ function MenteeReport({ sessionId, report }) {
         </div>
 
         {/* 멘토링 세션 입장 */}
-        <div style={{ marginTop: 32, background: NAVY, borderRadius: 16, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18 }}>
+        <div style={{ marginTop: 32, background: PRIMARY_GRAD, borderRadius: 16, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, boxShadow: "0 4px 20px rgba(13,34,64,0.2)" }}>
           <div>
-            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "0 0 8px" }}>AI 리포트 분석이 완료되었습니다</p>
-            <p style={{ color: "white", fontSize: 18, fontWeight: 700, margin: 0 }}>멘토와 함께 리포트를 리뷰하는 시간을 가져보세요</p>
+            <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, margin: "0 0 6px" }}>AI 리포트 분석이 완료되었습니다</p>
+            <p style={{ color: "white", fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>멘토와 함께 리포트를 리뷰하는 시간을 가져보세요</p>
           </div>
           <button
             onClick={() => navigate(`/mentoring/mentee/${sessionId}`)}
-            style={{ flex: "0 0 auto", padding: "14px 28px", borderRadius: 12, border: "none", background: GREEN, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.2s" }}
+            style={{ flex: "0 0 auto", padding: "14px 28px", borderRadius: 12, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
             onMouseLeave={e => e.currentTarget.style.opacity = "1"}
           >
@@ -667,15 +666,17 @@ function MentorReport({ sessionId, report }) {
         )}
 
         {/* 멘토링 세션 입장 */}
-        <div style={{ background: NAVY, borderRadius: 16, padding: 28, textAlign: "center" }}>
-          <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "0 0 8px" }}>AI 분석이 완료되었습니다</p>
-          <p style={{ color: "white", fontSize: 18, fontWeight: 700, margin: "0 0 20px" }}>멘티와 함께 리포트를 리뷰하는 멘토링 세션을 시작해보세요</p>
+        <div style={{ background: PRIMARY_GRAD, borderRadius: 16, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, boxShadow: "0 4px 20px rgba(13,34,64,0.2)" }}>
+          <div>
+            <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, margin: "0 0 6px" }}>AI 분석이 완료되었습니다</p>
+            <p style={{ color: "white", fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>멘티와 함께 리포트를 리뷰하는 멘토링 세션을 시작해보세요</p>
+          </div>
           <button
             onClick={async () => {
               try { await updateSessionStatus(sessionId, "in_progress"); } catch {}
               navigate(`/mentoring/mentor/${sessionId}`);
             }}
-            style={{ padding: "14px 40px", borderRadius: 12, border: "none", background: GREEN, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.2s" }}
+            style={{ flex: "0 0 auto", padding: "14px 32px", borderRadius: 12, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.2s", whiteSpace: "nowrap" }}
             onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
             onMouseLeave={e => e.currentTarget.style.opacity = "1"}
           >
@@ -770,20 +771,18 @@ export default function AIReportPage() {
         <LoadingScreen onDone={() => {}} />
       ) : phase === "error" ? (
         <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <div style={{ maxWidth: 420, width: "100%", background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 28, textAlign: "center", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
-            <h2 style={{ color: NAVY, fontSize: 20, margin: "0 0 10px" }}>리포트를 불러올 수 없습니다</h2>
-            <p style={{ color: "#666", fontSize: 14, lineHeight: 1.6, margin: "0 0 20px" }}>{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: GREEN, color: "white", fontWeight: 700, cursor: "pointer" }}
-            >
+          <div style={{ maxWidth: 420, width: "100%", background: CARD, border: "1px solid #E9ECEF", borderRadius: 16, padding: 32, textAlign: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05)" }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#FFF5F5", border: "1px solid #FED7D7", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 24 }}>⚠️</div>
+            <h2 style={{ color: NAVY, fontSize: 18, fontWeight: 800, margin: "0 0 10px" }}>리포트를 불러올 수 없습니다</h2>
+            <p style={{ color: "#495057", fontSize: 14, lineHeight: 1.6, margin: "0 0 20px" }}>{error}</p>
+            <button onClick={() => window.location.reload()} style={{ padding: "11px 28px", borderRadius: 10, border: "none", background: PRIMARY_GRAD, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
               다시 시도
             </button>
           </div>
         </div>
       ) : (
         <>
-          <Header onExportWord={() => exportWord(role)} />
+          <Header onExportWord={() => exportWord(role)} role={role} />
           {role === "mentee"
             ? <MenteeReport sessionId={sessionId} report={report} />
             : <MentorReport sessionId={sessionId} report={report} />

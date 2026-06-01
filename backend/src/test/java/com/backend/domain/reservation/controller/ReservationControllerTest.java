@@ -2,6 +2,7 @@ package com.backend.domain.reservation.controller;
 
 import com.backend.domain.reservation.dto.request.ReservationAcceptRequest;
 import com.backend.domain.reservation.dto.request.ReservationRequest;
+import com.backend.domain.reservation.dto.response.MenteeReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationAcceptResponse;
 import com.backend.domain.reservation.dto.response.ReservationResponse;
 import com.backend.domain.reservation.entity.ReservationStatus;
@@ -19,10 +20,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -42,6 +45,46 @@ class ReservationControllerTest {
 
     @MockitoBean
     private ReservationService reservationService;
+
+    @Test
+    void 멘티_예약목록_조회_성공_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(2L, "MENTEE");
+        MenteeReservationResponse response = new MenteeReservationResponse(
+                1L, null, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.PENDING, LocalDateTime.now()
+        );
+
+        given(reservationService.getMenteeReservations(any(), eq(null))).willReturn(List.of(response));
+
+        mockMvc.perform(get("/api/reservation/mentee")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].mentor_name").value("박멘토"))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+    }
+
+    @Test
+    void 멘티_예약목록_status_필터_조회_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(2L, "MENTEE");
+        MenteeReservationResponse response = new MenteeReservationResponse(
+                1L, 5L, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.CONFIRMED, LocalDateTime.now()
+        );
+
+        given(reservationService.getMenteeReservations(any(), eq(ReservationStatus.CONFIRMED))).willReturn(List.of(response));
+
+        mockMvc.perform(get("/api/reservation/mentee")
+                        .param("status", "CONFIRMED")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].session_id").value(5))
+                .andExpect(jsonPath("$[0].status").value("CONFIRMED"));
+    }
+
+    @Test
+    void 멘티_예약목록_인증없이_401() throws Exception {
+        mockMvc.perform(get("/api/reservation/mentee"))
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test
     void 예약_신청_성공_201() throws Exception {

@@ -70,6 +70,66 @@ class ReservationServiceTest {
         return saved;
     }
 
+    // ── getMenteeReservations ──────────────────────────────────────────────
+
+    @Test
+    void 멘티_전체_예약목록_조회() {
+        MentorAvailability availability = mock(MentorAvailability.class);
+        when(availability.getId()).thenReturn(3L);
+        when(availability.getStartTime()).thenReturn(LocalDateTime.now().plusDays(1));
+        when(availability.getMentor()).thenReturn(mentor);
+
+        Reservation reservation = mock(Reservation.class);
+        when(reservation.getId()).thenReturn(1L);
+        when(reservation.getMentorAvailability()).thenReturn(availability);
+        when(reservation.getInterviewSession()).thenReturn(null);
+        when(reservation.getStatus()).thenReturn(ReservationStatus.PENDING);
+        when(reservation.getCreateDate()).thenReturn(LocalDateTime.now());
+
+        given(memberRepository.findById(2L)).willReturn(Optional.of(mentee));
+        given(reservationRepository.findMenteeReservations(mentee)).willReturn(List.of(reservation));
+
+        var result = reservationService.getMenteeReservations(2L, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).mentorName()).isEqualTo("박멘토");
+        assertThat(result.get(0).status()).isEqualTo(ReservationStatus.PENDING);
+    }
+
+    @Test
+    void 멘티_status_필터로_예약목록_조회() {
+        MentorAvailability availability = mock(MentorAvailability.class);
+        when(availability.getId()).thenReturn(3L);
+        when(availability.getStartTime()).thenReturn(LocalDateTime.now().plusDays(1));
+        when(availability.getMentor()).thenReturn(mentor);
+
+        Reservation confirmed = mock(Reservation.class);
+        when(confirmed.getId()).thenReturn(2L);
+        when(confirmed.getMentorAvailability()).thenReturn(availability);
+        when(confirmed.getInterviewSession()).thenReturn(null);
+        when(confirmed.getStatus()).thenReturn(ReservationStatus.CONFIRMED);
+        when(confirmed.getCreateDate()).thenReturn(LocalDateTime.now());
+
+        given(memberRepository.findById(2L)).willReturn(Optional.of(mentee));
+        given(reservationRepository.findMenteeReservationsByStatus(mentee, ReservationStatus.CONFIRMED))
+                .willReturn(List.of(confirmed));
+
+        var result = reservationService.getMenteeReservations(2L, ReservationStatus.CONFIRMED);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).status()).isEqualTo(ReservationStatus.CONFIRMED);
+        verify(reservationRepository, never()).findMenteeReservations(any());
+    }
+
+    @Test
+    void 멘티_존재하지_않으면_404() {
+        given(memberRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.getMenteeReservations(99L, null))
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.MEMBER_NOT_FOUND));
+    }
+
     // ── createReservation ──────────────────────────────────────────────────
 
     @Test

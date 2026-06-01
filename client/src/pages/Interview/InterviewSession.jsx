@@ -12,20 +12,6 @@ import {
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || undefined;
 const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
-const THEME = {
-  main: "#F7F7F8",
-  card: "#FFFFFF",
-  panel: "#F1F1F3",
-  primary: "#10A37F",
-  speaker: "#10A37F",
-  ai: "#10A37F",
-  text: "#202123",
-  sub: "#6B7280",
-  border: "#E5E5E5",
-  danger: "#EF4444",
-  success: "#10A37F",
-  onAccent: "#FFFFFF",
-};
 
 function getPeerIdFromToken(token) {
   try {
@@ -61,13 +47,6 @@ function describeRecordingError(error) {
 
 function getQuestionSttStatus(question) {
   return question?.stt_status ?? question?.sttStatus ?? null;
-}
-
-function getQuestionDisplayText(question) {
-  const content = question?.content ?? "";
-  return content === "질문 음성 변환 중입니다."
-    ? "질문 텍스트 정제 중입니다."
-    : content;
 }
 
 function splitSessionQuestions(items) {
@@ -106,7 +85,7 @@ function RecordingWave({ level = 0 }) {
   const normalized = Math.min(1, Math.max(0.08, level * 5));
   const bars = Array.from({ length: 18 });
   return (
-    <div className="voice-wave" style={{ display: "flex", alignItems: "center", gap: 3, height: 28, flex: 1 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 2, height: 28, flex: 1 }}>
       {bars.map((_, i) => {
         const shape = (Math.sin(i * 0.85) + 1) / 2;
         const height = 5 + Math.round((8 + shape * 18) * normalized);
@@ -115,54 +94,12 @@ function RecordingWave({ level = 0 }) {
             width: 3,
             height,
             borderRadius: 999,
-            background: i % 3 === 0 ? THEME.speaker : THEME.success,
+            background: "#1D9E75",
             opacity: 0.38 + normalized * 0.62,
             transition: "height 0.18s ease, opacity 0.18s ease",
           }} />
         );
       })}
-    </div>
-  );
-}
-
-function PulseDot({ active = false, color = THEME.danger }) {
-  return (
-    <span style={{
-      width: 9,
-      height: 9,
-      borderRadius: "50%",
-      background: color,
-      boxShadow: active ? `0 0 0 6px ${color}22` : `0 0 0 3px ${color}18`,
-      animation: active ? "recordPulse 1.15s ease-in-out infinite" : "none",
-      flexShrink: 0,
-    }} />
-  );
-}
-
-function ReportStepsOverlay({ role }) {
-  const steps = role === "mentor"
-    ? ["면접 종료 동기화", "STT 작업 확인", "AI 리포트 생성", "멘토 검토 화면 준비"]
-    : ["종료 신호 수신", "답변 음성 정리", "AI 리포트 생성", "리포트 화면 이동"];
-
-  return (
-    <div className="report-overlay">
-      <div className="report-modal">
-        <div className="report-loader">
-          <span />
-          <span />
-          <span />
-        </div>
-        <h2>리포트 생성 준비 중</h2>
-        <p>저장된 질문과 답변을 확인하고 분석 단계로 넘기고 있습니다.</p>
-        <div className="report-steps">
-          {steps.map((step, index) => (
-            <div key={step} className="report-step" style={{ animationDelay: `${index * 0.18}s` }}>
-              <PulseDot active color={index < 2 ? THEME.success : THEME.speaker} />
-              <span>{step}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -178,14 +115,11 @@ function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = 
     video.play().catch(() => {});
   }, [stream, muted]);
   return (
-    <div className={`video-tile ${isSpeaking && !micOff ? "is-speaking" : ""}`} style={{
+    <div style={{
       position: "relative", width: "100%", height: "100%",
-      background: `linear-gradient(180deg, ${THEME.card}, ${THEME.panel})`, borderRadius: 18, overflow: "hidden",
-      border: `1px solid ${isSpeaking && !micOff ? THEME.text : THEME.border}`,
-      boxShadow: isSpeaking && !micOff
-        ? "0 0 0 3px rgba(32,33,35,0.14), 0 18px 42px rgba(32,33,35,0.12)"
-        : "0 16px 42px rgba(32,33,35,0.08)",
-      transition: "border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease",
+      background: "#0f172a", borderRadius: 12, overflow: "hidden",
+      border: `2px solid ${isSpeaking ? "#1D9E75" : "rgba(255,255,255,0.1)"}`,
+      transition: "border-color 0.3s",
     }}>
       <video ref={ref} autoPlay playsInline style={{
         width: "100%", height: "100%", objectFit: "cover",
@@ -201,9 +135,9 @@ function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = 
           transition: "background 0.2s",
         }}>
           <div style={{
-            width: 56, height: 56, borderRadius: "50%", background: "rgba(255,255,255,0.18)",
+            width: 56, height: 56, borderRadius: "50%", background: "#1B4F7A",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 20, color: THEME.onAccent, fontWeight: 700,
+            fontSize: 20, color: "#fff", fontWeight: 700,
             opacity: micOff ? 0.6 : 1, transition: "opacity 0.2s",
           }}>
             {(label || "?")[0]}
@@ -213,29 +147,27 @@ function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = 
       {label && (
         <div style={{
           position: "absolute", bottom: 8, left: 8,
-          background: "rgba(255,255,255,0.70)", borderRadius: 999, padding: "4px 10px",
+          background: "rgba(0,0,0,0.6)", borderRadius: 6, padding: "3px 10px",
           display: "flex", alignItems: "center", gap: 5,
-          border: "1px solid rgba(255,255,255,0.36)",
-          backdropFilter: "blur(12px)",
         }}>
           {micOff && (
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-              <rect x="5" y="1" width="6" height="9" rx="3" stroke={THEME.danger} strokeWidth="1.5"/>
-              <path d="M3 7c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke={THEME.danger} strokeWidth="1.5" strokeLinecap="round"/>
-              <line x1="1" y1="1" x2="15" y2="15" stroke={THEME.danger} strokeWidth="1.5" strokeLinecap="round"/>
+              <rect x="5" y="1" width="6" height="9" rx="3" stroke="#EF4444" strokeWidth="1.5"/>
+              <path d="M3 7c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="1" y1="1" x2="15" y2="15" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           )}
-          <span style={{ fontSize: 11, color: micOff ? THEME.sub : THEME.text, fontWeight: 700 }}>{label}</span>
+          <span style={{ fontSize: 11, color: micOff ? "rgba(255,255,255,0.55)" : "#fff", fontWeight: 500 }}>{label}</span>
         </div>
       )}
       {/* 음소거 상태 배지 (우하단) */}
       {micOff && (
         <div style={{
           position: "absolute", bottom: 8, right: 8,
-          background: THEME.danger, borderRadius: "50%",
+          background: "#EF4444", borderRadius: "50%",
           width: 22, height: 22,
           display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 0 0 2px rgba(255,255,255,0.72)",
+          boxShadow: "0 0 0 2px rgba(0,0,0,0.4)",
         }}>
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
             <rect x="5" y="1" width="6" height="9" rx="3" stroke="#fff" strokeWidth="1.5"/>
@@ -243,184 +175,16 @@ function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = 
           </svg>
         </div>
       )}
-    </div>
-  );
-}
-
-function MenteeProgressPanel({
-  activeQuestion,
-  answerStatus,
-  answerSaveState,
-  answerSaveMessage,
-  answeredQuestionIds,
-  spokenQuestions,
-  answerButtonDisabled,
-  answerBlockedByRecorder,
-  recordingLockedByOther,
-  activeRecorder,
-  audioLevel,
-  answerElapsedText,
-  onToggleAnswer,
-}) {
-  const answeredSet = new Set(answeredQuestionIds.map(String));
-  const actualQuestions = Array.isArray(spokenQuestions) ? [...spokenQuestions] : [];
-  if (activeQuestion?.id && !actualQuestions.some(q => String(q.id) === String(activeQuestion.id))) {
-    actualQuestions.push(activeQuestion);
-  }
-
-  const answeredCount = actualQuestions.filter(q => answeredSet.has(String(q.id))).length;
-  const totalCount = actualQuestions.length;
-  const progressRatio = totalCount > 0 ? Math.min(100, Math.round((answeredCount / totalCount) * 100)) : 0;
-  const isAnswering = answerStatus === "answering";
-  const isUploading = answerSaveState === "uploading";
-  const hasSaveError = answerSaveState === "failed";
-
-  const status = (() => {
-    if (isAnswering) {
-      return { label: "답변 녹음 중", tone: THEME.success, bg: THEME.panel, text: "답변 완료를 누르면 음성이 저장되고 분석 대기열에 들어갑니다." };
-    }
-    if (isUploading) {
-      return { label: "답변 저장 중", tone: THEME.primary, bg: THEME.panel, text: "오디오를 업로드하고 있습니다. 창을 닫지 말고 잠시 기다려주세요." };
-    }
-    if (hasSaveError) {
-      return { label: "저장 확인 필요", tone: THEME.danger, bg: THEME.panel, text: answerSaveMessage || "답변 저장에 실패했습니다. 같은 질문에 다시 답변해 주세요." };
-    }
-    if (answerSaveState === "saved") {
-      return { label: "답변 저장 완료", tone: THEME.success, bg: THEME.panel, text: answerSaveMessage || "" };
-    }
-    if (activeQuestion) {
-      return { label: "답변 차례", tone: THEME.success, bg: THEME.panel, text: "질문을 읽고 핵심 경험부터 차분히 답변하세요." };
-    }
-    if (answerBlockedByRecorder) {
-      return { label: "다른 답변 진행 중", tone: THEME.ai, bg: THEME.panel, text: "다른 참여자의 발화가 끝나면 내 답변을 시작할 수 있습니다." };
-    }
-    if (recordingLockedByOther && activeRecorder?.recordingType === "QUESTION") {
-      return { label: "멘토 질문 중", tone: THEME.speaker, bg: THEME.panel, text: "멘토가 질문을 확정하고 있습니다. 질문이 표시되면 답변을 시작하세요." };
-    }
-    return { label: "질문 대기 중", tone: THEME.sub, bg: THEME.panel, text: "멘토가 실제 질문을 기록하면 이 영역에 질문 전문이 표시됩니다." };
-  })();
-
-  return (
-    <div className="interview-side-panel" style={{
-      width: 320,
-      flexShrink: 0,
-      background: THEME.card,
-      borderLeft: `1px solid ${THEME.border}`,
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-    }}>
-      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${THEME.border}`, background: THEME.card }}>
-        <p style={{ fontSize: 13, fontWeight: 800, color: THEME.text }}>내 답변 흐름</p>
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-        <section style={{ border: `1px solid ${THEME.border}`, borderRadius: 14, padding: 14, background: status.bg, backdropFilter: "blur(18px)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
-            <p style={{ fontSize: 12, fontWeight: 900, color: status.tone }}>{status.label}</p>
-            <span style={{
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              background: status.tone,
-              boxShadow: isAnswering ? `0 0 0 5px ${status.tone}22` : "none",
-              animation: isAnswering ? "pulse 1s ease-in-out infinite" : "none",
-              flexShrink: 0,
+      {isSpeaking && !micOff && (
+        <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "flex-end", gap: 2 }}>
+          {[4, 8, 6, 10, 5].map((h, i) => (
+            <div key={i} style={{
+              width: 3, background: "#1D9E75", borderRadius: 2, height: h,
+              animation: `speakPulse 0.5s ease-in-out ${i * 0.08}s infinite`,
             }} />
-          </div>
-          {status.text && <p style={{ fontSize: 12, color: THEME.sub, lineHeight: 1.6 }}>{status.text}</p>}
-          {isAnswering && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-              <RecordingWave level={audioLevel || 0} />
-              <span style={{ fontSize: 11, fontWeight: 800, color: THEME.success, flexShrink: 0 }}>녹음 중 {answerElapsedText}</span>
-            </div>
-          )}
-        </section>
-
-        <section style={{ border: `1px solid ${THEME.border}`, borderRadius: 14, padding: 14, background: THEME.panel, backdropFilter: "blur(18px)" }}>
-          <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: THEME.speaker, marginBottom: 8 }}>
-            현재 질문
-          </p>
-          {activeQuestion ? (
-            <>
-              <p style={{ fontSize: 14, fontWeight: 800, color: THEME.text, lineHeight: 1.65, marginBottom: 12 }}>
-                {getQuestionDisplayText(activeQuestion)}
-              </p>
-              <button
-                type="button"
-                onClick={onToggleAnswer}
-                disabled={answerButtonDisabled}
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  borderRadius: 9,
-                  border: "none",
-                  background: isAnswering ? THEME.success : THEME.primary,
-                  color: THEME.onAccent,
-                  fontSize: 13,
-                  fontWeight: 900,
-                  cursor: answerButtonDisabled ? "not-allowed" : "pointer",
-                  opacity: answerButtonDisabled ? 0.55 : 1,
-                  fontFamily: "inherit",
-                }}
-              >
-                {isUploading ? "저장 중..." : isAnswering ? "답변 완료" : "답변 시작"}
-              </button>
-            </>
-          ) : (
-            <p style={{ fontSize: 12, color: THEME.sub, lineHeight: 1.7 }}>
-              아직 확정된 질문이 없습니다. 멘토가 질문을 완료하면 이곳에 표시됩니다.
-            </p>
-          )}
-        </section>
-
-        <section style={{ border: `1px solid ${THEME.border}`, borderRadius: 14, padding: 14, background: THEME.panel, backdropFilter: "blur(18px)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", color: THEME.primary }}>답변 진행</p>
-            <span style={{ fontSize: 11, color: THEME.sub, fontWeight: 800 }}>{answeredCount}/{totalCount}</span>
-          </div>
-          <div style={{ height: 8, background: THEME.card, borderRadius: 999, overflow: "hidden", marginBottom: 10 }}>
-            <div style={{ width: `${progressRatio}%`, height: "100%", background: THEME.success, borderRadius: 999, transition: "width 0.2s ease" }} />
-          </div>
-          {actualQuestions.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {actualQuestions.slice(-4).map((q, index) => {
-                const answered = answeredSet.has(String(q.id));
-                const current = activeQuestion?.id && String(activeQuestion.id) === String(q.id);
-                return (
-                  <div key={q.id ?? index} style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "flex-start",
-                    padding: "8px 9px",
-                    borderRadius: 8,
-                    background: current ? "rgba(16,163,127,0.10)" : THEME.card,
-                  }}>
-                    <span style={{
-                      width: 18,
-                      height: 18,
-                      borderRadius: "50%",
-                      background: answered ? THEME.success : current ? THEME.speaker : THEME.border,
-                      color: THEME.text,
-                      fontSize: 10,
-                      fontWeight: 900,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}>{answered ? "✓" : index + 1}</span>
-                    <p style={{ fontSize: 11, color: THEME.text, lineHeight: 1.55 }}>
-                      {getQuestionDisplayText(q)}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p style={{ fontSize: 12, color: THEME.sub, lineHeight: 1.6 }}>아직 기록된 질문이 없습니다.</p>
-          )}
-        </section>
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -449,14 +213,9 @@ export default function InterviewSession({ role = "mentee" }) {
   };
 
   /* ── 컨트롤 상태 ── */
-  const [micOn, setMicOn] = useState(true);
+  const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(true);
-  const [chatOpen, setChatOpen] = useState(false);
   const [ending, setEnding] = useState(false);
-
-  /* ── 멘토 전용 ── */
-  const [chatMsg, setChatMsg] = useState("");
-  const [chatHistory, setChatHistory] = useState([]);
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [recommendationsOpen, setRecommendationsOpen] = useState(true);
@@ -464,13 +223,9 @@ export default function InterviewSession({ role = "mentee" }) {
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState([]);
   const questionRecorderRef = useRef(null);
   const questionAudioChunksRef = useRef([]);
-  const questionStartRef = useRef(null);
-  const questionCancelRef = useRef(false);
 
   /* ── 멘티 전용: 답변 상태 + 오디오 녹음 ── */
   const [answerStatus, setAnswerStatus] = useState("idle");
-  const [answerSaveState, setAnswerSaveState] = useState("idle"); // idle | recording | uploading | saved | failed
-  const [answerSaveMessage, setAnswerSaveMessage] = useState("");
   const [activeRecorder, setActiveRecorder] = useState(null);
   const [localPeerId, setLocalPeerId] = useState(null);
   const mediaRecorderRef = useRef(null);
@@ -491,17 +246,10 @@ export default function InterviewSession({ role = "mentee" }) {
         const { recommendations, spoken } = splitSessionQuestions(data);
         setQuestions(recommendations.length > 0 ? recommendations : getCachedRecommendations(id));
         setSpokenQuestions(spoken);
-        setActiveQuestion(prev => {
-          if (!prev?.id) return prev;
-          const updated = spoken.find(question => String(question.id) === String(prev.id));
-          return updated ? { ...prev, ...updated } : prev;
-        });
         if (!isMentor) {
           const nextQuestion = findNextSpokenQuestion(spoken, answeredQuestionIds);
           setActiveQuestion(prev => (
-            prev?.id === nextQuestion?.id && prev?.content === nextQuestion?.content
-              ? prev
-              : nextQuestion
+            prev?.id === nextQuestion?.id ? prev : nextQuestion
           ));
         }
       } catch {}
@@ -677,6 +425,7 @@ export default function InterviewSession({ role = "mentee" }) {
           if (audioTrack) {
             try { audioProducerRef.current = await sendTransport.produce({ track: audioTrack }); }
             catch (e) { console.error("audio produce 실패:", e); }
+            audioProducerRef.current?.pause();
           }
         });
 
@@ -732,6 +481,7 @@ export default function InterviewSession({ role = "mentee" }) {
         }
         if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
         localStreamRef.current = localStream;
+        localStream.getAudioTracks().forEach(t => { t.enabled = false; });
         setLocalMediaStream(localStream);
         try {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
@@ -870,8 +620,8 @@ export default function InterviewSession({ role = "mentee" }) {
     try {
       await updateSessionStatus(id, "completed");
     } catch {}
-    await new Promise(r => setTimeout(r, 1000));
-    navigate(`/report/generating/${id}`, { state: { role: "mentor" } });
+    await new Promise(r => setTimeout(r, 800));
+    navigate(`/report/ai/${id}`, { state: { role: "mentor" } });
   };
 
   useEffect(() => {
@@ -964,12 +714,6 @@ export default function InterviewSession({ role = "mentee" }) {
     };
   }, [activeQuestion?.id, id, isMentor]);
 
-  useEffect(() => {
-    if (isMentor || !activeQuestion?.id) return;
-    setAnswerSaveState("idle");
-    setAnswerSaveMessage("");
-  }, [activeQuestion?.id, isMentor]);
-
   /* ── 답변 상태 / 녹음 ── */
   const handleAnswerStatus = async (nextStatus) => {
     if (nextStatus === "answering" && !activeQuestion?.id) {
@@ -981,8 +725,9 @@ export default function InterviewSession({ role = "mentee" }) {
       const locked = await requestRecordingLock("ANSWER");
       if (!locked) return;
       setAnswerStatus(nextStatus);
-      setAnswerSaveState("recording");
-      setAnswerSaveMessage("답변 녹음이 시작되었습니다.");
+      setMicOn(true);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = true; });
+      audioProducerRef.current?.resume();
       try {
         const user = getAuthUser();
         const memberId = user?.id || getPeerIdFromToken(user?.accessToken || "");
@@ -1000,14 +745,13 @@ export default function InterviewSession({ role = "mentee" }) {
       } catch (error) {
         releaseRecordingLock();
         setAnswerStatus("idle");
-        setAnswerSaveState("failed");
-        setAnswerSaveMessage(describeRecordingError(error));
         alert(describeRecordingError(error));
       }
     } else if (nextStatus === "done" && mediaRecorderRef.current?.state !== "inactive") {
       setAnswerStatus(nextStatus);
-      setAnswerSaveState("uploading");
-      setAnswerSaveMessage("답변 오디오를 저장하고 있습니다.");
+      setMicOn(false);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
+      audioProducerRef.current?.pause();
       try {
         const user = getAuthUser();
         const memberId = user?.id || getPeerIdFromToken(user?.accessToken || "");
@@ -1021,7 +765,6 @@ export default function InterviewSession({ role = "mentee" }) {
         try {
           const blob = createAudioBlob(audioChunksRef.current);
           if (!blob.size) throw new Error("녹음된 답변 오디오가 없습니다. 답변 시작 후 1초 이상 말한 뒤 완료해주세요.");
-          if (!questionId) throw new Error("답변 대상 질문을 찾지 못했습니다. 멘토가 질문을 다시 확정한 뒤 시도해주세요.");
           if (questionId) {
             await uploadAnswerAudio(id, questionId, blob, {
               answerStart: answerStartRef.current,
@@ -1033,13 +776,8 @@ export default function InterviewSession({ role = "mentee" }) {
               return prev.includes(key) ? prev : [...prev, key];
             });
             setActiveQuestion(prev => String(prev?.id) === String(questionId) ? null : prev);
-            setAnswerSaveState("saved");
-            setAnswerSaveMessage("");
           }
-        } catch (error) {
-          setAnswerStatus("idle");
-          setAnswerSaveState("failed");
-          setAnswerSaveMessage(error?.message || "답변 저장에 실패했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.");
+        } catch {
         } finally {
           releaseRecordingLock();
           mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
@@ -1053,17 +791,12 @@ export default function InterviewSession({ role = "mentee" }) {
   const handleQuestionRecordToggle = async () => {
     if (questionRecordStatus === "recording") {
       setQuestionRecordStatus("uploading");
+      setMicOn(false);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
+      audioProducerRef.current?.pause();
       questionRecorderRef.current.onstop = async () => {
         questionRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
         questionRecorderRef.current = null;
-        if (questionCancelRef.current) {
-          questionAudioChunksRef.current = [];
-          questionStartRef.current = null;
-          questionCancelRef.current = false;
-          releaseRecordingLock();
-          setQuestionRecordStatus("idle");
-          return;
-        }
         try {
           const blob = createAudioBlob(questionAudioChunksRef.current);
           if (!blob.size) throw new Error("녹음된 질문 오디오가 없습니다. 질문 시작 후 1초 이상 말한 뒤 완료해주세요.");
@@ -1075,7 +808,6 @@ export default function InterviewSession({ role = "mentee" }) {
           alert(error?.message || "질문 오디오 저장에 실패했습니다.");
         } finally {
           releaseRecordingLock();
-          questionStartRef.current = null;
           setQuestionRecordStatus("idle");
         }
       };
@@ -1087,48 +819,20 @@ export default function InterviewSession({ role = "mentee" }) {
       const locked = await requestRecordingLock("QUESTION");
       if (!locked) return;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      questionCancelRef.current = false;
-      questionStartRef.current = new Date().toISOString();
       questionAudioChunksRef.current = [];
       const recorder = new MediaRecorder(stream, getAudioRecorderOptions());
       recorder.ondataavailable = (e) => { if (e.data.size > 0) questionAudioChunksRef.current.push(e.data); };
       questionRecorderRef.current = recorder;
       recorder.start(250);
       setQuestionRecordStatus("recording");
+      setMicOn(true);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = true; });
+      audioProducerRef.current?.resume();
     } catch (error) {
       releaseRecordingLock();
       setQuestionRecordStatus("idle");
-      questionStartRef.current = null;
       alert(describeRecordingError(error));
     }
-  };
-
-  const handleQuestionCancel = () => {
-    if (questionRecordStatus !== "recording") return;
-    questionCancelRef.current = true;
-    const recorder = questionRecorderRef.current;
-    const cleanup = () => {
-      recorder?.stream?.getTracks().forEach(t => t.stop());
-      questionRecorderRef.current = null;
-      questionAudioChunksRef.current = [];
-      questionStartRef.current = null;
-      questionCancelRef.current = false;
-      releaseRecordingLock();
-      setQuestionRecordStatus("idle");
-    };
-
-    if (recorder && recorder.state !== "inactive") {
-      recorder.onstop = cleanup;
-      recorder.stop();
-    } else {
-      cleanup();
-    }
-  };
-
-  const sendChat = () => {
-    if (!chatMsg.trim()) return;
-    setChatHistory(prev => [...prev, { me: true, text: chatMsg }]);
-    setChatMsg("");
   };
 
   const SPEAK_THRESHOLD = 0.025;
@@ -1138,21 +842,8 @@ export default function InterviewSession({ role = "mentee" }) {
   const staleQuestionLock = Boolean(activeQuestion?.id && activeRecorder?.recordingType === "QUESTION");
   const answerBlockedByRecorder = recordingLockedByOther && !staleQuestionLock;
   const waitingForAnswer = isMentor && Boolean(activeQuestion?.id) && questionRecordStatus !== "recording";
-  const answerButtonDisabled = answerSaveState === "uploading"
-    || (!activeQuestion && answerStatus !== "answering")
-    || (answerBlockedByRecorder && answerStatus !== "answering");
+  const answerButtonDisabled = (!activeQuestion && answerStatus !== "answering") || (answerBlockedByRecorder && answerStatus !== "answering");
   const questionButtonDisabled = questionRecordStatus === "uploading" || waitingForAnswer || (recordingLockedByOther && questionRecordStatus !== "recording");
-  const nowMs = Date.now();
-  const localAnswerStartedAt = answerStartRef.current ? new Date(answerStartRef.current).getTime() : null;
-  const remoteAnswerStartedAt = activeRecorder?.recordingType === "ANSWER" && activeRecorder?.startedAt
-    ? new Date(activeRecorder.startedAt).getTime()
-    : null;
-  const localQuestionStartedAt = questionStartRef.current ? new Date(questionStartRef.current).getTime() : null;
-  const remoteQuestionStartedAt = activeRecorder?.recordingType === "QUESTION" && activeRecorder?.startedAt
-    ? new Date(activeRecorder.startedAt).getTime()
-    : null;
-  const answerElapsedText = formatTime(Math.max(0, Math.floor((nowMs - (localAnswerStartedAt || remoteAnswerStartedAt || nowMs)) / 1000)));
-  const questionElapsedText = formatTime(Math.max(0, Math.floor((nowMs - (localQuestionStartedAt || remoteQuestionStartedAt || nowMs)) / 1000)));
 
   return (
     <>
@@ -1161,105 +852,46 @@ export default function InterviewSession({ role = "mentee" }) {
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         html,body{height:100%;overflow:hidden;margin:0}
         #root{height:100%;overflow:hidden;min-height:0;width:100%;max-width:100%;margin:0;display:block;text-align:left}
-        body{font-family:'Noto Sans KR',sans-serif;background:${THEME.main};color:${THEME.text}}
+        body{font-family:'Noto Sans KR',sans-serif;background:#0a1628;color:#fff}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        @keyframes recordPulse{0%{transform:scale(1);opacity:1}70%{transform:scale(1.35);opacity:.58}100%{transform:scale(1);opacity:1}}
         @keyframes speakPulse{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
-        @keyframes cardFloat{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
-        @keyframes stepIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:${THEME.border};border-radius:4px}
-        .session-shell{
-          display:flex;flex-direction:column;height:100vh;
-          background:${THEME.main};
-        }
-        .session-header{
-          height:68px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;
-          background:${THEME.card};border-bottom:1px solid ${THEME.border};
-          color:${THEME.text};flex-shrink:0;
-        }
-        .recording-chip{
-          background:${THEME.card};
-          border:1px solid ${THEME.border};box-shadow:0 12px 34px rgba(32,33,35,.08);
-        }
-        .floating-control-bar{
-          position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:20;
-          display:flex;align-items:center;justify-content:center;gap:10px;
-          width:max-content;max-width:calc(100% - 36px);padding:10px 12px;border-radius:999px;
-          background:${THEME.card};border:1px solid ${THEME.border};
-          box-shadow:0 20px 54px rgba(32,33,35,.12);
-        }
-        .ctrl-btn:hover{background:#111827!important;transform:translateY(-1px)}
-        .ctrl-btn-off:hover{background:#6B7280!important;transform:translateY(-1px)}
-        .report-overlay{
-          position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
-          background:rgba(247,247,248,.76);backdrop-filter:blur(18px);animation:cardFloat .24s ease both;
-        }
-        .report-modal{
-          width:min(440px,calc(100vw - 34px));border-radius:24px;padding:26px;
-          background:${THEME.card};border:1px solid ${THEME.border};
-          box-shadow:0 32px 90px rgba(32,33,35,.14);text-align:left;
-        }
-        .report-loader{height:42px;display:flex;align-items:flex-end;gap:5px;margin-bottom:18px}
-        .report-loader span{width:9px;border-radius:999px;background:${THEME.success};animation:speakPulse .8s ease-in-out infinite}
-        .report-loader span:nth-child(1){height:18px}
-        .report-loader span:nth-child(2){height:30px;animation-delay:.1s;background:${THEME.speaker}}
-        .report-loader span:nth-child(3){height:24px;animation-delay:.2s;background:${THEME.ai}}
-        .report-modal h2{font-size:22px;font-weight:900;color:${THEME.text};margin:0 0 7px}
-        .report-modal p{font-size:13px;line-height:1.6;color:${THEME.sub};margin:0 0 18px}
-        .report-steps{display:flex;flex-direction:column;gap:10px}
-        .report-step{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:${THEME.panel};color:${THEME.text};font-size:12px;font-weight:900;animation:stepIn .34s ease both}
-        @media(max-width:980px){.interview-side-panel{display:none!important}.floating-control-bar{bottom:14px}}
+        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:4px}
+        .ctrl-btn:hover{background:rgba(255,255,255,0.25)!important}
+        .ctrl-btn-off:hover{background:rgba(239,68,68,0.85)!important}
       `}</style>
 
-      <div className="session-shell">
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0a1628" }}>
 
         {/* ════ 재접속 / 연결 실패 배너 ════ */}
         {(connectionState === "reconnecting" || connectionState === "failed") && (
           <div style={{
-            position: "fixed", top: 76, left: "50%", transform: "translateX(-50%)",
-            zIndex: 9999, width: "min(520px, calc(100vw - 32px))",
+            position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)",
+            zIndex: 9999, width: "min(480px, calc(100vw - 32px))",
           }}>
             <div style={{
-              background: THEME.card, borderRadius: 14, padding: "14px 18px",
-              boxShadow: "0 16px 40px rgba(32,33,35,0.08)", border: `1px solid ${THEME.border}`,
+              background: "rgba(13,34,64,0.96)", borderRadius: 12, padding: "14px 18px",
+              boxShadow: "0 8px 30px rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.12)",
               display: "flex", alignItems: "center", gap: 12,
             }}>
               {connectionState === "reconnecting" ? (
                 <>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    border: `3px solid ${THEME.border}`, borderTopColor: THEME.success,
-                    animation: "spin 0.9s linear infinite", flexShrink: 0,
-                  }} />
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2.5px solid rgba(255,255,255,0.15)", borderTopColor: "#1D9E75", animation: "spin 0.9s linear infinite", flexShrink: 0 }} />
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 800, color: THEME.text, marginBottom: 2 }}>미디어 서버 재연결 중</p>
-                    <p style={{ fontSize: 11, color: THEME.sub }}>화면 공유 연결을 복구하고 있습니다. 질문/답변 녹음은 계속 시도할 수 있습니다.</p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 2 }}>미디어 서버 재연결 중</p>
+                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>연결을 복구하고 있습니다. 녹음은 계속 진행됩니다.</p>
                   </div>
                 </>
               ) : (
                 <>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    background: "rgba(239,68,68,0.14)", color: THEME.danger,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 14, fontWeight: 900, flexShrink: 0,
-                  }}>!</div>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(239,68,68,0.2)", color: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, flexShrink: 0 }}>!</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 800, color: THEME.danger, marginBottom: 2 }}>미디어 서버 연결 실패</p>
-                    <p style={{ fontSize: 11, color: THEME.sub }}>상대 화면이 보이지 않을 수 있습니다. 로컬 녹음과 오디오 저장은 계속 진행할 수 있습니다.</p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#EF4444", marginBottom: 2 }}>미디어 서버 연결 실패</p>
+                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>상대 화면이 보이지 않을 수 있습니다.</p>
                   </div>
-                  <button
-                    onClick={() => window.location.reload()}
-                    style={{
-                      padding: "8px 12px", background: THEME.primary, color: THEME.onAccent,
-                      border: "none", borderRadius: 999, fontSize: 12, fontWeight: 800,
-                      cursor: "pointer", fontFamily: "inherit",
-                      flexShrink: 0,
-                    }}
-                  >
+                  <button onClick={() => window.location.reload()} style={{ padding: "7px 14px", background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
                     새로고침
                   </button>
                 </>
@@ -1268,75 +900,54 @@ export default function InterviewSession({ role = "mentee" }) {
           </div>
         )}
 
-        {/* ════ 상단 헤더 바 ════ */}
-        <div className="session-header">
+        {/* ════ 상단 헤더 ════ */}
+        <div style={{
+          background: "#0D2240", padding: "0 24px",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          height: 60, flexShrink: 0,
+        }}>
+          {/* 로고 + 상태 */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: THEME.text, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 24px rgba(32,33,35,.14)" }}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <rect x="1" y="4" width="11" height="9" rx="1.5" fill="white"/>
-                <path d="M12 7.5l5-2.5v8l-5-2.5V7.5z" fill="white"/>
-              </svg>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+                  <rect x="1" y="4" width="11" height="9" rx="1.5" fill="white"/>
+                  <path d="M12 7.5l5-2.5v8l-5-2.5V7.5z" fill="white"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>Scene<span style={{ color: "#1D9E75" }}>A</span></span>
             </div>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 900, color: THEME.text }}>면접 진행 중</p>
-              <p style={{ fontSize: 11, color: THEME.sub }}>
-                {mediaError ? <span style={{ color: THEME.danger }}>{mediaError}</span> : "실시간 면접 세션"}
-              </p>
+            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.15)" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#EF4444", animation: recording ? "pulse 1.2s ease-in-out infinite" : "none" }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>{formatTime(elapsed)}</span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>면접 진행 중</span>
             </div>
+            {mediaError && <span style={{ fontSize: 11, color: "#EF4444" }}>{mediaError}</span>}
           </div>
 
-          {/* 참가자 수 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: "50%",
-              background: THEME.text, border: `2px solid ${THEME.card}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontWeight: 700, color: THEME.onAccent,
-            }}>나</div>
+          {/* 참가자 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#1B4F7A", border: "2px solid rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>나</div>
             {peerIds.slice(0, 3).map((pid, i) => (
-              <div key={pid} style={{
-                width: 32, height: 32, borderRadius: "50%",
-                background: [THEME.panel, THEME.sub, THEME.text][i],
-                border: `2px solid ${THEME.card}`, marginLeft: -8, zIndex: 3 - i,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 11, fontWeight: 700, color: i === 0 ? THEME.text : THEME.onAccent,
-              }}>{i + 1}</div>
+              <div key={pid} style={{ width: 30, height: 30, borderRadius: "50%", background: ["#533BA0","#0F6E56","#8B4513"][i], border: "2px solid rgba(255,255,255,0.2)", marginLeft: -6, zIndex: 3-i, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{i+1}</div>
             ))}
-            {peerIds.length > 3 && (
-              <div style={{
-                width: 32, height: 32, borderRadius: "50%",
-                background: THEME.panel, border: `2px solid ${THEME.card}`, marginLeft: -8,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 10, fontWeight: 700, color: THEME.sub,
-              }}>+{peerIds.length - 3}</div>
-            )}
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginLeft: 6 }}>참여자 {peerIds.length + 1}명</span>
           </div>
 
-          <div style={{ fontSize: 12, color: THEME.sub, fontWeight: 800 }}>
-            세션 #{id} · 참여자 {peerIds.length + 1}명
-          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>세션 #{id}</div>
         </div>
 
-        {/* ════ 본문 영역 ════ */}
+        {/* ════ 본문 ════ */}
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
           {/* ── 메인 비디오 영역 ── */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-            {/* ── 비디오 그리드 ── */}
-            <div style={{ flex: 1, overflow: "hidden", background: THEME.main, position: "relative" }}>
-              {isMentor && (
-                <div className="recording-chip" style={{
-                  position: "absolute", top: 16, left: 16, zIndex: 10,
-                  padding: "5px 12px", display: "flex", alignItems: "center", gap: 7,
-                }}>
-                  <PulseDot active={recording} color={THEME.danger} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: THEME.text, fontFamily: "monospace" }}>{formatTime(elapsed)}</span>
-                </div>
-              )}
-
+            {/* 비디오 그리드 */}
+            <div style={{ flex: 1, overflow: "hidden", background: "#080f1e", position: "relative" }}>
               {peerIds.length === 0 ? (
-                /* ── 혼자: 자신 화면 중앙 ── */
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", height: "100%", padding: 20 }}>
                   <div style={{ width: "min(640px, 100%)", height: "min(480px, 100%)" }}>
                     <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
@@ -1344,32 +955,23 @@ export default function InterviewSession({ role = "mentee" }) {
                   </div>
                 </div>
               ) : (
-                /* ── 발화자 메인 + 전원 하단 스트립 (1:1 / 1:N 공통) ── */
-                <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "16px 16px 8px" }}>
-
-                  {/* 메인: 현재 발화자 (아무도 안 말하면 첫 번째 참가자) */}
+                <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "14px 14px 8px" }}>
                   <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
                     {mainViewId === '__local' ? (
-                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
-                        isSpeaking camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted isSpeaking camOff={!camOn} micOff={!micOn} />
                     ) : (
-                      <VideoTile stream={peersRef.current[mainViewId]} label="상대방"
-                        isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
+                      <VideoTile stream={peersRef.current[mainViewId]} label="상대방" isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
                     )}
                   </div>
-
-                  {/* 하단 스트립: 나 + 모든 참가자 전원 표시 */}
-                  <div style={{ height: 120, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0, paddingBottom: 4 }}>
-                    {/* 내 화면은 항상 첫 번째 */}
-                    <div style={{ width: 160, flexShrink: 0, height: "100%", position: "relative" }}>
-                      <VideoTile stream={localMediaStream} label="나" mirror muted
-                        isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
+                  <div style={{ height: 110, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
+                    <div style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
+                      <VideoTile stream={localMediaStream} label="나" mirror muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
+                      {mainViewId === '__local' && <div style={{ position: "absolute", top: 5, left: 5, zIndex: 2, background: "#1D9E75", borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff" }}>발화 중</div>}
                     </div>
-                    {/* 원격 참가자 전원 */}
                     {peerIds.map(peerId => (
-                      <div key={peerId} style={{ width: 160, flexShrink: 0, height: "100%", position: "relative" }}>
-                        <VideoTile stream={peersRef.current[peerId]} label="참여자"
-                          isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
+                      <div key={peerId} style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
+                        <VideoTile stream={peersRef.current[peerId]} label="참여자" isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
+                        {mainViewId === peerId && <div style={{ position: "absolute", top: 5, left: 5, zIndex: 2, background: "#1D9E75", borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff" }}>발화 중</div>}
                       </div>
                     ))}
                   </div>
@@ -1378,217 +980,140 @@ export default function InterviewSession({ role = "mentee" }) {
             </div>
 
             {/* ── 하단 컨트롤 바 ── */}
-            <div className="floating-control-bar">
-              {[
-                { icon: <MicIcon on={micOn} />, label: micOn ? "마이크" : "음소거", active: micOn, click: handleMicToggle },
-                { icon: <CamIcon on={camOn} />, label: camOn ? "카메라" : "카메라 끔", active: camOn, click: handleCamToggle },
-                { icon: <ChatIcon />, label: "채팅", active: !chatOpen, click: () => setChatOpen(v => !v) },
-              ].map((btn, i) => (
-                <button key={i} className={btn.active ? "ctrl-btn" : "ctrl-btn-off"} onClick={btn.click} style={{
-                  width: 48, height: 48, borderRadius: "50%",
-                  background: btn.active ? THEME.text : THEME.sub,
-                  border: `1px solid ${THEME.border}`, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "background 0.18s, transform 0.18s",
-                  boxShadow: "0 10px 22px rgba(32,33,35,.12)",
-                }}>
-                  {btn.icon}
-                </button>
-              ))}
+            <div style={{
+              background: "#0D2240", padding: "10px 24px",
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 12, flexShrink: 0,
+            }}>
+              {/* 미디어 컨트롤 */}
+              <div style={{ display: "flex", gap: 10 }}>
+                {[
+                  { icon: <CamIcon on={camOn} />, label: camOn ? "카메라" : "카메라 끔", active: camOn, click: handleCamToggle },
+                ].map((btn, i) => (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <button className={btn.active ? "ctrl-btn" : "ctrl-btn-off"} onClick={btn.click} style={{
+                      width: 44, height: 44, borderRadius: "50%",
+                      background: !btn.active ? "#EF4444" : "rgba(255,255,255,0.12)",
+                      border: `1.5px solid ${!btn.active ? "#EF4444" : "rgba(255,255,255,0.2)"}`,
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s",
+                    }}>{btn.icon}</button>
+                    <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: "0.02em" }}>{btn.label}</span>
+                  </div>
+                ))}
+              </div>
 
-              {/* 채팅 입력창 */}
-              {chatOpen && (
-                <div style={{ display: "flex", gap: 8, flex: 1, maxWidth: 340 }}>
-                  <input
-                    placeholder="Type Something..."
-                    value={chatMsg} onChange={e => setChatMsg(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && sendChat()}
-                    style={{
-                      flex: 1, padding: "10px 14px",
-                      background: THEME.card, border: `1px solid ${THEME.border}`,
-                      borderRadius: 24, fontSize: 13, color: THEME.text,
-                      outline: "none", fontFamily: "inherit",
-                    }}
-                  />
-                  <button onClick={sendChat} style={{
-                    width: 40, height: 40, borderRadius: "50%",
-                    background: THEME.text, border: "none", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
+              {/* 멘티 전용: 현재 질문 + 답변 버튼 */}
+              {!isMentor && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, justifyContent: "center" }}>
+                  <div style={{
+                    maxWidth: 300, padding: "8px 14px", borderRadius: 8,
+                    background: activeQuestion ? "rgba(29,158,117,0.15)" : "rgba(255,255,255,0.06)",
+                    border: `1px solid ${activeQuestion ? "rgba(29,158,117,0.4)" : "rgba(255,255,255,0.1)"}`,
+                    fontSize: 12, fontWeight: 600,
+                    color: activeQuestion ? "#6ee7c5" : "rgba(255,255,255,0.4)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <path d="M14 8L2 2l2 6-2 6 12-6z" fill="white" />
-                    </svg>
+                    {activeQuestion ? `Q. ${activeQuestion.content}` : "멘토 질문 대기 중..."}
+                  </div>
+                  <button
+                    onClick={() => handleAnswerStatus(answerStatus === "answering" ? "done" : "answering")}
+                    disabled={answerButtonDisabled}
+                    style={{
+                      padding: "10px 22px", borderRadius: 22,
+                      background: answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
+                      color: answerStatus === "answering" ? "#fff" : activeQuestion ? "#fff" : "rgba(255,255,255,0.35)",
+                      border: `1.5px solid ${answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.1)"}`,
+                      fontSize: 13, fontWeight: 700, cursor: answerButtonDisabled ? "not-allowed" : "pointer",
+                      fontFamily: "inherit", transition: "all 0.18s", flexShrink: 0,
+                    }}
+                  >
+                    {answerStatus === "answering" ? "● 답변 완료" : "답변 시작"}
                   </button>
                 </div>
               )}
 
-              {/* End Call */}
+              {/* 멘토 전용: 중앙 공간 */}
+              {isMentor && <div style={{ flex: 1 }} />}
+
+              {/* 종료 */}
               {isMentor ? (
                 <button onClick={handleEndCall} disabled={ending} style={{
-                  padding: "12px 24px",
-                  background: ending ? THEME.sub : THEME.danger,
-                  color: THEME.onAccent, border: "none", borderRadius: 24,
-                  fontSize: 14, fontWeight: 700, cursor: ending ? "not-allowed" : "pointer",
-                  fontFamily: "inherit", transition: "background 0.18s, transform 0.18s", marginLeft: 8,
-                  boxShadow: "0 10px 22px rgba(255,59,48,.18)",
+                  padding: "10px 22px", borderRadius: 22,
+                  background: ending ? "rgba(255,255,255,0.1)" : "#EF4444",
+                  color: "#fff", border: "none",
+                  fontSize: 13, fontWeight: 700, cursor: ending ? "not-allowed" : "pointer",
+                  fontFamily: "inherit", transition: "background 0.18s", flexShrink: 0,
                 }}
                   onMouseEnter={e => { if (!ending) e.currentTarget.style.background = "#DC2626"; }}
-                  onMouseLeave={e => { if (!ending) e.currentTarget.style.background = THEME.danger; }}
+                  onMouseLeave={e => { if (!ending) e.currentTarget.style.background = "#EF4444"; }}
                 >
                   {ending ? "종료 중..." : "면접 종료"}
                 </button>
-              ) : null}
+              ) : (
+                <div style={{ padding: "8px 14px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", flexShrink: 0 }}>
+                  {ending ? "리포트로 이동 중..." : "멘토가 종료하면 자동 이동"}
+                </div>
+              )}
             </div>
           </div>
 
-          {!isMentor && (
-            <MenteeProgressPanel
-              activeQuestion={activeQuestion}
-              answerStatus={answerStatus}
-              answerSaveState={answerSaveState}
-              answerSaveMessage={answerSaveMessage}
-              answeredQuestionIds={answeredQuestionIds}
-              spokenQuestions={spokenQuestions}
-              answerButtonDisabled={answerButtonDisabled}
-              answerBlockedByRecorder={answerBlockedByRecorder}
-              recordingLockedByOther={recordingLockedByOther}
-              activeRecorder={activeRecorder}
-              audioLevel={audioLevels['__local'] || 0}
-              answerElapsedText={answerElapsedText}
-              onToggleAnswer={() => handleAnswerStatus(answerStatus === "answering" ? "done" : "answering")}
-            />
-          )}
-
-          {/* ════ 멘토 전용: 우측 사이드패널 ════ */}
+          {/* ════ 멘토 전용: 우측 질문 패널 ════ */}
           {isMentor && (
             <div style={{
               width: 300, flexShrink: 0,
-              background: THEME.card, borderLeft: `1px solid ${THEME.border}`,
-              display: "flex", flexDirection: "column",
-              overflow: "hidden",
+              background: "#0D2240", borderLeft: "1px solid rgba(255,255,255,0.08)",
+              display: "flex", flexDirection: "column", overflow: "hidden",
             }}>
-              <div style={{ padding: "13px 16px", borderBottom: `1px solid ${THEME.border}`, background: THEME.card }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: THEME.text }}>면접 질문 패널</p>
+              {/* 패널 헤더 */}
+              <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>질문 패널</p>
+                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>질문을 말하고 저장하세요</p>
               </div>
 
-              <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 18 }}>
+
+                {/* 질문 녹음 */}
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: THEME.speaker, textTransform: "uppercase" }}>실제 질문 기록</p>
-                    <span style={{
-                      minWidth: 54,
-                      padding: "4px 8px",
-                      borderRadius: 999,
-                      background: questionRecordStatus === "recording" ? "rgba(16,163,127,0.10)" : THEME.panel,
-                      border: `1px solid ${THEME.border}`,
-                      color: questionRecordStatus === "recording" ? THEME.speaker : THEME.sub,
-                      fontSize: 11,
-                      fontWeight: 900,
-                      fontVariantNumeric: "tabular-nums",
-                      textAlign: "center",
-                    }}>
-                      {questionElapsedText}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={handleQuestionRecordToggle}
-                      disabled={questionButtonDisabled}
-                      style={{
-                        flex: 1, padding: "12px 14px",
-                        borderRadius: 12, border: "none",
-                        background: questionRecordStatus === "recording" ? THEME.panel : questionRecordStatus === "uploading" ? THEME.sub : THEME.primary,
-                        color: questionRecordStatus === "recording" ? THEME.text : THEME.onAccent, fontSize: 13, fontWeight: 800,
-                        cursor: questionButtonDisabled ? "not-allowed" : "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      {questionRecordStatus === "recording"
-                        ? "질문 완료"
-                        : questionRecordStatus === "uploading"
-                          ? "질문 저장 중..."
-                          : "질문 시작"}
-                    </button>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase", marginBottom: 10 }}>질문 녹음</p>
+                  <button type="button" onClick={handleQuestionRecordToggle} disabled={questionButtonDisabled} style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 10, border: "none",
+                    background: questionRecordStatus === "recording" ? "#1D9E75" : questionRecordStatus === "uploading" ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.12)",
+                    color: "#fff", fontSize: 13, fontWeight: 700,
+                    cursor: questionButtonDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.18s",
+                  }}>
                     {questionRecordStatus === "recording" && (
-                      <button
-                        type="button"
-                        onClick={handleQuestionCancel}
-                        style={{
-                          padding: "0 14px",
-                          borderRadius: 12,
-                          border: `1px solid ${THEME.border}`,
-                          background: THEME.card,
-                          color: THEME.sub,
-                          fontSize: 13,
-                          fontWeight: 800,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        취소
-                      </button>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "pulse 0.8s ease-in-out infinite", flexShrink: 0 }} />
                     )}
-                  </div>
-                  {(waitingForAnswer || recordingLockedByOther) && (
-                    <p style={{ fontSize: 11, color: THEME.sub, lineHeight: 1.6, marginTop: 8 }}>
-                      {waitingForAnswer
-                        ? "멘티 답변을 기다리는 중입니다. 답변 저장 후 다음 질문을 진행하세요."
-                        : "다른 참여자가 말하는 중입니다. 발화가 끝난 뒤 질문을 시작하세요."}
-                    </p>
-                  )}
+                    {questionRecordStatus === "recording" ? "질문 완료" : questionRecordStatus === "uploading" ? "저장 중..." : "질문 시작"}
+                  </button>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", lineHeight: 1.6, marginTop: 8 }}>
+                    {waitingForAnswer ? "멘티 답변을 기다리는 중..." : recordingLockedByOther ? "다른 참여자가 말하는 중..." : "멘토의 질문 오디오가 STT로 변환되어 저장됩니다."}
+                  </p>
                   {questionRecordStatus === "recording" && (
-                    <div style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginTop: 10,
-                      padding: "9px 10px",
-                      borderRadius: 14,
-                      background: THEME.panel,
-                      border: `1px solid ${THEME.border}`,
-                    }}>
-                      <span style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: THEME.danger,
-                        boxShadow: "0 0 0 4px rgba(239,68,68,0.12)",
-                        flexShrink: 0,
-                        animation: "pulse 1s ease-in-out infinite",
-                      }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "9px 12px", borderRadius: 10, background: "rgba(29,158,117,0.15)", border: "1px solid rgba(29,158,117,0.3)" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#EF4444", animation: "pulse 1s ease-in-out infinite", flexShrink: 0 }} />
                       <RecordingWave level={audioLevels['__local'] || 0} />
-                      <span style={{ fontSize: 11, fontWeight: 800, color: THEME.speaker, flexShrink: 0 }}>
-                        질문 녹음 중
-                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#1D9E75", flexShrink: 0 }}>녹음 중</span>
                     </div>
                   )}
                   {activeQuestion && (
-                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 14, background: THEME.panel, border: `1px solid ${THEME.border}`, backdropFilter: "blur(18px)" }}>
-                      <p style={{ fontSize: 10, fontWeight: 800, color: THEME.speaker, marginBottom: 4 }}>현재 답변 대상 질문</p>
-                      <p style={{ fontSize: 12, color: THEME.text, lineHeight: 1.6 }}>{getQuestionDisplayText(activeQuestion)}</p>
+                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "rgba(29,158,117,0.12)", border: "1px solid rgba(29,158,117,0.3)" }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", marginBottom: 4 }}>현재 답변 대상</p>
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.6 }}>{activeQuestion.content}</p>
                     </div>
                   )}
                 </div>
 
+                {/* AI 추천 질문 */}
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
-                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: THEME.ai, textTransform: "uppercase" }}>AI 추천질문</p>
-                    <button
-                      type="button"
-                      onClick={() => setRecommendationsOpen(v => !v)}
-                      style={{
-                        border: `1px solid ${THEME.border}`,
-                        background: recommendationsOpen ? "rgba(16,163,127,0.10)" : THEME.card,
-                        color: THEME.ai,
-                        borderRadius: 999,
-                        padding: "4px 9px",
-                        fontSize: 10,
-                        fontWeight: 800,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#F59E0B", textTransform: "uppercase" }}>AI 추천 질문</p>
+                    <button type="button" onClick={() => setRecommendationsOpen(v => !v)} style={{
+                      border: "1px solid rgba(245,158,11,0.3)", background: recommendationsOpen ? "rgba(245,158,11,0.12)" : "transparent",
+                      color: "#F59E0B", borderRadius: 99, padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                    }}>
                       {recommendationsOpen ? "접기" : "보기"}
                     </button>
                   </div>
@@ -1596,18 +1121,18 @@ export default function InterviewSession({ role = "mentee" }) {
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {questions.length > 0 ? questions.map((q, i) => (
                         <div key={q.id ?? i} style={{
-                          background: THEME.panel, borderRadius: 14, padding: "12px 14px",
-                          border: `1px solid ${THEME.border}`,
-                          borderLeft: `3px solid ${THEME.ai}`, transition: "background 0.15s",
+                          background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 12px",
+                          border: "1px solid rgba(255,255,255,0.08)", borderLeft: "2px solid #F59E0B",
+                          cursor: "default", transition: "background 0.15s",
                         }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(16,163,127,0.10)"}
-                          onMouseLeave={e => e.currentTarget.style.background = THEME.panel}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(245,158,11,0.08)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
                         >
-                          <span style={{ fontSize: 10, fontWeight: 700, color: THEME.ai, display: "block", marginBottom: 4 }}>추천 {i + 1}</span>
-                          <p style={{ fontSize: 12, color: THEME.text, lineHeight: 1.65 }}>{getQuestionDisplayText(q)}</p>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", display: "block", marginBottom: 4, letterSpacing: "0.05em" }}>추천 {i + 1}</span>
+                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.65 }}>{q.content}</p>
                         </div>
                       )) : (
-                        <p style={{ fontSize: 12, color: THEME.sub, lineHeight: 1.6 }}>
+                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>
                           준비 화면에서 생성한 AI 추천 질문이 여기에 표시됩니다.
                         </p>
                       )}
@@ -1615,20 +1140,17 @@ export default function InterviewSession({ role = "mentee" }) {
                   )}
                 </div>
 
+                {/* 실제 질문 기록 */}
                 <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: THEME.sub, textTransform: "uppercase", marginBottom: 10 }}>실제 질문 기록</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 10 }}>질문 기록</p>
                   {spokenQuestions.length > 0 ? spokenQuestions.map((q, i) => (
-                    <div key={q.id ?? i} style={{ padding: "10px 0", borderBottom: `1px solid ${THEME.border}` }}>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: THEME.sub, display: "block", marginBottom: 4 }}>
-                        질문 {i + 1}
-                      </span>
-                      <p style={{ fontSize: 12, color: THEME.text, lineHeight: 1.7 }}>
-                        {getQuestionDisplayText(q)}
-                      </p>
+                    <div key={q.id ?? i} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 4, letterSpacing: "0.05em" }}>Q{i + 1}</span>
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", lineHeight: 1.7 }}>{q.content}</p>
                     </div>
                   )) : (
-                    <p style={{ fontSize: 12, color: THEME.sub, lineHeight: 1.6 }}>
-                      질문 완료를 누르면 멘토가 실제로 말한 질문이 여기에 기록됩니다.
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", lineHeight: 1.6 }}>
+                      질문 완료 시 여기에 기록됩니다.
                     </p>
                   )}
                 </div>
@@ -1636,7 +1158,6 @@ export default function InterviewSession({ role = "mentee" }) {
             </div>
           )}
         </div>
-        {ending && <ReportStepsOverlay role={role} />}
       </div>
     </>
   );
@@ -1656,11 +1177,5 @@ const CamIcon = ({ on }) => (
     <rect x="1" y="4" width="11" height="9" rx="1.5" fill={on ? "white" : "rgba(255,255,255,0.5)"} />
     <path d="M12 7l5-2.5v8L12 10V7z" fill={on ? "white" : "rgba(255,255,255,0.5)"} />
     {!on && <line x1="2" y1="2" x2="16" y2="16" stroke="white" strokeWidth="1.6" strokeLinecap="round" />}
-  </svg>
-);
-const ChatIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M2 3h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5l-3 3V4a1 1 0 0 1 1-1z" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
-    <path d="M5 7h8M5 10h5" stroke="white" strokeWidth="1.3" strokeLinecap="round" />
   </svg>
 );

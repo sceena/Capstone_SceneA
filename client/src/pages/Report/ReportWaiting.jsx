@@ -46,7 +46,7 @@ export default function ReportWaitingPage() {
         const report = await getSessionReport(sessionId);
         if (report?.report_status === "final") {
           clearInterval(poll);
-          navigate(`/report/final/${sessionId}`, { state: { sessionId, role: "mentee" } });
+          navigate("/report/final", { state: { sessionId, role: "mentee" } });
         }
       } catch {}
     }, 5000);

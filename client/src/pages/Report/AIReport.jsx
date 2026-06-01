@@ -3,9 +3,11 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import mockAiReport from "./mockAiReport";
 
 const NAVY = "#0D2240";
-const GREEN = "#1D9E75";
-const BG = "#FAF8F4";
+const GREEN = "#0CA678";
+const BG = "#F0F4F8";
 const CARD = "#FFFFFF";
+const PRIMARY_GRAD = "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)";
+const SUCCESS_GRAD = "linear-gradient(135deg, #0CA678 0%, #38D9A9 100%)";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const USE_MOCK_REPORT = import.meta.env.VITE_USE_MOCK_REPORT === "true";
 const LOADING_STEPS = [
@@ -228,8 +230,8 @@ function LoadingScreen({ onDone }) {
             <rect x="20" y="20" width="12" height="12" rx="2" fill={GREEN} opacity="1" />
           </svg>
         </div>
-        <h2 style={{ textAlign: "center", color: NAVY, fontSize: 22, fontWeight: 700, margin: 0 }}>AI 면접 분석 리포트</h2>
-        <p style={{ textAlign: "center", color: "#666", fontSize: 14, margin: "8px 0 0" }}>면접 데이터를 정밀 분석하고 있습니다</p>
+        <h2 style={{ textAlign: "center", color: NAVY, fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>AI 면접 분석 리포트</h2>
+        <p style={{ textAlign: "center", color: "#868E96", fontSize: 14, margin: "8px 0 0" }}>면접 데이터를 정밀 분석하고 있습니다</p>
       </div>
 
       {/* Progress bar */}
@@ -245,23 +247,25 @@ function LoadingScreen({ onDone }) {
 }
 
 // ─── Shared Header ────────────────────────────────────────────────
-function Header({ onExportWord }) {
+function Header({ onExportWord, role }) {
   return (
-    <header style={{ background: NAVY, padding: "0 32px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.12)", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="20" height="20" viewBox="0 0 36 36" fill="none">
-            <rect x="4" y="4" width="12" height="12" rx="2" fill="white" opacity="0.9" />
-            <rect x="20" y="4" width="12" height="12" rx="2" fill="white" opacity="0.6" />
-            <rect x="4" y="20" width="12" height="12" rx="2" fill="white" opacity="0.6" />
-            <rect x="20" y="20" width="12" height="12" rx="2" fill={GREEN} />
-          </svg>
+    <header style={{ background: CARD, padding: "0 5%", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 1200, width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: PRIMARY_GRAD, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>
+            Scene<span style={{ color: NAVY }}>A</span>
+          </span>
+          <span style={{ fontSize: 12, color: "#868E96", marginLeft: 4 }}>/ AI 면접 분석 리포트</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: role === "mentor" ? "#E8EEF6" : "#E6FCF5", color: role === "mentor" ? NAVY : GREEN, marginLeft: 4 }}>
+            {role === "mentor" ? "멘토 보기" : "멘티 보기"}
+          </span>
         </div>
-        <span style={{ color: "white", fontWeight: 600, fontSize: 15 }}>AI 면접 분석 리포트</span>
-      </div>
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={onExportWord} style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: GREEN, color: "white", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+        <button onClick={onExportWord} style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 13, cursor: "pointer", fontWeight: 700, boxShadow: "0 2px 8px rgba(12,166,120,0.3)", whiteSpace: "nowrap" }}>
           Word 내보내기
         </button>
       </div>
@@ -310,25 +314,20 @@ function StarText({ text, highlights }) {
 
 function MetricRows({ metrics, tone }) {
   const isBest = tone === "best";
-  const labelColor = isBest ? "#166534" : "#9B1C1C";
-  const valueColor = isBest ? "#14532D" : "#7F1D1D";
-  const borderColor = isBest ? "#BBF7D0" : "#FED7D7";
-  const bgColor = isBest ? "#F0FDF4" : "#FFF5F5";
   const rows = [
     ["말하기 속도", metrics?.speaking_speed || "미측정"],
     ["침묵", metrics?.silence || "미측정"],
     ["문장 명료도", metrics?.sentence_clarity || "미측정"],
     ["답변 구조", metrics?.star_structure || "미측정"],
   ];
-
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${borderColor}` }}>
-      <p style={{ color: labelColor, fontSize: 11, fontWeight: 700, margin: "0 0 8px" }}>이 답변의 정량 평가</p>
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(13,34,64,0.08)" }}>
+      <p style={{ color: NAVY, fontSize: 11, fontWeight: 700, opacity: 0.6, margin: "0 0 8px", letterSpacing: "0.06em" }}>정량 평가</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
         {rows.map(([label, value]) => (
-          <div key={label} style={{ background: bgColor, borderRadius: 8, padding: "8px 10px" }}>
-            <p style={{ color: labelColor, fontSize: 10, fontWeight: 700, margin: "0 0 4px" }}>{label}</p>
-      <p style={{ color: valueColor, fontSize: 13, fontWeight: 700, margin: 0 }}>{value}</p>
+          <div key={label} style={{ background: isBest ? "rgba(12,166,120,0.06)" : "rgba(192,57,43,0.05)", borderRadius: 10, padding: "9px 12px" }}>
+            <p style={{ color: NAVY, fontSize: 10, fontWeight: 700, opacity: 0.55, margin: "0 0 3px" }}>{label}</p>
+            <p style={{ color: NAVY, fontSize: 13, fontWeight: 700, margin: 0 }}>{value}</p>
           </div>
         ))}
       </div>
@@ -338,44 +337,44 @@ function MetricRows({ metrics, tone }) {
 
 function SectionTitle({ eyebrow, title, description }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <p style={{ fontSize: 11, fontWeight: 800, color: GREEN, letterSpacing: 1, margin: "0 0 6px" }}>{eyebrow}</p>
-      <h2 style={{ fontSize: 18, fontWeight: 800, color: NAVY, margin: "0 0 6px" }}>{title}</h2>
-      {description && <p style={{ fontSize: 14, color: "#666", lineHeight: 1.65, margin: 0 }}>{description}</p>}
+    <div style={{ marginBottom: 16 }}>
+      <p style={{ fontSize: 11, fontWeight: 800, color: NAVY, opacity: 0.4, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 6px" }}>{eyebrow}</p>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: NAVY, margin: "0 0 6px", letterSpacing: "-0.02em" }}>{title}</h2>
+      {description && <p style={{ fontSize: 14, color: "#868E96", lineHeight: 1.65, margin: 0 }}>{description}</p>}
     </div>
   );
 }
 
 function CoreQuestionCard({ type, question, report, questionNo }) {
   const isBest = type === "best";
-  const accent = isBest ? GREEN : "#E24B4A";
-  const softBg = isBest ? "#F0FDF4" : "#FFF5F5";
-  const title = isBest ? "BEST 문항" : "WORST 문항";
+  const accentColor = isBest ? GREEN : "#C0392B";
+  const accentBg   = isBest ? "rgba(12,166,120,0.07)" : "rgba(192,57,43,0.05)";
+  const title    = isBest ? "BEST 문항" : "WORST 문항";
   const subtitle = isBest ? "가장 설득력 있었던 답변" : "보완이 가장 필요한 답변";
 
   return (
-    <div style={{ background: CARD, border: "1px solid #E8E5DF", borderTop: `4px solid ${accent}`, borderRadius: 14, padding: 22 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
+    <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.09)", borderTop: `3px solid ${accentColor}`, borderRadius: 20, padding: 24, boxShadow: "0 2px 12px rgba(13,34,64,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18 }}>
         <div>
-          <p style={{ fontSize: 13, fontWeight: 800, color: accent, letterSpacing: 0.5, margin: "0 0 4px" }}>{title}</p>
-          <p style={{ fontSize: 13, color: "#777", margin: 0 }}>{subtitle}</p>
+          <p style={{ fontSize: 11, fontWeight: 800, color: accentColor, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 4px" }}>{title}</p>
+          <p style={{ fontSize: 13, color: "#868E96", margin: 0 }}>{subtitle}</p>
         </div>
-        <span style={{ flex: "0 0 auto", fontSize: 12, fontWeight: 800, color: accent, background: softBg, borderRadius: 99, padding: "5px 10px" }}>{questionNo}</span>
+        <span style={{ flex: "0 0 auto", fontSize: 12, fontWeight: 800, color: accentColor, background: accentBg, borderRadius: 99, padding: "5px 12px" }}>{questionNo}</span>
       </div>
 
       <div style={{ marginBottom: 14 }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: "#777", margin: "0 0 6px" }}>질문</p>
-        <p style={{ color: "#111", fontSize: 15, fontWeight: 700, lineHeight: 1.55, margin: 0 }}>{question?.question || `${title} 정보가 없습니다.`}</p>
+        <p style={{ fontSize: 10, fontWeight: 700, color: NAVY, opacity: 0.45, letterSpacing: "0.08em", margin: "0 0 6px" }}>질문</p>
+        <p style={{ color: NAVY, fontSize: 15, fontWeight: 700, lineHeight: 1.6, margin: 0 }}>{question?.question || `${title} 정보가 없습니다.`}</p>
       </div>
 
-      <div style={{ background: "#F8F7F4", borderRadius: 10, padding: 14, marginBottom: 14 }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: "#777", margin: "0 0 6px" }}>답변</p>
-        <p style={{ color: "#333", fontSize: 14, lineHeight: 1.75, margin: 0 }}>{report?.answer || "답변 정보가 없습니다."}</p>
+      <div style={{ background: BG, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: NAVY, opacity: 0.45, letterSpacing: "0.08em", margin: "0 0 6px" }}>답변</p>
+        <p style={{ color: "#495057", fontSize: 14, lineHeight: 1.8, margin: 0 }}>{report?.answer || "답변 정보가 없습니다."}</p>
       </div>
 
-      <div style={{ borderLeft: `3px solid ${accent}`, paddingLeft: 12 }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: accent, margin: "0 0 6px" }}>AI 분석</p>
-        <p style={{ color: "#444", fontSize: 14, lineHeight: 1.7, margin: 0 }}>{question?.reason || "분석 사유가 없습니다."}</p>
+      <div style={{ background: accentBg, borderRadius: 12, padding: 14 }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: accentColor, letterSpacing: "0.08em", margin: "0 0 6px" }}>AI 분석</p>
+        <p style={{ color: NAVY, fontSize: 14, lineHeight: 1.7, margin: 0 }}>{question?.reason || "분석 사유가 없습니다."}</p>
       </div>
 
       <MetricRows metrics={question?.metrics_summary} tone={type} />
@@ -393,28 +392,33 @@ function parseFitGapItem(item) {
 
 function FitGapList({ title, items = [], tone }) {
   const isMatched = tone === "matched";
-  const accent = isMatched ? GREEN : "#E24B4A";
-  const bg = isMatched ? "#F0FDF4" : "#FFF5F5";
-  const label = isMatched ? "충족 근거" : "부족 근거";
+  const accent   = isMatched ? GREEN : "#C0392B";
+  const accentBg = isMatched ? "rgba(12,166,120,0.06)" : "rgba(192,57,43,0.05)";
+  const label    = isMatched ? "충족 근거" : "부족 근거";
 
   return (
-    <div style={{ background: bg, border: `1px solid ${isMatched ? "#BBF7D0" : "#FED7D7"}`, borderRadius: 12, padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <p style={{ fontSize: 14, fontWeight: 800, color: accent, margin: 0 }}>{title}</p>
-        <span style={{ fontSize: 11, fontWeight: 800, color: accent, background: CARD, borderRadius: 99, padding: "4px 8px" }}>{items.length}개</span>
+    <div style={{ background: accentBg, border: `1px solid rgba(13,34,64,0.08)`, borderRadius: 18, padding: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: NAVY, margin: 0 }}>{title}</p>
+        <span style={{ fontSize: 11, fontWeight: 700, color: accent, background: CARD, borderRadius: 99, padding: "3px 10px", border: `1px solid rgba(13,34,64,0.1)` }}>{items.length}개</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {items.map((item, index) => {
           const parsed = parseFitGapItem(item);
           return (
-            <div key={index} style={{ background: CARD, borderRadius: 10, padding: 13, border: "1px solid rgba(0,0,0,0.04)", borderLeft: `3px solid ${accent}` }}>
-              <p style={{ fontSize: 14, fontWeight: 800, color: "#222", lineHeight: 1.5, margin: parsed.detail ? "0 0 8px" : 0 }}>{parsed.requirement}</p>
-              {parsed.detail && (
-                <>
-                  <p style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: 0.5, margin: "0 0 4px" }}>{label}</p>
-                  <p style={{ fontSize: 14, color: "#555", lineHeight: 1.65, margin: 0 }}>{parsed.detail}</p>
-                </>
-              )}
+            <div key={index} style={{ background: CARD, borderRadius: 12, padding: 14, border: "1px solid rgba(13,34,64,0.06)" }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: accent, flexShrink: 0, marginTop: 7 }} />
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: NAVY, lineHeight: 1.55, margin: parsed.detail ? "0 0 6px" : 0 }}>{parsed.requirement}</p>
+                  {parsed.detail && (
+                    <>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: accent, opacity: 0.8, letterSpacing: "0.06em", margin: "0 0 3px" }}>{label}</p>
+                      <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.65, margin: 0 }}>{parsed.detail}</p>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}
@@ -425,13 +429,13 @@ function FitGapList({ title, items = [], tone }) {
 
 function RecommendationList({ items = [] }) {
   return (
-    <div style={{ marginTop: 16, background: "#F8F7F4", border: "1px solid #E8E5DF", borderRadius: 12, padding: 16 }}>
-      <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 12px" }}>추천 보완 방향</p>
-      <div style={{ display: "grid", gap: 8 }}>
+    <div style={{ marginTop: 14, background: BG, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 18, padding: 18 }}>
+      <p style={{ fontSize: 13, fontWeight: 800, color: NAVY, margin: "0 0 14px" }}>추천 보완 방향</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {items.map((item, index) => (
-          <div key={index} style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: 10, alignItems: "start" }}>
-            <span style={{ width: 24, height: 24, borderRadius: "50%", background: NAVY, color: "white", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
-            <p style={{ fontSize: 14, color: "#444", lineHeight: 1.7, margin: 0 }}>{item}</p>
+          <div key={index} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ width: 24, height: 24, borderRadius: "50%", background: PRIMARY_GRAD, color: "white", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{index + 1}</span>
+            <p style={{ fontSize: 14, color: "#495057", lineHeight: 1.75, margin: 0 }}>{item}</p>
           </div>
         ))}
       </div>
@@ -474,13 +478,19 @@ function MenteeReport({ sessionId, report }) {
     <div id="report-content" style={{ background: BG, minHeight: "100vh", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", paddingBottom: 80, textAlign: "left" }}>
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "36px 24px" }}>
         {/* Meta */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center" }}>
           {metaBadges.map((t, i) => (
-            <span key={i} style={{ fontSize: 12, padding: "3px 10px", borderRadius: 99, background: i === 0 ? "#E1F5EE" : i === 2 ? "#FFF3CD" : "#E8E5DF", color: i === 0 ? "#0F6E56" : i === 2 ? "#8A5A00" : "#666", fontWeight: 600 }}>{t}</span>
+            <span key={i} style={{
+              fontSize: 11, padding: "3px 10px", borderRadius: 6,
+              background: "transparent",
+              border: `1px solid ${i === 0 ? "rgba(12,166,120,0.4)" : i === 2 ? "rgba(13,34,64,0.2)" : "rgba(13,34,64,0.15)"}`,
+              color: i === 0 ? GREEN : "#868E96",
+              fontWeight: 600, letterSpacing: "0.02em",
+            }}>{t}</span>
           ))}
         </div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111", margin: "0 0 8px" }}>AI 면접 분석 리포트</h1>
-        <p style={{ color: "#666", fontSize: 14, margin: "0 0 34px" }}>세션 #{report?.session_id || sessionId} · 종합 점수 {aiReport?.overall_score ?? report?.total_score ?? "-"}점</p>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: NAVY, margin: "0 0 8px", letterSpacing: "-0.02em" }}>AI 면접 분석 리포트</h1>
+        <p style={{ color: "#868E96", fontSize: 14, margin: "0 0 36px" }}>세션 #{report?.session_id || sessionId} · 종합 점수 <strong style={{ color: NAVY }}>{aiReport?.overall_score ?? report?.total_score ?? "-"}점</strong></p>
 
         {/* BEST / WORST */}
         <SectionTitle
@@ -509,7 +519,7 @@ function MenteeReport({ sessionId, report }) {
           title="채용 요구사항 대비 역량 분석"
           description="지원자 제출 문서와 면접 답변을 근거로 충족/부족 요구사항을 정리합니다."
         />
-        <div style={{ background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 20, marginBottom: 34 }}>
+        <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 22, marginBottom: 34, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
             <FitGapList title="충족한 요구사항" items={fitGap?.matched_requirements || []} tone="matched" />
             <FitGapList title="부족한 요구사항" items={fitGap?.missing_requirements || []} tone="missing" />
@@ -525,50 +535,65 @@ function MenteeReport({ sessionId, report }) {
         />
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {qnas.map((qa, i) => (
-            <div key={i} style={{ background: CARD, border: `1px solid ${qa.bad ? "#FED7D7" : "#E8E5DF"}`, borderLeft: `4px solid ${qa.bad ? "#E24B4A" : GREEN}`, borderRadius: 14, padding: 22 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 14 }}>
+            <div key={i} style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderTop: `3px solid ${qa.bad ? "#C0392B" : GREEN}`, borderRadius: 20, padding: 24, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
                 <div>
-                <p style={{ fontSize: 15, fontWeight: 800, color: NAVY, lineHeight: 1.55, margin: "0 0 6px" }}>{qa.q}</p>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: NAVY, lineHeight: 1.55, margin: "0 0 8px" }}>{qa.q}</p>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {qa.note && <span style={{ fontSize: 11, color: "#666", background: "#FAF8F4", padding: "3px 8px", borderRadius: 99 }}>{qa.note}</span>}
-                    {qa.bad && <span style={{ fontSize: 11, color: "#9B1C1C", background: "#FFF5F5", padding: "3px 8px", borderRadius: 99, fontWeight: 700 }}>개선 우선</span>}
+                    {qa.note && <span style={{ fontSize: 11, color: "#868E96", background: BG, padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(13,34,64,0.08)" }}>{qa.note}</span>}
+                    {qa.bad && <span style={{ fontSize: 11, color: "#C0392B", background: "rgba(13,34,64,0.06)", padding: "3px 10px", borderRadius: 99, fontWeight: 700 }}>보완 필요</span>}
                   </div>
                 </div>
                 <div style={{ flex: "0 0 auto", textAlign: "right" }}>
                   <Stars score={qa.score} />
-                  <p style={{ fontSize: 13, color: "#666", fontWeight: 800, margin: "4px 0 0" }}>AI {qa.rawScore}</p>
+                  <p style={{ fontSize: 12, color: "#868E96", fontWeight: 700, margin: "4px 0 0" }}>AI {qa.rawScore}</p>
                 </div>
               </div>
 
-              <div style={{ background: "#F8F7F4", borderRadius: 10, padding: 14, marginBottom: 14 }}>
-                <p style={{ fontSize: 11, fontWeight: 800, color: "#777", margin: "0 0 6px" }}>답변</p>
+              <div style={{ background: BG, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: NAVY, opacity: 0.45, letterSpacing: "0.08em", margin: "0 0 6px" }}>답변</p>
                 <StarText text={qa.text} highlights={qa.highlights} />
               </div>
 
               {qa.reasoning && (
-                <div style={{ borderLeft: "3px solid #CAD3DF", paddingLeft: 12, marginBottom: 14 }}>
-                  <p style={{ fontSize: 11, fontWeight: 800, color: "#667085", margin: "0 0 6px" }}>평가 근거</p>
-                  <p style={{ fontSize: 14, color: "#444", lineHeight: 1.7, margin: 0 }}>{qa.reasoning}</p>
+                <div style={{ background: "rgba(13,34,64,0.04)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: NAVY, opacity: 0.5, letterSpacing: "0.08em", margin: "0 0 6px" }}>평가 근거</p>
+                  <p style={{ fontSize: 14, color: "#495057", lineHeight: 1.75, margin: 0 }}>{qa.reasoning}</p>
                 </div>
               )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
                 <AudioPlayer sessionId={sessionId} questionId={qa.questionId} answerId={qa.answerId} />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                <div style={{ background: "#F0FDF4", borderRadius: 10, padding: 14 }}>
-                  <p style={{ fontSize: 13, fontWeight: 800, color: GREEN, margin: "0 0 8px" }}>장점</p>
-                  {qa.strengths.map((item, idx) => <p key={idx} style={{ fontSize: 14, color: "#3F5F4B", margin: "0 0 5px", lineHeight: 1.6 }}>• {item}</p>)}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+                <div style={{ background: "rgba(12,166,120,0.06)", borderRadius: 14, padding: 14 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: GREEN, margin: "0 0 8px" }}>강점</p>
+                  {qa.strengths.map((item, idx) => <p key={idx} style={{ fontSize: 13, color: NAVY, opacity: 0.75, margin: "0 0 5px", lineHeight: 1.65 }}>· {item}</p>)}
                 </div>
-                <div style={{ background: "#FFF5F5", borderRadius: 10, padding: 14 }}>
-                  <p style={{ fontSize: 13, fontWeight: 800, color: "#E24B4A", margin: "0 0 8px" }}>개선점</p>
-                  {qa.improvements.map((item, idx) => <p key={idx} style={{ fontSize: 14, color: "#6F4545", margin: "0 0 5px", lineHeight: 1.6 }}>• {item}</p>)}
+                <div style={{ background: "rgba(192,57,43,0.05)", borderRadius: 14, padding: 14 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: "#C0392B", margin: "0 0 8px" }}>개선점</p>
+                  {qa.improvements.map((item, idx) => <p key={idx} style={{ fontSize: 13, color: NAVY, opacity: 0.75, margin: "0 0 5px", lineHeight: 1.65 }}>· {item}</p>)}
                 </div>
               </div>
             </div>
           ))}
         </div>
 
+        {/* 멘토링 세션 입장 */}
+        <div style={{ marginTop: 32, background: PRIMARY_GRAD, borderRadius: 16, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, boxShadow: "0 4px 20px rgba(13,34,64,0.2)" }}>
+          <div>
+            <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, margin: "0 0 6px" }}>AI 리포트 분석이 완료되었습니다</p>
+            <p style={{ color: "white", fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>멘토와 함께 리포트를 리뷰하는 시간을 가져보세요</p>
+          </div>
+          <button
+            onClick={() => navigate(`/mentoring/mentee/${sessionId}`)}
+            style={{ flex: "0 0 auto", padding: "14px 28px", borderRadius: 12, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+          >
+            멘토링 세션 입장하기 →
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -590,35 +615,35 @@ function MentorReport({ sessionId, report }) {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
 
         {/* 세션 헤더 */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-          {["멘토 리포트 보기", `세션 #${report?.session_id ?? sessionId}`].map((t, i) => (
-            <span key={i} style={{ fontSize: 12, padding: "4px 12px", borderRadius: 99, background: i === 0 ? "#E1F5EE" : CARD, border: "1px solid #E0DDD8", color: i === 0 ? "#0F6E56" : "#555", fontWeight: 600 }}>{t}</span>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {["멘토 리포트", `세션 #${report?.session_id ?? sessionId}`].map((t, i) => (
+            <span key={i} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 99, background: i === 0 ? "rgba(12,166,120,0.1)" : "rgba(13,34,64,0.06)", color: i === 0 ? GREEN : NAVY, fontWeight: 700 }}>{t}</span>
           ))}
         </div>
 
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#111", margin: "0 0 6px" }}>멘티 AI 면접 분석 리포트</h1>
-        <p style={{ color: "#666", fontSize: 14, margin: "0 0 28px" }}>멘티의 면접 결과를 확인하고 멘토링 세션을 준비하세요</p>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: NAVY, margin: "0 0 6px", letterSpacing: "-0.02em" }}>멘티 AI 면접 분석 리포트</h1>
+        <p style={{ color: "#868E96", fontSize: 14, margin: "0 0 28px" }}>멘티의 면접 결과를 확인하고 멘토링 세션을 준비하세요</p>
 
         {/* 종합 점수 */}
-        <div style={{ background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 24, marginBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: "#111", margin: 0 }}>AI 종합 점수</p>
-            <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor }}>{overallScore}<span style={{ fontSize: 13, color: "#999", fontWeight: 400 }}> / 10</span></span>
+        <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 24, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: 0 }}>AI 종합 점수</p>
+            <span style={{ fontSize: 30, fontWeight: 800, color: NAVY }}>{overallScore}<span style={{ fontSize: 13, color: "#868E96", fontWeight: 400 }}> / 10</span></span>
           </div>
-          <div style={{ background: "#E8E5DF", borderRadius: 99, height: 8 }}>
-            <div style={{ width: `${Math.min(overallScore * 10, 100)}%`, height: 8, borderRadius: 99, background: scoreColor, transition: "width 1s ease" }} />
+          <div style={{ background: BG, borderRadius: 99, height: 8 }}>
+            <div style={{ width: `${Math.min(overallScore * 10, 100)}%`, height: 8, borderRadius: 99, background: PRIMARY_GRAD, transition: "width 1s ease" }} />
           </div>
         </div>
 
         {/* Best / Worst 문항 */}
         {(best || worst) && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-            {[{ type: "best", data: best, accent: GREEN, label: "BEST 문항" }, { type: "worst", data: worst, accent: "#E24B4A", label: "WORST 문항" }].map(({ type, data, accent, label }) => (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+            {[{ type: "best", data: best, accent: GREEN, accentBg: "rgba(12,166,120,0.06)", label: "BEST 문항" }, { type: "worst", data: worst, accent: "#C0392B", accentBg: "rgba(192,57,43,0.05)", label: "WORST 문항" }].map(({ type, data, accent, accentBg, label }) => (
               data ? (
-                <div key={type} style={{ background: CARD, border: `1px solid ${accent}30`, borderTop: `3px solid ${accent}`, borderRadius: 12, padding: 16 }}>
-                  <p style={{ fontSize: 11, fontWeight: 800, color: accent, margin: "0 0 8px" }}>{label}</p>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#111", margin: "0 0 6px", lineHeight: 1.5 }}>{data.question}</p>
-                  <p style={{ fontSize: 12, color: "#666", margin: 0 }}>{data.reason}</p>
+                <div key={type} style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderTop: `3px solid ${accent}`, borderRadius: 20, padding: 18, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
+                  <p style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 10px" }}>{label}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: "0 0 8px", lineHeight: 1.55 }}>{data.question}</p>
+                  <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.65, margin: 0, background: accentBg, borderRadius: 10, padding: "10px 12px" }}>{data.reason}</p>
                 </div>
               ) : null
             ))}
@@ -627,21 +652,20 @@ function MentorReport({ sessionId, report }) {
 
         {/* Q&A 답변 목록 */}
         {questionReports.length > 0 && (
-          <div style={{ background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 20, marginBottom: 24 }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: "#111", margin: "0 0 16px" }}>전체 Q&A 답변</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 22, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 18px" }}>전체 Q&A 답변</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {questionReports.map((qr, i) => {
                 const sc = qr.score ?? 0;
-                const scColor = sc >= 8 ? GREEN : sc >= 6 ? "#F59E0B" : "#E24B4A";
                 const isBad = qr.question_id === worst?.question_id;
                 return (
-                  <div key={qr.question_id ?? i} style={{ borderLeft: `3px solid ${isBad ? "#E24B4A" : GREEN}`, paddingLeft: 12, paddingBottom: i < questionReports.length - 1 ? 14 : 0, borderBottom: i < questionReports.length - 1 ? "1px solid #F0EDE8" : "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 6 }}>
+                  <div key={qr.question_id ?? i} style={{ background: BG, borderRadius: 14, padding: 16, borderLeft: `3px solid ${isBad ? "#C0392B" : GREEN}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, lineHeight: 1.5, margin: 0 }}>Q{i + 1} · {qr.question}</p>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: scColor, background: `${scColor}18`, padding: "2px 8px", borderRadius: 99, flexShrink: 0 }}>AI {sc}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: "rgba(13,34,64,0.08)", padding: "3px 10px", borderRadius: 99, flexShrink: 0 }}>AI {sc}</span>
                     </div>
-                    <p style={{ fontSize: 12, color: "#555", lineHeight: 1.7, background: "#FAF8F4", borderRadius: 7, padding: "8px 10px", margin: 0 }}>{qr.answer}</p>
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                    <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.75, background: CARD, borderRadius: 10, padding: "10px 12px", margin: 0 }}>{qr.answer}</p>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
                       <AudioPlayer sessionId={sessionId} questionId={qr.question_id} answerId={qr.answer_id} />
                     </div>
                   </div>
@@ -652,15 +676,17 @@ function MentorReport({ sessionId, report }) {
         )}
 
         {/* 멘토링 세션 입장 */}
-        <div style={{ background: NAVY, borderRadius: 16, padding: 28, textAlign: "center" }}>
-          <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, margin: "0 0 8px" }}>AI 분석이 완료되었습니다</p>
-          <p style={{ color: "white", fontSize: 18, fontWeight: 700, margin: "0 0 20px" }}>멘티와 함께 리포트를 리뷰하는 멘토링 세션을 시작해보세요</p>
+        <div style={{ background: PRIMARY_GRAD, borderRadius: 16, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, boxShadow: "0 4px 20px rgba(13,34,64,0.2)" }}>
+          <div>
+            <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, margin: "0 0 6px" }}>AI 분석이 완료되었습니다</p>
+            <p style={{ color: "white", fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>멘티와 함께 리포트를 리뷰하는 멘토링 세션을 시작해보세요</p>
+          </div>
           <button
             onClick={async () => {
               try { await updateSessionStatus(sessionId, "in_progress"); } catch {}
               navigate(`/mentoring/mentor/${sessionId}`);
             }}
-            style={{ padding: "14px 40px", borderRadius: 12, border: "none", background: GREEN, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.2s" }}
+            style={{ flex: "0 0 auto", padding: "14px 32px", borderRadius: 12, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.2s", whiteSpace: "nowrap" }}
             onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
             onMouseLeave={e => e.currentTarget.style.opacity = "1"}
           >
@@ -715,10 +741,6 @@ export default function AIReportPage() {
         if (!data?.ai_report) {
           throw new Error("AI 리포트 데이터가 없습니다.");
         }
-        if (role === "mentee" && data?.report_status === "final") {
-          navigate(`/report/final/${sessionId}`, { replace: true, state: { sessionId, role: "mentee" } });
-          return;
-        }
         setReport(data);
         setPhase("report");
       } catch (err) {
@@ -732,7 +754,7 @@ export default function AIReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, role, navigate]);
+  }, [sessionId]);
 
   useEffect(() => {
     if (role !== "mentee" || !sessionId || !/^\d+$/.test(String(sessionId))) return;
@@ -759,20 +781,18 @@ export default function AIReportPage() {
         <LoadingScreen onDone={() => {}} />
       ) : phase === "error" ? (
         <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <div style={{ maxWidth: 420, width: "100%", background: CARD, border: "1px solid #E8E5DF", borderRadius: 14, padding: 28, textAlign: "center", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
-            <h2 style={{ color: NAVY, fontSize: 20, margin: "0 0 10px" }}>리포트를 불러올 수 없습니다</h2>
-            <p style={{ color: "#666", fontSize: 14, lineHeight: 1.6, margin: "0 0 20px" }}>{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: GREEN, color: "white", fontWeight: 700, cursor: "pointer" }}
-            >
+          <div style={{ maxWidth: 420, width: "100%", background: CARD, border: "1px solid #E9ECEF", borderRadius: 16, padding: 32, textAlign: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05)" }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#FFF5F5", border: "1px solid #FED7D7", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 24 }}>⚠️</div>
+            <h2 style={{ color: NAVY, fontSize: 18, fontWeight: 800, margin: "0 0 10px" }}>리포트를 불러올 수 없습니다</h2>
+            <p style={{ color: "#495057", fontSize: 14, lineHeight: 1.6, margin: "0 0 20px" }}>{error}</p>
+            <button onClick={() => window.location.reload()} style={{ padding: "11px 28px", borderRadius: 10, border: "none", background: PRIMARY_GRAD, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
               다시 시도
             </button>
           </div>
         </div>
       ) : (
         <>
-          <Header onExportWord={() => exportWord(role)} />
+          <Header onExportWord={() => exportWord(role)} role={role} />
           {role === "mentee"
             ? <MenteeReport sessionId={sessionId} report={report} />
             : <MentorReport sessionId={sessionId} report={report} />

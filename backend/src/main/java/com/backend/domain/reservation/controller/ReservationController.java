@@ -2,6 +2,7 @@ package com.backend.domain.reservation.controller;
 
 import com.backend.domain.reservation.dto.request.ReservationAcceptRequest;
 import com.backend.domain.reservation.dto.request.ReservationRequest;
+import com.backend.domain.reservation.dto.response.MenteeReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationAcceptResponse;
 import com.backend.domain.reservation.dto.response.ReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationSummaryResponse;
@@ -28,6 +29,14 @@ import java.util.List;
 public class ReservationController {
 
     private final ReservationService reservationService;
+
+    @Operation(summary = "내 예약 목록 조회 (멘티)", description = "멘티가 자신이 신청한 예약 목록을 조회. status 파라미터로 필터링 가능 (PENDING, CONFIRMED, CANCELLED)")
+    @GetMapping("/mentee")
+    public ResponseEntity<List<MenteeReservationResponse>> getMenteeReservations(
+            @AuthenticationPrincipal Long menteeId,
+            @RequestParam(required = false) ReservationStatus status) {
+        return ResponseEntity.ok(reservationService.getMenteeReservations(menteeId, status));
+    }
 
     @GetMapping("/mentor")
     public ResponseEntity<List<ReservationSummaryResponse>> getMentorReservations(

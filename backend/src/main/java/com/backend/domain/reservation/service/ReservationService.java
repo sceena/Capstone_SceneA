@@ -11,6 +11,7 @@ import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
 import com.backend.domain.reservation.dto.request.ReservationAcceptRequest;
 import com.backend.domain.reservation.dto.request.ReservationRequest;
+import com.backend.domain.reservation.dto.response.MenteeReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationAcceptResponse;
 import com.backend.domain.reservation.dto.response.ReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationSummaryResponse;
@@ -49,6 +50,19 @@ public class ReservationService {
 
         return reservations.stream()
                 .map(ReservationSummaryResponse::from)
+                .toList();
+    }
+
+    public List<MenteeReservationResponse> getMenteeReservations(Long menteeId, ReservationStatus status) {
+        Member mentee = memberRepository.findById(menteeId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+
+        List<Reservation> reservations = status != null
+                ? reservationRepository.findMenteeReservationsByStatus(mentee, status)
+                : reservationRepository.findMenteeReservations(mentee);
+
+        return reservations.stream()
+                .map(MenteeReservationResponse::from)
                 .toList();
     }
 

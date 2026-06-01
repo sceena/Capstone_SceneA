@@ -107,6 +107,7 @@ public class ReservationService {
                 .mentee(mentee)
                 .interviewSession(session)
                 .resumeContent(request.resumeContent())
+                .requestNote(request.requestNote())
                 .build();
 
         Reservation saved = reservationRepository.save(reservation);

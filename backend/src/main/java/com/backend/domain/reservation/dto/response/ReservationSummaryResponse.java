@@ -14,6 +14,8 @@ public record ReservationSummaryResponse(
         @JsonProperty("availability_id") Long availabilityId,
         @JsonProperty("scheduled_at") LocalDateTime scheduledAt,
         ReservationStatus status,
+        @JsonProperty("resume_content") String resumeContent,
+        @JsonProperty("request_note") String requestNote,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
     public static ReservationSummaryResponse from(Reservation reservation) {
@@ -25,6 +27,8 @@ public record ReservationSummaryResponse(
                 reservation.getMentorAvailability().getId(),
                 reservation.getMentorAvailability().getStartTime(),
                 reservation.getStatus(),
+                reservation.getResumeContent(),
+                reservation.getRequestNote(),
                 reservation.getCreateDate()
         );
     }

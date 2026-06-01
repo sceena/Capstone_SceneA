@@ -5,6 +5,7 @@ import com.backend.domain.reservation.dto.request.ReservationRequest;
 import com.backend.domain.reservation.dto.response.MenteeReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationAcceptResponse;
 import com.backend.domain.reservation.dto.response.ReservationResponse;
+import com.backend.domain.reservation.dto.response.ReservationSummaryResponse;
 import com.backend.domain.reservation.entity.ReservationStatus;
 import com.backend.domain.reservation.service.ReservationService;
 import com.backend.global.exception.CustomException;
@@ -45,6 +46,30 @@ class ReservationControllerTest {
 
     @MockitoBean
     private ReservationService reservationService;
+
+    @Test
+    void 멘토_예약요청_목록_조회_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTOR");
+        ReservationSummaryResponse response = new ReservationSummaryResponse(
+                1L, null, 2L, "김멘티", 3L, LocalDateTime.now(),
+                ReservationStatus.PENDING, "자소서 내용", "꼬리질문 피드백 부탁드려요", LocalDateTime.now()
+        );
+
+        given(reservationService.getMentorReservations(any(), eq(null))).willReturn(List.of(response));
+
+        mockMvc.perform(get("/api/reservation/mentor")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].mentee_name").value("김멘티"))
+                .andExpect(jsonPath("$[0].request_note").value("꼬리질문 피드백 부탁드려요"))
+                .andExpect(jsonPath("$[0].resume_content").value("자소서 내용"));
+    }
+
+    @Test
+    void 멘토_예약요청_목록_인증없이_401() throws Exception {
+        mockMvc.perform(get("/api/reservation/mentor"))
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test
     void 멘티_예약목록_조회_성공_200() throws Exception {

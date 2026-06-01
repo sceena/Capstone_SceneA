@@ -213,7 +213,7 @@ export default function InterviewSession({ role = "mentee" }) {
   };
 
   /* ── 컨트롤 상태 ── */
-  const [micOn, setMicOn] = useState(true);
+  const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(true);
   const [ending, setEnding] = useState(false);
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
@@ -425,6 +425,7 @@ export default function InterviewSession({ role = "mentee" }) {
           if (audioTrack) {
             try { audioProducerRef.current = await sendTransport.produce({ track: audioTrack }); }
             catch (e) { console.error("audio produce 실패:", e); }
+            audioProducerRef.current?.pause();
           }
         });
 
@@ -480,6 +481,7 @@ export default function InterviewSession({ role = "mentee" }) {
         }
         if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
         localStreamRef.current = localStream;
+        localStream.getAudioTracks().forEach(t => { t.enabled = false; });
         setLocalMediaStream(localStream);
         try {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
@@ -723,6 +725,9 @@ export default function InterviewSession({ role = "mentee" }) {
       const locked = await requestRecordingLock("ANSWER");
       if (!locked) return;
       setAnswerStatus(nextStatus);
+      setMicOn(true);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = true; });
+      audioProducerRef.current?.resume();
       try {
         const user = getAuthUser();
         const memberId = user?.id || getPeerIdFromToken(user?.accessToken || "");
@@ -744,6 +749,9 @@ export default function InterviewSession({ role = "mentee" }) {
       }
     } else if (nextStatus === "done" && mediaRecorderRef.current?.state !== "inactive") {
       setAnswerStatus(nextStatus);
+      setMicOn(false);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
+      audioProducerRef.current?.pause();
       try {
         const user = getAuthUser();
         const memberId = user?.id || getPeerIdFromToken(user?.accessToken || "");
@@ -783,6 +791,9 @@ export default function InterviewSession({ role = "mentee" }) {
   const handleQuestionRecordToggle = async () => {
     if (questionRecordStatus === "recording") {
       setQuestionRecordStatus("uploading");
+      setMicOn(false);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
+      audioProducerRef.current?.pause();
       questionRecorderRef.current.onstop = async () => {
         questionRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
         questionRecorderRef.current = null;
@@ -814,6 +825,9 @@ export default function InterviewSession({ role = "mentee" }) {
       questionRecorderRef.current = recorder;
       recorder.start(250);
       setQuestionRecordStatus("recording");
+      setMicOn(true);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = true; });
+      audioProducerRef.current?.resume();
     } catch (error) {
       releaseRecordingLock();
       setQuestionRecordStatus("idle");
@@ -975,7 +989,6 @@ export default function InterviewSession({ role = "mentee" }) {
               {/* 미디어 컨트롤 */}
               <div style={{ display: "flex", gap: 10 }}>
                 {[
-                  { icon: <MicIcon on={micOn} />, label: micOn ? "마이크" : "음소거", active: micOn, click: handleMicToggle },
                   { icon: <CamIcon on={camOn} />, label: camOn ? "카메라" : "카메라 끔", active: camOn, click: handleCamToggle },
                 ].map((btn, i) => (
                   <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>

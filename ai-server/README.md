@@ -36,6 +36,7 @@ export USE_SFT=false
 export WHISPER_MODEL_SIZE=medium
 export WHISPER_DEVICE=cuda
 export WHISPER_COMPUTE_TYPE=float16
+export WHISPER_INITIAL_PROMPT_EXTRA="MSSQL, MySQL, MongoDB, ERD, 빌링, 쿠폰, 예약, AWS, IDC"
 export QUESTION_GENERATION_TIMEOUT_SEC=60
 export QUESTION_GENERATION_MAX_RETRIES=1
 export STT_WORKER_COUNT=1
@@ -43,6 +44,9 @@ export STT_WORKER_COUNT=1
 
 `ffmpeg` and `ffprobe` must be installed on the AI server because uploaded
 audio is normalized to 16 kHz mono WAV before transcription.
+The STT service always sends a Korean developer interview initial prompt to
+Whisper. Use `WHISPER_INITIAL_PROMPT_EXTRA` to add job-posting-specific terms
+that are likely to appear in the current interview.
 
 Runtime check:
 

@@ -6,19 +6,18 @@ import { getAuthUser } from "../../store/authStore";
 const NAVY = "#0D2240";
 const GREEN = "#1D9E75";
 const BG = "#FAF8F4";
-
 const COLS = 10;
 const ROWS = 20;
-const CELL = 26;
+const CELL = 22;
 
 const PIECES = [
-  { shape: [[1,1,1,1]],               color: "#26C6DA" }, // I
-  { shape: [[1,1],[1,1]],             color: "#FDD835" }, // O
-  { shape: [[0,1,0],[1,1,1]],         color: "#AB47BC" }, // T
-  { shape: [[0,1,1],[1,1,0]],         color: "#66BB6A" }, // S
-  { shape: [[1,1,0],[0,1,1]],         color: "#EF5350" }, // Z
-  { shape: [[1,0,0],[1,1,1]],         color: "#42A5F5" }, // J
-  { shape: [[0,0,1],[1,1,1]],         color: "#FFA726" }, // L
+  { shape: [[1, 1, 1, 1]], color: "#26C6DA" },
+  { shape: [[1, 1], [1, 1]], color: "#FDD835" },
+  { shape: [[0, 1, 0], [1, 1, 1]], color: "#AB47BC" },
+  { shape: [[0, 1, 1], [1, 1, 0]], color: "#66BB6A" },
+  { shape: [[1, 1, 0], [0, 1, 1]], color: "#EF5350" },
+  { shape: [[1, 0, 0], [1, 1, 1]], color: "#42A5F5" },
+  { shape: [[0, 0, 1], [1, 1, 1]], color: "#FFA726" },
 ];
 
 const ANALYSIS_STEPS = [
@@ -29,305 +28,177 @@ const ANALYSIS_STEPS = [
   "AI 인사이트 생성 중...",
 ];
 
-/* ── 테트리스 유틸 ── */
 function createGrid() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 }
 
 function randomPiece() {
-  const p = PIECES[Math.floor(Math.random() * PIECES.length)];
-  return { shape: p.shape, color: p.color, x: Math.floor(COLS / 2) - Math.floor(p.shape[0].length / 2), y: 0 };
+  const piece = PIECES[Math.floor(Math.random() * PIECES.length)];
+  return {
+    shape: piece.shape,
+    color: piece.color,
+    x: Math.floor(COLS / 2) - Math.ceil(piece.shape[0].length / 2),
+    y: 0,
+  };
 }
 
-function rotatePiece(shape) {
-  return shape[0].map((_, c) => shape.map(r => r[c]).reverse());
+function rotate(shape) {
+  return shape[0].map((_, col) => shape.map(row => row[col]).reverse());
 }
 
-function isValid(grid, shape, px, py) {
-  for (let r = 0; r < shape.length; r++) {
-    for (let c = 0; c < shape[r].length; c++) {
-      if (!shape[r][c]) continue;
-      const nr = py + r, nc = px + c;
-      if (nc < 0 || nc >= COLS || nr >= ROWS) return false;
-      if (nr >= 0 && grid[nr][nc]) return false;
+function isValid(grid, shape, x, y) {
+  for (let row = 0; row < shape.length; row++) {
+    for (let col = 0; col < shape[row].length; col++) {
+      if (!shape[row][col]) continue;
+      const nextX = x + col;
+      const nextY = y + row;
+      if (nextX < 0 || nextX >= COLS || nextY >= ROWS) return false;
+      if (nextY >= 0 && grid[nextY][nextX]) return false;
     }
   }
   return true;
 }
 
-function lockPiece(grid, shape, px, py, color) {
-  const g = grid.map(r => [...r]);
-  for (let r = 0; r < shape.length; r++)
-    for (let c = 0; c < shape[r].length; c++)
-      if (shape[r][c] && py + r >= 0) g[py + r][px + c] = color;
-  return g;
+function drawCell(ctx, x, y, color) {
+  const px = x * CELL + 1;
+  const py = y * CELL + 1;
+  const size = CELL - 2;
+  ctx.fillStyle = color;
+  ctx.fillRect(px, py, size, size);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.fillRect(px, py, size, 4);
+  ctx.fillRect(px, py, 4, size);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fillRect(px, py + size - 4, size, 4);
+  ctx.fillRect(px + size - 4, py, 4, size);
 }
 
-function clearLines(grid) {
-  const kept = grid.filter(row => row.some(cell => !cell));
-  const cleared = ROWS - kept.length;
-  const blanks = Array.from({ length: cleared }, () => Array(COLS).fill(null));
-  return { grid: [...blanks, ...kept], lines: cleared };
-}
-
-/* ── 캔버스 렌더 ── */
-function drawCanvas(ctx, grid, piece, ghost) {
+function drawBoard(canvas, grid, piece) {
+  const ctx = canvas?.getContext("2d");
+  if (!ctx) return;
   ctx.fillStyle = "#111827";
   ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-
-  // 격자
-  ctx.strokeStyle = "rgba(255,255,255,0.05)";
-  ctx.lineWidth = 0.5;
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    ctx.strokeRect(c * CELL, r * CELL, CELL, CELL);
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      ctx.strokeRect(col * CELL, row * CELL, CELL, CELL);
+      if (grid[row][col]) drawCell(ctx, col, row, grid[row][col]);
+    }
   }
-
-  // 고정된 블록
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    if (grid[r][c]) drawCell(ctx, c, r, grid[r][c]);
-  }
-
-  // 고스트
-  if (ghost && piece) {
-    ctx.globalAlpha = 0.2;
-    for (let r = 0; r < piece.shape.length; r++)
-      for (let c = 0; c < piece.shape[r].length; c++)
-        if (piece.shape[r][c]) drawCell(ctx, piece.x + c, ghost + r, piece.color);
-    ctx.globalAlpha = 1;
-  }
-
-  // 현재 피스
-  if (piece) {
-    for (let r = 0; r < piece.shape.length; r++)
-      for (let c = 0; c < piece.shape[r].length; c++)
-        if (piece.shape[r][c]) drawCell(ctx, piece.x + c, piece.y + r, piece.color);
-  }
-}
-
-function drawCell(ctx, c, r, color) {
-  const x = c * CELL + 1, y = r * CELL + 1, s = CELL - 2;
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, s, s);
-  ctx.fillStyle = "rgba(255,255,255,0.2)";
-  ctx.fillRect(x, y, s, 4);
-  ctx.fillRect(x, y, 4, s);
-  ctx.fillStyle = "rgba(0,0,0,0.3)";
-  ctx.fillRect(x, y + s - 4, s, 4);
-  ctx.fillRect(x + s - 4, y, 4, s);
-}
-
-function drawNext(ctx, piece) {
-  ctx.fillStyle = "#1a2332";
-  ctx.fillRect(0, 0, 120, 80);
   if (!piece) return;
-  const offX = Math.floor((4 - piece.shape[0].length) / 2);
-  const offY = Math.floor((3 - piece.shape.length) / 2);
-  for (let r = 0; r < piece.shape.length; r++)
-    for (let c = 0; c < piece.shape[r].length; c++)
-      if (piece.shape[r][c]) drawCell(ctx, offX + c, offY + r, piece.color);
+  piece.shape.forEach((line, row) => {
+    line.forEach((filled, col) => {
+      if (filled) drawCell(ctx, piece.x + col, piece.y + row, piece.color);
+    });
+  });
 }
 
-/* ── 테트리스 컴포넌트 ── */
-function Tetris() {
+function TetrisPanel() {
   const canvasRef = useRef(null);
-  const nextCanvasRef = useRef(null);
-  const gameRef = useRef({
-    grid: createGrid(),
-    piece: null,
-    next: null,
-    score: 0,
-    lines: 0,
-    level: 1,
-    over: false,
-    paused: false,
-  });
-  const [display, setDisplay] = useState({ score: 0, lines: 0, level: 1, over: false, paused: false });
-  const rafRef = useRef(null);
-  const lastTimeRef = useRef(0);
-  const dropIntervalRef = useRef(800);
-  const dropTimerRef = useRef(0);
+  const gameRef = useRef({ grid: createGrid(), piece: randomPiece(), score: 0, over: false });
+  const [score, setScore] = useState(0);
+  const [over, setOver] = useState(false);
 
-  const getGhost = useCallback((g, piece) => {
-    if (!piece) return null;
-    let gy = piece.y;
-    while (isValid(g, piece.shape, piece.x, gy + 1)) gy++;
-    return gy;
+  const restart = useCallback(() => {
+    gameRef.current = { grid: createGrid(), piece: randomPiece(), score: 0, over: false };
+    setScore(0);
+    setOver(false);
+    drawBoard(canvasRef.current, gameRef.current.grid, gameRef.current.piece);
   }, []);
 
-  const spawnPiece = useCallback(() => {
-    const g = gameRef.current;
-    const piece = g.next || randomPiece();
-    const next = randomPiece();
-    if (!isValid(g.grid, piece.shape, piece.x, piece.y)) {
-      g.over = true;
-      setDisplay(d => ({ ...d, over: true }));
-      return;
+  const lockPiece = useCallback(() => {
+    const game = gameRef.current;
+    const { grid, piece } = game;
+    piece.shape.forEach((line, row) => {
+      line.forEach((filled, col) => {
+        if (filled && piece.y + row >= 0) grid[piece.y + row][piece.x + col] = piece.color;
+      });
+    });
+    const kept = grid.filter(row => row.some(cell => !cell));
+    const cleared = ROWS - kept.length;
+    game.grid = [...Array.from({ length: cleared }, () => Array(COLS).fill(null)), ...kept];
+    game.score += cleared * 100;
+    game.piece = randomPiece();
+    if (!isValid(game.grid, game.piece.shape, game.piece.x, game.piece.y)) {
+      game.over = true;
+      setOver(true);
     }
-    g.piece = piece;
-    g.next = next;
-    if (nextCanvasRef.current) {
-      const ctx = nextCanvasRef.current.getContext("2d");
-      drawNext(ctx, next);
-    }
+    setScore(game.score);
   }, []);
 
-  const lock = useCallback(() => {
-    const g = gameRef.current;
-    if (!g.piece) return;
-    g.grid = lockPiece(g.grid, g.piece.shape, g.piece.x, g.piece.y, g.piece.color);
-    const { grid: newGrid, lines } = clearLines(g.grid);
-    g.grid = newGrid;
-    g.lines += lines;
-    const pts = [0, 100, 300, 500, 800][lines] || 0;
-    g.score += pts * g.level;
-    g.level = Math.floor(g.lines / 10) + 1;
-    dropIntervalRef.current = Math.max(100, 800 - (g.level - 1) * 70);
-    setDisplay({ score: g.score, lines: g.lines, level: g.level, over: g.over, paused: g.paused });
-    g.piece = null;
-    spawnPiece();
-  }, [spawnPiece]);
-
-  const gameLoop = useCallback((time) => {
-    const g = gameRef.current;
-    if (!g.over && !g.paused) {
-      const delta = time - lastTimeRef.current;
-      lastTimeRef.current = time;
-      dropTimerRef.current += delta;
-      if (dropTimerRef.current >= dropIntervalRef.current) {
-        dropTimerRef.current = 0;
-        if (g.piece && isValid(g.grid, g.piece.shape, g.piece.x, g.piece.y + 1)) {
-          g.piece.y++;
-        } else {
-          lock();
-        }
-      }
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext("2d");
-        const ghost = getGhost(g.grid, g.piece);
-        drawCanvas(ctx, g.grid, g.piece, ghost);
-      }
+  const stepDown = useCallback(() => {
+    const game = gameRef.current;
+    if (game.over) return;
+    const nextY = game.piece.y + 1;
+    if (isValid(game.grid, game.piece.shape, game.piece.x, nextY)) {
+      game.piece.y = nextY;
+    } else {
+      lockPiece();
     }
-    rafRef.current = requestAnimationFrame(gameLoop);
-  }, [lock, getGhost]);
+    drawBoard(canvasRef.current, game.grid, game.piece);
+  }, [lockPiece]);
 
   useEffect(() => {
-    spawnPiece();
-    lastTimeRef.current = performance.now();
-    rafRef.current = requestAnimationFrame(gameLoop);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [spawnPiece, gameLoop]);
+    drawBoard(canvasRef.current, gameRef.current.grid, gameRef.current.piece);
+    const timer = window.setInterval(stepDown, 700);
+    return () => window.clearInterval(timer);
+  }, [stepDown]);
 
   useEffect(() => {
-    const onKey = (e) => {
-      const g = gameRef.current;
-      if (g.over) return;
-      if (e.key === "p" || e.key === "P") {
-        g.paused = !g.paused;
-        setDisplay(d => ({ ...d, paused: g.paused }));
-        if (!g.paused) lastTimeRef.current = performance.now();
-        return;
+    const onKey = (event) => {
+      const game = gameRef.current;
+      if (game.over || !game.piece) return;
+      const { piece, grid } = game;
+      if (event.key === "ArrowLeft" && isValid(grid, piece.shape, piece.x - 1, piece.y)) piece.x -= 1;
+      if (event.key === "ArrowRight" && isValid(grid, piece.shape, piece.x + 1, piece.y)) piece.x += 1;
+      if (event.key === "ArrowDown" && isValid(grid, piece.shape, piece.x, piece.y + 1)) piece.y += 1;
+      if (event.key === "ArrowUp") {
+        const rotated = rotate(piece.shape);
+        if (isValid(grid, rotated, piece.x, piece.y)) piece.shape = rotated;
       }
-      if (g.paused || !g.piece) return;
-      if (e.key === "ArrowLeft") {
-        if (isValid(g.grid, g.piece.shape, g.piece.x - 1, g.piece.y)) g.piece.x--;
-        e.preventDefault();
-      } else if (e.key === "ArrowRight") {
-        if (isValid(g.grid, g.piece.shape, g.piece.x + 1, g.piece.y)) g.piece.x++;
-        e.preventDefault();
-      } else if (e.key === "ArrowDown") {
-        if (isValid(g.grid, g.piece.shape, g.piece.x, g.piece.y + 1)) { g.piece.y++; dropTimerRef.current = 0; }
-        e.preventDefault();
-      } else if (e.key === "ArrowUp") {
-        const rotated = rotatePiece(g.piece.shape);
-        if (isValid(g.grid, rotated, g.piece.x, g.piece.y)) g.piece.shape = rotated;
-        e.preventDefault();
-      } else if (e.key === " ") {
-        const gy = getGhost(g.grid, g.piece);
-        if (gy !== null) { g.piece.y = gy; lock(); }
-        e.preventDefault();
+      if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        drawBoard(canvasRef.current, game.grid, game.piece);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lock, getGhost]);
-
-  const restart = () => {
-    const g = gameRef.current;
-    g.grid = createGrid();
-    g.piece = null;
-    g.next = null;
-    g.score = 0; g.lines = 0; g.level = 1;
-    g.over = false; g.paused = false;
-    dropIntervalRef.current = 800;
-    dropTimerRef.current = 0;
-    setDisplay({ score: 0, lines: 0, level: 1, over: false, paused: false });
-    spawnPiece();
-    lastTimeRef.current = performance.now();
-  };
+  }, []);
 
   return (
-    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", userSelect: "none" }}>
-      {/* 게임 보드 */}
-      <div style={{ position: "relative" }}>
+    <div style={{ background: NAVY, borderRadius: 18, padding: 22, boxShadow: "0 18px 50px rgba(13,34,64,0.16)", color: "white" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 17, fontWeight: 800, margin: "0 0 4px" }}>테트리스로 기다려보세요</p>
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", margin: 0 }}>리포트가 완성되면 자동으로 이동합니다.</p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <p style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", margin: "0 0 2px", fontWeight: 700 }}>SCORE</p>
+          <p style={{ fontSize: 20, fontWeight: 900, margin: 0, fontVariantNumeric: "tabular-nums" }}>{score}</p>
+        </div>
+      </div>
+      <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
         <canvas
           ref={canvasRef}
           width={COLS * CELL}
           height={ROWS * CELL}
-          style={{ display: "block", borderRadius: 10, border: "2px solid rgba(255,255,255,0.1)" }}
+          style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", maxWidth: "100%", background: "#111827" }}
         />
-        {(display.over || display.paused) && (
+        {over && (
           <div style={{
-            position: "absolute", inset: 0, borderRadius: 10,
-            background: "rgba(0,0,0,0.72)", display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", gap: 12,
+            position: "absolute", inset: 0, borderRadius: 12, background: "rgba(0,0,0,0.68)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10,
           }}>
-            <p style={{ color: "white", fontSize: 18, fontWeight: 800, margin: 0 }}>
-              {display.over ? "GAME OVER" : "PAUSED"}
-            </p>
-            {display.over && (
-              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, margin: 0 }}>
-                점수: {display.score}
-              </p>
-            )}
-            <button onClick={restart} style={{
-              padding: "9px 24px", borderRadius: 8, border: "none",
-              background: GREEN, color: "white", fontSize: 13, fontWeight: 700,
-              cursor: "pointer", fontFamily: "inherit",
-            }}>
-              {display.over ? "다시 시작" : "계속하기"}
+            <p style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>GAME OVER</p>
+            <button onClick={restart} style={{ border: "none", borderRadius: 9, background: GREEN, color: "white", padding: "9px 18px", fontWeight: 800, cursor: "pointer" }}>
+              다시 시작
             </button>
           </div>
         )}
       </div>
-
-      {/* 우측 정보 */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 110 }}>
-        {/* NEXT */}
-        <div>
-          <p style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.1em", marginBottom: 6 }}>NEXT</p>
-          <canvas ref={nextCanvasRef} width={120} height={80} style={{ borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)" }} />
-        </div>
-
-        {/* 점수 */}
-        {[["SCORE", display.score], ["LINES", display.lines], ["LEVEL", display.level]].map(([label, val]) => (
-          <div key={label} style={{ background: "rgba(255,255,255,0.06)", borderRadius: 8, padding: "10px 14px" }}>
-            <p style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", margin: "0 0 4px" }}>{label}</p>
-            <p style={{ fontSize: 20, fontWeight: 800, color: "white", margin: 0, fontVariantNumeric: "tabular-nums" }}>{val}</p>
-          </div>
-        ))}
-
-        {/* 조작 방법 */}
-        <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 12px" }}>
-          <p style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: "0.08em", marginBottom: 8 }}>CONTROLS</p>
-          {[["←→", "이동"], ["↑", "회전"], ["↓", "내리기"], ["Space", "즉시 낙하"], ["P", "일시정지"]].map(([k, v]) => (
-            <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 10, color: GREEN, fontWeight: 700 }}>{k}</span>
-              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <p style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", margin: "12px 0 0", textAlign: "center" }}>
+        방향키로 이동 · 회전할 수 있어요
+      </p>
     </div>
   );
 }
@@ -343,6 +214,7 @@ export default function ReportGeneratingPage() {
   const [error, setError] = useState("");
   const generatingRef = useRef(false);
   const role = String(location.state?.role || getAuthUser()?.role || "mentee").toLowerCase();
+  const isMentorRole = role.includes("mentor");
 
   const goToReport = useCallback(() => {
     navigate(`/report/ai/${sessionId}`, { state: { role } });
@@ -424,6 +296,9 @@ export default function ReportGeneratingPage() {
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @media (max-width: 860px) {
+          .report-generating-grid { grid-template-columns: 1fr !important; }
+        }
       `}</style>
 
       {/* 헤더 */}
@@ -446,7 +321,15 @@ export default function ReportGeneratingPage() {
       {/* 본문 */}
       <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "48px 5%", width: "100%" }}>
 
-        <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 18 }}>
+        <div className="report-generating-grid" style={{
+          width: "100%",
+          maxWidth: isMentorRole ? 720 : 1080,
+          display: "grid",
+          gridTemplateColumns: isMentorRole ? "1fr" : "minmax(0, 1fr) 320px",
+          gap: 20,
+          alignItems: "start",
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ background: "white", borderRadius: 18, border: "1px solid #E8E0D0", padding: "28px 30px", boxShadow: "0 18px 50px rgba(13,34,64,0.08)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
               <div style={{ width: 48, height: 48, borderRadius: "50%", border: "4px solid #E8E0D0", borderTopColor: GREEN, animation: "spin 1s linear infinite", flexShrink: 0 }} />
@@ -525,6 +408,8 @@ export default function ReportGeneratingPage() {
           >
             건너뛰고 리포트 보기 →
           </button>
+          </div>
+          {!isMentorRole && <TetrisPanel />}
         </div>
       </div>
     </div>

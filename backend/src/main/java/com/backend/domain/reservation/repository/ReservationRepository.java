@@ -1,5 +1,6 @@
 package com.backend.domain.reservation.repository;
 
+import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.reservation.entity.Reservation;
@@ -19,6 +20,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     boolean existsByMentorAvailability(MentorAvailability mentorAvailability);
 
     List<Reservation> findAllByMentee(Member mentee);
+
+    List<Reservation> findAllByInterviewSession(InterviewSession interviewSession);
 
     List<Reservation> findAllByMentorAvailability_Mentor(Member mentor);
 

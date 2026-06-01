@@ -421,21 +421,22 @@ export default function InterviewRobby({ role = "mentee" }) {
   const isGroup  = mentees.length > 1 || session.type?.includes("그룹");
 
   /* ── 아코디언 헬퍼 ── */
-  const Accordion = ({ title, accentColor = "rgba(255,255,255,0.5)", defaultOpen = false, children }) => {
+  const Accordion = ({ title, accentColor = "#fff", defaultOpen = false, children }) => {
     const [open, setOpen] = useState(defaultOpen);
     return (
-      <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }}>
+      <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)", overflow: "hidden", background: "#112338", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
         <button type="button" onClick={() => setOpen(v => !v)} style={{
-          width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.05)",
-          border: "none", cursor: "pointer", fontFamily: "inherit",
+          width: "100%", padding: "14px 18px", background: "#1a3352",
+          border: "none", borderBottom: open ? "1px solid rgba(255,255,255,0.1)" : "none",
+          cursor: "pointer", fontFamily: "inherit",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
         }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: "0.08em", textTransform: "uppercase" }}>{title}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: accentColor }}>{title}</span>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>
-            <path d="M2 5l5 5 5-5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 5l5 5 5-5" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        {open && <div style={{ padding: "14px 16px", background: "rgba(0,0,0,0.15)" }}>{children}</div>}
+        {open && <div style={{ padding: "16px 18px", background: "#0e1e30" }}>{children}</div>}
       </div>
     );
   };
@@ -524,7 +525,7 @@ export default function InterviewRobby({ role = "mentee" }) {
             <div style={{ width: 270, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", paddingRight: 4 }}>
 
               {/* 세션 참여자 카드 */}
-              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: "20px 22px", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ background: "#112338", borderRadius: 16, padding: "20px 22px", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>참여자</p>
                   {isGroup && (
@@ -597,7 +598,7 @@ export default function InterviewRobby({ role = "mentee" }) {
 
               {/* 면접 진행 가이드 (멘토만) */}
               {isMentor && (
-                <div style={{ background: "rgba(29,158,117,0.07)", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(29,158,117,0.2)" }}>
+                <div style={{ background: "#0d2219", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(29,158,117,0.35)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: C_teal, textTransform: "uppercase", marginBottom: 14 }}>면접 진행 가이드</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {[
@@ -634,26 +635,26 @@ export default function InterviewRobby({ role = "mentee" }) {
                   <div style={{ flex: 1, overflowY: "auto" }}>
                     <Accordion title={isGroup ? `${selectedMentee?.name ?? "멘티"} 자기소개서` : "멘티 자기소개서"} accentColor="#818CF8" defaultOpen={true}>
                       {resumeContent ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {parseResumeContent(resumeContent).map((item, i) => (
-                            <div key={i} style={{ borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <div key={i} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.15)" }}>
                               <button type="button" onClick={() => setOpenResumeIndex(openResumeIndex === i ? null : i)} style={{
-                                width: "100%", background: "rgba(255,255,255,0.04)", border: "none", cursor: "pointer",
-                                display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", gap: 8, fontFamily: "inherit",
+                                width: "100%", background: "#1e3a5a", border: "none", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", gap: 8, fontFamily: "inherit",
                               }}>
-                                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, textAlign: "left" }}>{item.title}</span>
-                                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", flexShrink: 0 }}>{openResumeIndex === i ? "▼" : "▶"}</span>
+                                <span style={{ fontSize: 13, color: "#fff", fontWeight: 600, textAlign: "left" }}>{item.title}</span>
+                                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", flexShrink: 0 }}>{openResumeIndex === i ? "▼" : "▶"}</span>
                               </button>
                               {openResumeIndex === i && (
-                                <div style={{ padding: "10px 12px", background: "rgba(0,0,0,0.25)" }}>
-                                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.75, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>{item.content}</p>
+                                <div style={{ padding: "14px 16px", background: "#0d1e30", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                                  <p style={{ fontSize: 13, color: "rgba(255,255,255,0.88)", lineHeight: 1.85, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>{item.content}</p>
                                 </div>
                               )}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", fontStyle: "italic" }}>자기소개서가 없습니다</p>
+                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", fontStyle: "italic" }}>자기소개서가 없습니다</p>
                       )}
                     </Accordion>
                   </div>
@@ -706,9 +707,9 @@ export default function InterviewRobby({ role = "mentee" }) {
                                   const globalIdx = recommendedQuestions.indexOf(item);
                                   return (
                                     <label key={item.key} style={{
-                                      background: item.selected ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.03)",
-                                      border: `1px solid ${item.selected ? "rgba(245,158,11,0.3)" : "rgba(255,255,255,0.07)"}`,
-                                      borderRadius: 8, padding: "8px 10px", display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer",
+                                      background: item.selected ? "#2a1e00" : "#162030",
+                                      border: `1px solid ${item.selected ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.15)"}`,
+                                      borderRadius: 10, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer",
                                     }}>
                                       <input type="checkbox" checked={item.selected} onChange={() => handleRecommendedQuestionToggle(globalIdx)} style={{ accentColor: "#F59E0B", width: 14, height: 14, marginTop: 6, flexShrink: 0 }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -718,7 +719,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                                         </div>
                                         <textarea value={item.content ?? ""} onChange={e => handleRecommendedQuestionChange(globalIdx, e.target.value)}
                                           rows={Math.max(2, Math.ceil(String(item.content ?? "").length / 34))}
-                                          style={{ width: "100%", resize: "none", minHeight: 60, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, padding: "7px 8px", background: "rgba(13,34,64,0.8)", color: "rgba(255,255,255,0.82)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.55, outline: "none", boxSizing: "border-box" }}
+                                          style={{ width: "100%", resize: "none", minHeight: 60, border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "8px 10px", background: "rgba(13,34,64,0.9)", color: "rgba(255,255,255,0.92)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.65, outline: "none", boxSizing: "border-box" }}
                                         />
                                       </div>
                                     </label>
@@ -729,9 +730,9 @@ export default function InterviewRobby({ role = "mentee" }) {
                             {shownSaved.length > 0 && (
                               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 {shownSaved.map((q, i) => (
-                                  <div key={q.id ?? i} style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 8, padding: "9px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", flexShrink: 0, marginTop: 1 }}>Q{i + 1}</span>
-                                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>{q.content ?? q.question ?? q}</p>
+                                  <div key={q.id ?? i} style={{ background: "#1e1400", border: "1px solid rgba(245,158,11,0.45)", borderRadius: 10, padding: "11px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: "#F59E0B", flexShrink: 0, marginTop: 2 }}>Q{i + 1}</span>
+                                    <p style={{ fontSize: 13, color: "rgba(255,255,255,0.95)", lineHeight: 1.65, margin: 0 }}>{q.content ?? q.question ?? q}</p>
                                   </div>
                                 ))}
                               </div>

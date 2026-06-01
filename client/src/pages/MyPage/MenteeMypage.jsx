@@ -634,8 +634,8 @@ export default function MenteeMyPage() {
               </div>
             </div>
 
-            {/* 면접 정보 등록 */}
-            <div style={{ background: C.primaryGrad, borderRadius: 16, padding: "18px 18px", boxShadow: "0 6px 20px rgba(13,34,64,0.2)" }}>
+            {/* 면접 정보 등록 — 세션이 없는 신규 사용자에게만 표시 */}
+            {apiSessions.length === 0 && <div style={{ background: C.primaryGrad, borderRadius: 16, padding: "18px 18px", boxShadow: "0 6px 20px rgba(13,34,64,0.2)" }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 4 }}>면접 정보 등록</p>
               <p style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.6, marginBottom: 14 }}>채용공고와 자소서를 등록하면 AI가 맞춤 질문을 생성해요</p>
               <Link to="/mentee/resume" style={{
@@ -648,7 +648,7 @@ export default function MenteeMyPage() {
                 onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
                 onMouseLeave={e => e.currentTarget.style.opacity = "1"}
               >등록하러 가기 →</Link>
-            </div>
+            </div>}
 
             {/* 프로필 수정 / 탈퇴 */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

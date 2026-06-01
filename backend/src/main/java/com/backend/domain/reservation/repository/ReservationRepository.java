@@ -49,4 +49,30 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             @Param("mentor") Member mentor,
             @Param("status") ReservationStatus status
     );
+
+    @Query("""
+            select r
+            from Reservation r
+            join fetch r.mentorAvailability a
+            join fetch a.mentor
+            left join fetch r.interviewSession
+            where r.mentee = :mentee
+            order by a.startTime asc
+            """)
+    List<Reservation> findMenteeReservations(@Param("mentee") Member mentee);
+
+    @Query("""
+            select r
+            from Reservation r
+            join fetch r.mentorAvailability a
+            join fetch a.mentor
+            left join fetch r.interviewSession
+            where r.mentee = :mentee
+              and r.status = :status
+            order by a.startTime asc
+            """)
+    List<Reservation> findMenteeReservationsByStatus(
+            @Param("mentee") Member mentee,
+            @Param("status") ReservationStatus status
+    );
 }

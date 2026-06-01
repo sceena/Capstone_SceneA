@@ -147,7 +147,7 @@ jobs:
             AI_SERVER_BASE_URL_VALUE="${{ secrets.AI_SERVER_BASE_URL }}"
             ANNOUNCED_IP_VALUE="${{ secrets.ANNOUNCED_IP }}"
             if [ -z "$AI_SERVER_BASE_URL_VALUE" ]; then
-              AI_SERVER_BASE_URL_VALUE="https://crib-mutilator-uncle.ngrok-free.dev"
+              AI_SERVER_BASE_URL_VALUE="https://ninth-relation-unusual.ngrok-free.dev"
             fi
             if [ -z "$ANNOUNCED_IP_VALUE" ]; then
               ANNOUNCED_IP_VALUE="${{ secrets.EC2_HOST }}"

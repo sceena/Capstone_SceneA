@@ -215,12 +215,7 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── 컨트롤 상태 ── */
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
-  const [chatOpen, setChatOpen] = useState(false);
   const [ending, setEnding] = useState(false);
-
-  /* ── 멘토 전용 ── */
-  const [chatMsg, setChatMsg] = useState("");
-  const [chatHistory, setChatHistory] = useState([]);
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [recommendationsOpen, setRecommendationsOpen] = useState(true);
@@ -826,12 +821,6 @@ export default function InterviewSession({ role = "mentee" }) {
     }
   };
 
-  const sendChat = () => {
-    if (!chatMsg.trim()) return;
-    setChatHistory(prev => [...prev, { me: true, text: chatMsg }]);
-    setChatMsg("");
-  };
-
   const SPEAK_THRESHOLD = 0.025;
   // 참가자가 1명이라도 있으면 발화자 메인 뷰 활성화
   const mainViewId = peerIds.length > 0 ? (activeSpeakerId || peerIds[0]) : null;
@@ -849,63 +838,46 @@ export default function InterviewSession({ role = "mentee" }) {
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         html,body{height:100%;overflow:hidden;margin:0}
         #root{height:100%;overflow:hidden;min-height:0;width:100%;max-width:100%;margin:0;display:block;text-align:left}
-        body{font-family:'Noto Sans KR',sans-serif;background:#f5f5f5;color:#111}
+        body{font-family:'Noto Sans KR',sans-serif;background:#0a1628;color:#fff}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes speakPulse{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
-        .ctrl-btn:hover{background:rgba(13,34,64,0.85)!important}
+        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:4px}
+        .ctrl-btn:hover{background:rgba(255,255,255,0.25)!important}
         .ctrl-btn-off:hover{background:rgba(239,68,68,0.85)!important}
       `}</style>
 
-      <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#FAF8F4" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0a1628" }}>
 
         {/* ════ 재접속 / 연결 실패 배너 ════ */}
         {(connectionState === "reconnecting" || connectionState === "failed") && (
           <div style={{
-            position: "fixed", top: 76, left: "50%", transform: "translateX(-50%)",
-            zIndex: 9999, width: "min(520px, calc(100vw - 32px))",
+            position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)",
+            zIndex: 9999, width: "min(480px, calc(100vw - 32px))",
           }}>
             <div style={{
-              background: "rgba(255,255,255,0.96)", borderRadius: 14, padding: "14px 18px",
-              boxShadow: "0 8px 30px rgba(0,0,0,0.18)", border: "1px solid #E8E0D0",
+              background: "rgba(13,34,64,0.96)", borderRadius: 12, padding: "14px 18px",
+              boxShadow: "0 8px 30px rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.12)",
               display: "flex", alignItems: "center", gap: 12,
             }}>
               {connectionState === "reconnecting" ? (
                 <>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    border: "3px solid #E8E0D0", borderTopColor: "#1D9E75",
-                    animation: "spin 0.9s linear infinite", flexShrink: 0,
-                  }} />
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2.5px solid rgba(255,255,255,0.15)", borderTopColor: "#1D9E75", animation: "spin 0.9s linear infinite", flexShrink: 0 }} />
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 800, color: "#1A1818", marginBottom: 2 }}>미디어 서버 재연결 중</p>
-                    <p style={{ fontSize: 11, color: "#6b7280" }}>화면 공유 연결을 복구하고 있습니다. 질문/답변 녹음은 계속 시도할 수 있습니다.</p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 2 }}>미디어 서버 재연결 중</p>
+                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>연결을 복구하고 있습니다. 녹음은 계속 진행됩니다.</p>
                   </div>
                 </>
               ) : (
                 <>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    background: "#FEE2E2", color: "#EF4444",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 14, fontWeight: 900, flexShrink: 0,
-                  }}>!</div>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(239,68,68,0.2)", color: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, flexShrink: 0 }}>!</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 800, color: "#EF4444", marginBottom: 2 }}>미디어 서버 연결 실패</p>
-                    <p style={{ fontSize: 11, color: "#6b7280" }}>상대 화면이 보이지 않을 수 있습니다. 로컬 녹음과 오디오 저장은 계속 진행할 수 있습니다.</p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#EF4444", marginBottom: 2 }}>미디어 서버 연결 실패</p>
+                    <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>상대 화면이 보이지 않을 수 있습니다.</p>
                   </div>
-                  <button
-                    onClick={() => window.location.reload()}
-                    style={{
-                      padding: "8px 12px", background: "#0D2240", color: "#fff",
-                      border: "none", borderRadius: 999, fontSize: 12, fontWeight: 800,
-                      cursor: "pointer", fontFamily: "inherit",
-                      flexShrink: 0,
-                    }}
-                  >
+                  <button onClick={() => window.location.reload()} style={{ padding: "7px 14px", background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
                     새로고침
                   </button>
                 </>
@@ -914,80 +886,54 @@ export default function InterviewSession({ role = "mentee" }) {
           </div>
         )}
 
-        {/* ════ 상단 헤더 바 ════ */}
+        {/* ════ 상단 헤더 ════ */}
         <div style={{
-          background: "#fff", padding: "0 20px",
-          borderBottom: "1px solid #E8E0D0",
+          background: "#0D2240", padding: "0 24px",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          height: 64, flexShrink: 0,
+          height: 60, flexShrink: 0,
         }}>
+          {/* 로고 + 상태 */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 8, background: "#0D2240", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <rect x="1" y="4" width="11" height="9" rx="1.5" fill="white"/>
-                <path d="M12 7.5l5-2.5v8l-5-2.5V7.5z" fill="white"/>
-              </svg>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+                  <rect x="1" y="4" width="11" height="9" rx="1.5" fill="white"/>
+                  <path d="M12 7.5l5-2.5v8l-5-2.5V7.5z" fill="white"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>Scene<span style={{ color: "#1D9E75" }}>A</span></span>
             </div>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#1A1818" }}>면접 진행 중</p>
-              <p style={{ fontSize: 11, color: "#9E9B95" }}>
-                {mediaError ? <span style={{ color: "#EF4444" }}>{mediaError}</span> : "실시간 면접 세션"}
-              </p>
+            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.15)" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#EF4444", animation: recording ? "pulse 1.2s ease-in-out infinite" : "none" }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>{formatTime(elapsed)}</span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>면접 진행 중</span>
             </div>
+            {mediaError && <span style={{ fontSize: 11, color: "#EF4444" }}>{mediaError}</span>}
           </div>
 
-          {/* 참가자 수 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: "50%",
-              background: "#1B4F7A", border: "2px solid #fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontWeight: 700, color: "#fff",
-            }}>나</div>
+          {/* 참가자 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#1B4F7A", border: "2px solid rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>나</div>
             {peerIds.slice(0, 3).map((pid, i) => (
-              <div key={pid} style={{
-                width: 32, height: 32, borderRadius: "50%",
-                background: ["#533BA0", "#0F6E56", "#8B4513"][i],
-                border: "2px solid #fff", marginLeft: -8, zIndex: 3 - i,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 11, fontWeight: 700, color: "#fff",
-              }}>{i + 1}</div>
+              <div key={pid} style={{ width: 30, height: 30, borderRadius: "50%", background: ["#533BA0","#0F6E56","#8B4513"][i], border: "2px solid rgba(255,255,255,0.2)", marginLeft: -6, zIndex: 3-i, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{i+1}</div>
             ))}
-            {peerIds.length > 3 && (
-              <div style={{
-                width: 32, height: 32, borderRadius: "50%",
-                background: "#e5e7eb", border: "2px solid #fff", marginLeft: -8,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 10, fontWeight: 700, color: "#6b7280",
-              }}>+{peerIds.length - 3}</div>
-            )}
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginLeft: 6 }}>참여자 {peerIds.length + 1}명</span>
           </div>
 
-          <div style={{ fontSize: 12, color: "#9E9B95" }}>
-            세션 #{id} · 참여자 {peerIds.length + 1}명
-          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>세션 #{id}</div>
         </div>
 
-        {/* ════ 본문 영역 ════ */}
+        {/* ════ 본문 ════ */}
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
           {/* ── 메인 비디오 영역 ── */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-            {/* ── 비디오 그리드 ── */}
-            <div style={{ flex: 1, overflow: "hidden", background: "#111827", position: "relative" }}>
-              {/* 타이머 */}
-              <div style={{
-                position: "absolute", top: 16, left: 16, zIndex: 10,
-                background: "rgba(0,0,0,0.55)", borderRadius: 20,
-                padding: "5px 12px", display: "flex", alignItems: "center", gap: 7,
-              }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#EF4444", animation: recording ? "pulse 1.2s ease-in-out infinite" : "none" }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>{formatTime(elapsed)}</span>
-              </div>
-
+            {/* 비디오 그리드 */}
+            <div style={{ flex: 1, overflow: "hidden", background: "#080f1e", position: "relative" }}>
               {peerIds.length === 0 ? (
-                /* ── 혼자: 자신 화면 중앙 ── */
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", height: "100%", padding: 20 }}>
                   <div style={{ width: "min(640px, 100%)", height: "min(480px, 100%)" }}>
                     <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
@@ -995,46 +941,23 @@ export default function InterviewSession({ role = "mentee" }) {
                   </div>
                 </div>
               ) : (
-                /* ── 발화자 메인 + 전원 하단 스트립 (1:1 / 1:N 공통) ── */
-                <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "16px 16px 8px" }}>
-
-                  {/* 메인: 현재 발화자 (아무도 안 말하면 첫 번째 참가자) */}
+                <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "14px 14px 8px" }}>
                   <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
                     {mainViewId === '__local' ? (
-                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
-                        isSpeaking camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted isSpeaking camOff={!camOn} micOff={!micOn} />
                     ) : (
-                      <VideoTile stream={peersRef.current[mainViewId]} label="상대방"
-                        isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
+                      <VideoTile stream={peersRef.current[mainViewId]} label="상대방" isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
                     )}
                   </div>
-
-                  {/* 하단 스트립: 나 + 모든 참가자 전원 표시 */}
-                  <div style={{ height: 120, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0, paddingBottom: 4 }}>
-                    {/* 내 화면은 항상 첫 번째 */}
-                    <div style={{ width: 160, flexShrink: 0, height: "100%", position: "relative" }}>
-                      <VideoTile stream={localMediaStream} label="나" mirror muted
-                        isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
-                      {mainViewId === '__local' && (
-                        <div style={{
-                          position: "absolute", top: 6, left: 6, zIndex: 2,
-                          background: "#1D9E75", borderRadius: 4,
-                          padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff",
-                        }}>발화 중</div>
-                      )}
+                  <div style={{ height: 110, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
+                    <div style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
+                      <VideoTile stream={localMediaStream} label="나" mirror muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
+                      {mainViewId === '__local' && <div style={{ position: "absolute", top: 5, left: 5, zIndex: 2, background: "#1D9E75", borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff" }}>발화 중</div>}
                     </div>
-                    {/* 원격 참가자 전원 */}
                     {peerIds.map(peerId => (
-                      <div key={peerId} style={{ width: 160, flexShrink: 0, height: "100%", position: "relative" }}>
-                        <VideoTile stream={peersRef.current[peerId]} label="참여자"
-                          isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
-                        {mainViewId === peerId && (
-                          <div style={{
-                            position: "absolute", top: 6, left: 6, zIndex: 2,
-                            background: "#1D9E75", borderRadius: 4,
-                            padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff",
-                          }}>발화 중</div>
-                        )}
+                      <div key={peerId} style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
+                        <VideoTile stream={peersRef.current[peerId]} label="참여자" isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
+                        {mainViewId === peerId && <div style={{ position: "absolute", top: 5, left: 5, zIndex: 2, background: "#1D9E75", borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 700, color: "#fff" }}>발화 중</div>}
                       </div>
                     ))}
                   </div>
@@ -1044,80 +967,52 @@ export default function InterviewSession({ role = "mentee" }) {
 
             {/* ── 하단 컨트롤 바 ── */}
             <div style={{
-              background: "#0D2240", padding: "12px 20px",
-              borderTop: "1px solid rgba(255,255,255,0.1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 10, flexShrink: 0,
+              background: "#0D2240", padding: "10px 24px",
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 12, flexShrink: 0,
             }}>
-              {[
-                { icon: <MicIcon on={micOn} />, label: micOn ? "마이크" : "음소거", active: micOn, click: handleMicToggle },
-                { icon: <CamIcon on={camOn} />, label: camOn ? "카메라" : "카메라 끔", active: camOn, click: handleCamToggle },
-                { icon: <ChatIcon />, label: "채팅", active: !chatOpen, click: () => setChatOpen(v => !v) },
-              ].map((btn, i) => (
-                <button key={i} className={btn.active ? "ctrl-btn" : "ctrl-btn-off"} onClick={btn.click} style={{
-                  width: 48, height: 48, borderRadius: "50%",
-                  background: btn.pink && !btn.active ? "#FEE2E2"
-                    : !btn.active ? "#EF4444"
-                    : "rgba(255,255,255,0.15)",
-                  border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "background 0.18s",
-                }}>
-                  {btn.icon}
-                </button>
-              ))}
+              {/* 미디어 컨트롤 */}
+              <div style={{ display: "flex", gap: 10 }}>
+                {[
+                  { icon: <MicIcon on={micOn} />, label: micOn ? "마이크" : "음소거", active: micOn, click: handleMicToggle },
+                  { icon: <CamIcon on={camOn} />, label: camOn ? "카메라" : "카메라 끔", active: camOn, click: handleCamToggle },
+                ].map((btn, i) => (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <button className={btn.active ? "ctrl-btn" : "ctrl-btn-off"} onClick={btn.click} style={{
+                      width: 44, height: 44, borderRadius: "50%",
+                      background: !btn.active ? "#EF4444" : "rgba(255,255,255,0.12)",
+                      border: `1.5px solid ${!btn.active ? "#EF4444" : "rgba(255,255,255,0.2)"}`,
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s",
+                    }}>{btn.icon}</button>
+                    <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: "0.02em" }}>{btn.label}</span>
+                  </div>
+                ))}
+              </div>
 
-              {/* 채팅 입력창 */}
-              {chatOpen && (
-                <div style={{ display: "flex", gap: 8, flex: 1, maxWidth: 340 }}>
-                  <input
-                    placeholder="Type Something..."
-                    value={chatMsg} onChange={e => setChatMsg(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && sendChat()}
-                    style={{
-                      flex: 1, padding: "10px 14px",
-                      background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)",
-                      borderRadius: 24, fontSize: 13, color: "#fff",
-                      outline: "none", fontFamily: "inherit",
-                    }}
-                  />
-                  <button onClick={sendChat} style={{
-                    width: 40, height: 40, borderRadius: "50%",
-                    background: "#1D9E75", border: "none", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <path d="M14 8L2 2l2 6-2 6 12-6z" fill="white" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-
-              {/* 멘티 전용: 답변 상태 버튼 */}
+              {/* 멘티 전용: 현재 질문 + 답변 버튼 */}
               {!isMentor && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, justifyContent: "center" }}>
                   <div style={{
-                    maxWidth: 240,
-                    color: activeQuestion ? "#d1fae5" : "#fecaca",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    maxWidth: 300, padding: "8px 14px", borderRadius: 8,
+                    background: activeQuestion ? "rgba(29,158,117,0.15)" : "rgba(255,255,255,0.06)",
+                    border: `1px solid ${activeQuestion ? "rgba(29,158,117,0.4)" : "rgba(255,255,255,0.1)"}`,
+                    fontSize: 12, fontWeight: 600,
+                    color: activeQuestion ? "#6ee7c5" : "rgba(255,255,255,0.4)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
-                    {activeQuestion ? `현재 질문: ${activeQuestion.content}` : "멘토 질문 대기 중"}
+                    {activeQuestion ? `Q. ${activeQuestion.content}` : "멘토 질문 대기 중..."}
                   </div>
                   <button
                     onClick={() => handleAnswerStatus(answerStatus === "answering" ? "done" : "answering")}
                     disabled={answerButtonDisabled}
                     style={{
-                      padding: "12px 20px",
-                      background: answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "#f3f4f6" : "#9ca3af",
-                      color: answerStatus === "answering" ? "#fff" : "#374151",
-                      border: `1.5px solid ${answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "#d1d5db" : "#9ca3af"}`,
-                      borderRadius: 24,
+                      padding: "10px 22px", borderRadius: 22,
+                      background: answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
+                      color: answerStatus === "answering" ? "#fff" : activeQuestion ? "#fff" : "rgba(255,255,255,0.35)",
+                      border: `1.5px solid ${answerStatus === "answering" ? "#1D9E75" : activeQuestion ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.1)"}`,
                       fontSize: 13, fontWeight: 700, cursor: answerButtonDisabled ? "not-allowed" : "pointer",
-                      fontFamily: "inherit", transition: "all 0.18s",
+                      fontFamily: "inherit", transition: "all 0.18s", flexShrink: 0,
                     }}
                   >
                     {answerStatus === "answering" ? "● 답변 완료" : "답변 시작"}
@@ -1125,14 +1020,17 @@ export default function InterviewSession({ role = "mentee" }) {
                 </div>
               )}
 
-              {/* End Call */}
+              {/* 멘토 전용: 중앙 공간 */}
+              {isMentor && <div style={{ flex: 1 }} />}
+
+              {/* 종료 */}
               {isMentor ? (
                 <button onClick={handleEndCall} disabled={ending} style={{
-                  padding: "12px 24px",
-                  background: ending ? "#9ca3af" : "#EF4444",
-                  color: "#fff", border: "none", borderRadius: 24,
-                  fontSize: 14, fontWeight: 700, cursor: ending ? "not-allowed" : "pointer",
-                  fontFamily: "inherit", transition: "background 0.18s", marginLeft: 8,
+                  padding: "10px 22px", borderRadius: 22,
+                  background: ending ? "rgba(255,255,255,0.1)" : "#EF4444",
+                  color: "#fff", border: "none",
+                  fontSize: 13, fontWeight: 700, cursor: ending ? "not-allowed" : "pointer",
+                  fontFamily: "inherit", transition: "background 0.18s", flexShrink: 0,
                 }}
                   onMouseEnter={e => { if (!ending) e.currentTarget.style.background = "#DC2626"; }}
                   onMouseLeave={e => { if (!ending) e.currentTarget.style.background = "#EF4444"; }}
@@ -1140,114 +1038,69 @@ export default function InterviewSession({ role = "mentee" }) {
                   {ending ? "종료 중..." : "면접 종료"}
                 </button>
               ) : (
-                <div style={{
-                  padding: "10px 16px",
-                  borderRadius: 24,
-                  background: "rgba(255,255,255,0.12)",
-                  color: "rgba(255,255,255,0.72)",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  marginLeft: 8,
-                }}>
+                <div style={{ padding: "8px 14px", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", flexShrink: 0 }}>
                   {ending ? "리포트로 이동 중..." : "멘토가 종료하면 자동 이동"}
                 </div>
               )}
             </div>
           </div>
 
-          {/* ════ 멘토 전용: 우측 사이드패널 ════ */}
+          {/* ════ 멘토 전용: 우측 질문 패널 ════ */}
           {isMentor && (
             <div style={{
               width: 300, flexShrink: 0,
-              background: "#fff", borderLeft: "1px solid #E8E0D0",
-              display: "flex", flexDirection: "column",
-              overflow: "hidden",
+              background: "#0D2240", borderLeft: "1px solid rgba(255,255,255,0.08)",
+              display: "flex", flexDirection: "column", overflow: "hidden",
             }}>
-              <div style={{ padding: "13px 16px", borderBottom: "1px solid #E8E0D0", background: "#0D2240" }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>면접 질문 패널</p>
+              {/* 패널 헤더 */}
+              <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>질문 패널</p>
+                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>질문을 말하고 저장하세요</p>
               </div>
 
-              <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 18 }}>
+
+                {/* 질문 녹음 */}
                 <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase", marginBottom: 10 }}>실제 질문 기록</p>
-                  <button
-                    type="button"
-                    onClick={handleQuestionRecordToggle}
-                    disabled={questionButtonDisabled}
-                    style={{
-                      width: "100%", padding: "12px 14px",
-                      borderRadius: 10, border: "none",
-                      background: questionRecordStatus === "recording" ? "#1D9E75" : questionRecordStatus === "uploading" ? "#9ca3af" : "#0D2240",
-                      color: "#fff", fontSize: 13, fontWeight: 800,
-                      cursor: questionButtonDisabled ? "not-allowed" : "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    {questionRecordStatus === "recording"
-                      ? "● 질문 완료"
-                      : questionRecordStatus === "uploading"
-                        ? "질문 저장 중..."
-                        : "질문 시작"}
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase", marginBottom: 10 }}>질문 녹음</p>
+                  <button type="button" onClick={handleQuestionRecordToggle} disabled={questionButtonDisabled} style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 10, border: "none",
+                    background: questionRecordStatus === "recording" ? "#1D9E75" : questionRecordStatus === "uploading" ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.12)",
+                    color: "#fff", fontSize: 13, fontWeight: 700,
+                    cursor: questionButtonDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.18s",
+                  }}>
+                    {questionRecordStatus === "recording" && (
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "pulse 0.8s ease-in-out infinite", flexShrink: 0 }} />
+                    )}
+                    {questionRecordStatus === "recording" ? "질문 완료" : questionRecordStatus === "uploading" ? "저장 중..." : "질문 시작"}
                   </button>
-                  <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.6, marginTop: 8 }}>
-                    {waitingForAnswer
-                      ? "멘티 답변을 기다리는 중입니다. 답변 저장 후 다음 질문을 진행하세요."
-                      : recordingLockedByOther
-                      ? "다른 참여자가 말하는 중입니다. 발화가 끝난 뒤 질문을 시작하세요."
-                      : "멘토가 실제로 말한 질문 오디오가 STT로 변환되어 리포트 질문으로 저장됩니다."}
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", lineHeight: 1.6, marginTop: 8 }}>
+                    {waitingForAnswer ? "멘티 답변을 기다리는 중..." : recordingLockedByOther ? "다른 참여자가 말하는 중..." : "멘토의 질문 오디오가 STT로 변환되어 저장됩니다."}
                   </p>
                   {questionRecordStatus === "recording" && (
-                    <div style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginTop: 10,
-                      padding: "9px 10px",
-                      borderRadius: 10,
-                      background: "#F0FDF4",
-                      border: "1px solid #B7E2D4",
-                    }}>
-                      <span style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: "#EF4444",
-                        boxShadow: "0 0 0 4px rgba(239,68,68,0.12)",
-                        flexShrink: 0,
-                        animation: "pulse 1s ease-in-out infinite",
-                      }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "9px 12px", borderRadius: 10, background: "rgba(29,158,117,0.15)", border: "1px solid rgba(29,158,117,0.3)" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#EF4444", animation: "pulse 1s ease-in-out infinite", flexShrink: 0 }} />
                       <RecordingWave level={audioLevels['__local'] || 0} />
-                      <span style={{ fontSize: 11, fontWeight: 800, color: "#11745D", flexShrink: 0 }}>
-                        질문 녹음 중
-                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#1D9E75", flexShrink: 0 }}>녹음 중</span>
                     </div>
                   )}
                   {activeQuestion && (
-                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#E8F5EE", border: "1px solid #B7E2D4" }}>
-                      <p style={{ fontSize: 10, fontWeight: 800, color: "#11745D", marginBottom: 4 }}>현재 답변 대상 질문</p>
-                      <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.6 }}>{activeQuestion.content}</p>
+                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "rgba(29,158,117,0.12)", border: "1px solid rgba(29,158,117,0.3)" }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", marginBottom: 4 }}>현재 답변 대상</p>
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.6 }}>{activeQuestion.content}</p>
                     </div>
                   )}
                 </div>
 
+                {/* AI 추천 질문 */}
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
-                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase" }}>AI 추천질문</p>
-                    <button
-                      type="button"
-                      onClick={() => setRecommendationsOpen(v => !v)}
-                      style={{
-                        border: "1px solid #D7E7DF",
-                        background: recommendationsOpen ? "#E8F5EE" : "#fff",
-                        color: "#11745D",
-                        borderRadius: 999,
-                        padding: "4px 9px",
-                        fontSize: 10,
-                        fontWeight: 800,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#F59E0B", textTransform: "uppercase" }}>AI 추천 질문</p>
+                    <button type="button" onClick={() => setRecommendationsOpen(v => !v)} style={{
+                      border: "1px solid rgba(245,158,11,0.3)", background: recommendationsOpen ? "rgba(245,158,11,0.12)" : "transparent",
+                      color: "#F59E0B", borderRadius: 99, padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                    }}>
                       {recommendationsOpen ? "접기" : "보기"}
                     </button>
                   </div>
@@ -1255,18 +1108,18 @@ export default function InterviewSession({ role = "mentee" }) {
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {questions.length > 0 ? questions.map((q, i) => (
                         <div key={q.id ?? i} style={{
-                          background: "#FAF8F4", borderRadius: 10, padding: "12px 14px",
-                          border: "1px solid #E8E0D0",
-                          borderLeft: "3px solid #1D9E75", transition: "background 0.15s",
+                          background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 12px",
+                          border: "1px solid rgba(255,255,255,0.08)", borderLeft: "2px solid #F59E0B",
+                          cursor: "default", transition: "background 0.15s",
                         }}
-                          onMouseEnter={e => e.currentTarget.style.background = "#E8F5EE"}
-                          onMouseLeave={e => e.currentTarget.style.background = "#FAF8F4"}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(245,158,11,0.08)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
                         >
-                          <span style={{ fontSize: 10, fontWeight: 700, color: "#1D9E75", display: "block", marginBottom: 4 }}>추천 {i + 1}</span>
-                          <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.65 }}>{q.content}</p>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", display: "block", marginBottom: 4, letterSpacing: "0.05em" }}>추천 {i + 1}</span>
+                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.65 }}>{q.content}</p>
                         </div>
                       )) : (
-                        <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
+                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>
                           준비 화면에서 생성한 AI 추천 질문이 여기에 표시됩니다.
                         </p>
                       )}
@@ -1274,40 +1127,20 @@ export default function InterviewSession({ role = "mentee" }) {
                   )}
                 </div>
 
+                {/* 실제 질문 기록 */}
                 <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#6b7280", textTransform: "uppercase", marginBottom: 10 }}>실제 질문 기록</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 10 }}>질문 기록</p>
                   {spokenQuestions.length > 0 ? spokenQuestions.map((q, i) => (
-                    <div key={q.id ?? i} style={{ padding: "10px 0", borderBottom: "1px solid #f3f4f6" }}>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: "#6b7280", display: "block", marginBottom: 4 }}>
-                        질문 {i + 1}
-                      </span>
-                      <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.7 }}>
-                        {q.content}
-                      </p>
+                    <div key={q.id ?? i} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 4, letterSpacing: "0.05em" }}>Q{i + 1}</span>
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", lineHeight: 1.7 }}>{q.content}</p>
                     </div>
                   )) : (
-                    <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
-                      질문 완료를 누르면 멘토가 실제로 말한 질문이 여기에 기록됩니다.
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", lineHeight: 1.6 }}>
+                      질문 완료 시 여기에 기록됩니다.
                     </p>
                   )}
                 </div>
-              </div>
-
-              <div style={{ padding: "12px 14px", borderTop: "1px solid #E8E0D0", display: "flex", gap: 8 }}>
-                <input placeholder="메시지 입력..." value={chatMsg}
-                  onChange={e => setChatMsg(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && sendChat()}
-                  style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, color: "#1A1818", outline: "none", fontFamily: "inherit" }}
-                />
-                <button onClick={sendChat} style={{
-                  width: 32, height: 32, borderRadius: "50%",
-                  background: "#0D2240", border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M11.5 6.5L1.5 1.5l1.5 5-1.5 5 10-5z" fill="white" />
-                  </svg>
-                </button>
               </div>
             </div>
           )}
@@ -1331,11 +1164,5 @@ const CamIcon = ({ on }) => (
     <rect x="1" y="4" width="11" height="9" rx="1.5" fill={on ? "white" : "rgba(255,255,255,0.5)"} />
     <path d="M12 7l5-2.5v8L12 10V7z" fill={on ? "white" : "rgba(255,255,255,0.5)"} />
     {!on && <line x1="2" y1="2" x2="16" y2="16" stroke="white" strokeWidth="1.6" strokeLinecap="round" />}
-  </svg>
-);
-const ChatIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M2 3h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5l-3 3V4a1 1 0 0 1 1-1z" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
-    <path d="M5 7h8M5 10h5" stroke="white" strokeWidth="1.3" strokeLinecap="round" />
   </svg>
 );

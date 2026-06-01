@@ -104,6 +104,20 @@ function RecordingWave({ level = 0 }) {
   );
 }
 
+function RecordingTimerText({ time }) {
+  return (
+    <span style={{
+      color: "rgba(255,255,255,0.78)",
+      fontSize: 13,
+      fontWeight: 800,
+      fontFamily: "monospace",
+      fontVariantNumeric: "tabular-nums",
+      letterSpacing: 0,
+      whiteSpace: "nowrap",
+    }}>{time}</span>
+  );
+}
+
 /* ── 통합 비디오 타일 ── */
 function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false, micOff = false }) {
   const ref = useRef(null);
@@ -200,11 +214,16 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── 타이머 ── */
   const [elapsed, setElapsed] = useState(0);
   const [recording, setRecording] = useState(true);
+  const [clockNow, setClockNow] = useState(Date.now());
   useEffect(() => {
     if (!recording) return;
     const t = setInterval(() => setElapsed(s => s + 1), 1000);
     return () => clearInterval(t);
   }, [recording]);
+  useEffect(() => {
+    const t = setInterval(() => setClockNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
   const formatTime = (s) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     return h > 0
@@ -223,6 +242,8 @@ export default function InterviewSession({ role = "mentee" }) {
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState([]);
   const questionRecorderRef = useRef(null);
   const questionAudioChunksRef = useRef([]);
+  const questionCancelRef = useRef(false);
+  const questionStartRef = useRef(null);
 
   /* ── 멘티 전용: 답변 상태 + 오디오 녹음 ── */
   const [answerStatus, setAnswerStatus] = useState("idle");
@@ -797,6 +818,14 @@ export default function InterviewSession({ role = "mentee" }) {
       questionRecorderRef.current.onstop = async () => {
         questionRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
         questionRecorderRef.current = null;
+        if (questionCancelRef.current) {
+          questionAudioChunksRef.current = [];
+          questionCancelRef.current = false;
+          questionStartRef.current = null;
+          releaseRecordingLock();
+          setQuestionRecordStatus("idle");
+          return;
+        }
         try {
           const blob = createAudioBlob(questionAudioChunksRef.current);
           if (!blob.size) throw new Error("녹음된 질문 오디오가 없습니다. 질문 시작 후 1초 이상 말한 뒤 완료해주세요.");
@@ -807,6 +836,8 @@ export default function InterviewSession({ role = "mentee" }) {
         } catch (error) {
           alert(error?.message || "질문 오디오 저장에 실패했습니다.");
         } finally {
+          questionCancelRef.current = false;
+          questionStartRef.current = null;
           releaseRecordingLock();
           setQuestionRecordStatus("idle");
         }
@@ -819,6 +850,8 @@ export default function InterviewSession({ role = "mentee" }) {
       const locked = await requestRecordingLock("QUESTION");
       if (!locked) return;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      questionCancelRef.current = false;
+      questionStartRef.current = new Date().toISOString();
       questionAudioChunksRef.current = [];
       const recorder = new MediaRecorder(stream, getAudioRecorderOptions());
       recorder.ondataavailable = (e) => { if (e.data.size > 0) questionAudioChunksRef.current.push(e.data); };
@@ -831,8 +864,38 @@ export default function InterviewSession({ role = "mentee" }) {
     } catch (error) {
       releaseRecordingLock();
       setQuestionRecordStatus("idle");
+      questionStartRef.current = null;
       alert(describeRecordingError(error));
     }
+  };
+
+  const handleQuestionCancel = () => {
+    if (questionRecordStatus !== "recording") return;
+    questionCancelRef.current = true;
+    setQuestionRecordStatus("idle");
+    setMicOn(false);
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
+    audioProducerRef.current?.pause();
+
+    const recorder = questionRecorderRef.current;
+    const cleanupCancelledQuestion = () => {
+      recorder?.stream?.getTracks().forEach(t => t.stop());
+      questionAudioChunksRef.current = [];
+      questionCancelRef.current = false;
+      questionStartRef.current = null;
+      questionRecorderRef.current = null;
+      releaseRecordingLock();
+      setQuestionRecordStatus("idle");
+    };
+
+    if (recorder && recorder.state !== "inactive") {
+      recorder.ondataavailable = null;
+      recorder.onstop = cleanupCancelledQuestion;
+      recorder.stop();
+      return;
+    }
+
+    cleanupCancelledQuestion();
   };
 
   const SPEAK_THRESHOLD = 0.025;
@@ -844,6 +907,16 @@ export default function InterviewSession({ role = "mentee" }) {
   const waitingForAnswer = isMentor && Boolean(activeQuestion?.id) && questionRecordStatus !== "recording";
   const answerButtonDisabled = (!activeQuestion && answerStatus !== "answering") || (answerBlockedByRecorder && answerStatus !== "answering");
   const questionButtonDisabled = questionRecordStatus === "uploading" || waitingForAnswer || (recordingLockedByOther && questionRecordStatus !== "recording");
+  const questionTimerStart = isMentor && questionRecordStatus === "recording"
+    ? (activeRecorder?.recordingType === "QUESTION" ? activeRecorder.startedAt : questionStartRef.current)
+    : null;
+  const questionElapsed = questionTimerStart
+    ? Math.max(0, Math.floor((clockNow - new Date(questionTimerStart).getTime()) / 1000))
+    : 0;
+  const answerTimerStart = !isMentor && answerStatus === "answering" ? answerStartRef.current : null;
+  const answerElapsed = answerTimerStart
+    ? Math.max(0, Math.floor((clockNow - new Date(answerTimerStart).getTime()) / 1000))
+    : 0;
 
   return (
     <>
@@ -1016,6 +1089,7 @@ export default function InterviewSession({ role = "mentee" }) {
                   }}>
                     {activeQuestion ? `Q. ${activeQuestion.content}` : "멘토 질문 대기 중..."}
                   </div>
+                  {answerTimerStart && <RecordingTimerText time={formatTime(answerElapsed)} />}
                   <button
                     onClick={() => handleAnswerStatus(answerStatus === "answering" ? "done" : "answering")}
                     disabled={answerButtonDisabled}
@@ -1076,21 +1150,38 @@ export default function InterviewSession({ role = "mentee" }) {
                 {/* 질문 녹음 */}
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#1D9E75", textTransform: "uppercase", marginBottom: 10 }}>질문 녹음</p>
-                  <button type="button" onClick={handleQuestionRecordToggle} disabled={questionButtonDisabled} style={{
-                    width: "100%", padding: "12px 14px", borderRadius: 10, border: "none",
-                    background: questionRecordStatus === "recording" ? "#1D9E75" : questionRecordStatus === "uploading" ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.12)",
-                    color: "#fff", fontSize: 13, fontWeight: 700,
-                    cursor: questionButtonDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.18s",
-                  }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" onClick={handleQuestionRecordToggle} disabled={questionButtonDisabled} style={{
+                      flex: 1, padding: "12px 14px", borderRadius: 10, border: "none",
+                      background: questionRecordStatus === "recording" ? "#1D9E75" : questionRecordStatus === "uploading" ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.12)",
+                      color: "#fff", fontSize: 13, fontWeight: 700,
+                      cursor: questionButtonDisabled ? "not-allowed" : "pointer", fontFamily: "inherit",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.18s",
+                    }}>
+                      {questionRecordStatus === "recording" && (
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "pulse 0.8s ease-in-out infinite", flexShrink: 0 }} />
+                      )}
+                      {questionRecordStatus === "recording" ? "질문 완료" : questionRecordStatus === "uploading" ? "저장 중..." : "질문 시작"}
+                    </button>
                     {questionRecordStatus === "recording" && (
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "pulse 0.8s ease-in-out infinite", flexShrink: 0 }} />
+                      <button type="button" onClick={handleQuestionCancel} style={{
+                        padding: "0 12px", borderRadius: 10,
+                        border: "1px solid rgba(239,68,68,0.45)", background: "rgba(239,68,68,0.12)",
+                        color: "#FCA5A5", fontSize: 12, fontWeight: 800,
+                        cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
+                      }}>
+                        취소
+                      </button>
                     )}
-                    {questionRecordStatus === "recording" ? "질문 완료" : questionRecordStatus === "uploading" ? "저장 중..." : "질문 시작"}
-                  </button>
+                  </div>
                   <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", lineHeight: 1.6, marginTop: 8 }}>
                     {waitingForAnswer ? "멘티 답변을 기다리는 중..." : recordingLockedByOther ? "다른 참여자가 말하는 중..." : "멘토의 질문 오디오가 STT로 변환되어 저장됩니다."}
                   </p>
+                  {questionTimerStart && (
+                    <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                      <RecordingTimerText time={formatTime(questionElapsed)} />
+                    </div>
+                  )}
                   {questionRecordStatus === "recording" && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "9px 12px", borderRadius: 10, background: "rgba(29,158,117,0.15)", border: "1px solid rgba(29,158,117,0.3)" }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#EF4444", animation: "pulse 1s ease-in-out infinite", flexShrink: 0 }} />

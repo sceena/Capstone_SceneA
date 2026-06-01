@@ -35,12 +35,16 @@ public class Reservation extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String resumeContent;
 
+    @Column(columnDefinition = "TEXT")
+    private String requestNote;
+
     @Builder
-    public Reservation(MentorAvailability mentorAvailability, Member mentee, InterviewSession interviewSession, String resumeContent) {
+    public Reservation(MentorAvailability mentorAvailability, Member mentee, InterviewSession interviewSession, String resumeContent, String requestNote) {
         this.mentorAvailability = mentorAvailability;
         this.mentee = mentee;
         this.interviewSession = interviewSession;
         this.resumeContent = resumeContent;
+        this.requestNote = requestNote;
     }
 
     public void confirm() {

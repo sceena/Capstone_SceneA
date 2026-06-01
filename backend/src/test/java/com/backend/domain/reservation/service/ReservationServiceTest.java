@@ -19,6 +19,7 @@ import com.backend.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -130,7 +131,85 @@ class ReservationServiceTest {
                 .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.MEMBER_NOT_FOUND));
     }
 
+    // ── getMentorReservations ──────────────────────────────────────────────
+
+    @Test
+    void 멘토_전체_예약목록_조회() {
+        MentorAvailability availability = mock(MentorAvailability.class);
+        when(availability.getId()).thenReturn(3L);
+        when(availability.getStartTime()).thenReturn(LocalDateTime.now().plusDays(1));
+
+        Reservation reservation = mock(Reservation.class);
+        when(reservation.getId()).thenReturn(1L);
+        when(reservation.getMentorAvailability()).thenReturn(availability);
+        when(reservation.getMentee()).thenReturn(mentee);
+        when(reservation.getInterviewSession()).thenReturn(null);
+        when(reservation.getStatus()).thenReturn(ReservationStatus.PENDING);
+        when(reservation.getResumeContent()).thenReturn("자소서 내용");
+        when(reservation.getRequestNote()).thenReturn("꼬리질문 피드백 부탁드려요");
+        when(reservation.getCreateDate()).thenReturn(LocalDateTime.now());
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(mentor));
+        given(reservationRepository.findMentorReservations(mentor)).willReturn(List.of(reservation));
+
+        var result = reservationService.getMentorReservations(1L, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).resumeContent()).isEqualTo("자소서 내용");
+        assertThat(result.get(0).requestNote()).isEqualTo("꼬리질문 피드백 부탁드려요");
+        assertThat(result.get(0).menteeName()).isEqualTo("김멘티");
+    }
+
+    @Test
+    void 멘토_status_필터로_예약목록_조회() {
+        MentorAvailability availability = mock(MentorAvailability.class);
+        when(availability.getId()).thenReturn(3L);
+        when(availability.getStartTime()).thenReturn(LocalDateTime.now().plusDays(1));
+
+        Reservation pending = mock(Reservation.class);
+        when(pending.getId()).thenReturn(1L);
+        when(pending.getMentorAvailability()).thenReturn(availability);
+        when(pending.getMentee()).thenReturn(mentee);
+        when(pending.getInterviewSession()).thenReturn(null);
+        when(pending.getStatus()).thenReturn(ReservationStatus.PENDING);
+        when(pending.getResumeContent()).thenReturn(null);
+        when(pending.getRequestNote()).thenReturn(null);
+        when(pending.getCreateDate()).thenReturn(LocalDateTime.now());
+
+        given(memberRepository.findById(1L)).willReturn(Optional.of(mentor));
+        given(reservationRepository.findMentorReservationsByStatus(mentor, ReservationStatus.PENDING))
+                .willReturn(List.of(pending));
+
+        var result = reservationService.getMentorReservations(1L, ReservationStatus.PENDING);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).status()).isEqualTo(ReservationStatus.PENDING);
+        verify(reservationRepository, never()).findMentorReservations(any());
+    }
+
     // ── createReservation ──────────────────────────────────────────────────
+
+    @Test
+    void request_note_포함_예약_신청() {
+        MentorAvailability availability = MentorAvailability.builder()
+                .mentor(mentor).startTime(LocalDateTime.now().plusDays(1))
+                .endTime(LocalDateTime.now().plusDays(1).plusHours(1)).maxParticipants(4).build();
+        ReflectionTestUtils.setField(availability, "id", 10L);
+
+        Reservation saved = savedReservationMock(availability);
+
+        given(memberRepository.findById(2L)).willReturn(Optional.of(mentee));
+        given(mentorAvailabilityRepository.findById(10L)).willReturn(Optional.of(availability));
+        given(reservationRepository.findAllByMentorAvailability(availability)).willReturn(List.of());
+        given(reservationRepository.save(any())).willReturn(saved);
+        given(reservationRepository.countByMentorAvailabilityAndStatusNot(eq(availability), eq(ReservationStatus.CANCELLED))).willReturn(1L);
+
+        reservationService.createReservation(2L, new ReservationRequest(1L, 10L, null, null, null, "꼬리질문 피드백 부탁드려요"));
+
+        ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+        verify(reservationRepository).save(captor.capture());
+        assertThat(captor.getValue().getRequestNote()).isEqualTo("꼬리질문 피드백 부탁드려요");
+    }
 
     @Test
     void 이미_예약한_멘티가_재신청하면_409() {

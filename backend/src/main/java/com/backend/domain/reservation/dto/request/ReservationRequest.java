@@ -7,9 +7,10 @@ public record ReservationRequest(
         @JsonProperty("availability_id") Long availabilityId,
         @JsonProperty("session_id") Long sessionId,
         @JsonProperty("job_posting_id") Long jobPostingId,
-        @JsonProperty("resume_content") String resumeContent
+        @JsonProperty("resume_content") String resumeContent,
+        @JsonProperty("request_note") String requestNote
 ) {
     public ReservationRequest(Long mentorId, Long availabilityId, Long sessionId, Long jobPostingId) {
-        this(mentorId, availabilityId, sessionId, jobPostingId, null);
+        this(mentorId, availabilityId, sessionId, jobPostingId, null, null);
     }
 }

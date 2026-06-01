@@ -435,7 +435,16 @@ export async function deleteQuestion(sessionId, questionId) {
     method: "DELETE",
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error("질문 삭제 실패");
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body?.message || body?.detail || body?.error || "";
+    } catch {
+      detail = await res.text().catch(() => "");
+    }
+    throw new Error(detail || "질문 삭제 실패");
+  }
 }
 
 /* ── 채용공고 ────────────────────────────────────────────── */

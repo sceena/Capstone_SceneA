@@ -15,6 +15,7 @@ import AIReportPage from './pages/Report/AIReport'
 import ReportWaitingPage from './pages/Report/ReportWaiting'
 import MentorReviewPage from './pages/Report/MentorReview'
 import FinalReportPage from './pages/Report/FinalReport'
+import MentorFeedbackPage from './pages/Report/MentorFeedback'
 import ReportGeneratingPage from './pages/Report/ReportGenerating'
 import MyPage from './pages/MyPage'
 import MentorMyPage from './pages/MyPage/MentorMypage'
@@ -48,6 +49,7 @@ export default function App() {
       <Route path="/interview/ready-mentor/:id" element={<ProtectedRoute role="mentor" element={<InterviewRobby role="mentor" />} />} />
       <Route path="/interview/mentor/:id"    element={<ProtectedRoute role="mentor" element={<InterviewSession role="mentor" />} />} />
       <Route path="/mentoring/mentor/:sessionId" element={<ProtectedRoute role="mentor" element={<MentoringSessionPage />} />} />
+      <Route path="/mentor/feedback/:sessionId" element={<ProtectedRoute role="mentor" element={<MentorFeedbackPage />} />} />
 
       {/* 멘티 전용 */}
       <Route path="/dashboard/mentee"        element={<ProtectedRoute role="mentee" element={<MenteeDashboard />} />} />

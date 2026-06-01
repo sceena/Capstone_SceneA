@@ -842,6 +842,19 @@ export default function InterviewRobby({ role = "mentee" }) {
                 </div>
               </div>
 
+              {/* 마이크 작동 방식 안내 */}
+              <div style={{ width: "100%", maxWidth: 460, background: "rgba(29,158,117,0.1)", border: "1px solid rgba(29,158,117,0.3)", borderRadius: 10, padding: "12px 16px", display: "flex", gap: 12, alignItems: "center" }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>🎙</span>
+                <div>
+                  <p style={{ fontSize: 13, color: C_teal, fontWeight: 700, marginBottom: 3 }}>마이크는 기본 음소거로 시작합니다</p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>
+                    면접 중 <strong style={{ color: "rgba(255,255,255,0.85)" }}>
+                      {isMentor ? '"질문 녹음" 버튼' : '"답변 시작" 버튼'}
+                    </strong>을 눌러야만 마이크가 활성화됩니다.
+                  </p>
+                </div>
+              </div>
+
               {/* 컨트롤 버튼 */}
               <div style={{ display: "flex", gap: 16 }}>
                 {[

@@ -28,6 +28,8 @@ public class AnalysisReport extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String mentorFeedback;
 
+    private Float mentorScore;
+
     private Float totalScore;
 
     private Float alignmentScore;
@@ -65,8 +67,9 @@ public class AnalysisReport extends BaseEntity {
         this.reportStatus = ReportStatus.FIRST;
     }
 
-    public void completeFinal(String mentorFeedback) {
+    public void completeFinal(String mentorFeedback, Float mentorScore) {
         this.mentorFeedback = mentorFeedback;
+        this.mentorScore = mentorScore;
         this.reportStatus = ReportStatus.FINAL;
     }
 }

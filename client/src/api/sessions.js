@@ -59,9 +59,13 @@ export async function getSession(id) {
  * GET /api/sessions/me : 로그인한 사용자가 참여한 세션 목록을 조회한다.
  * @returns {Promise<Array>}
  */
-export async function getMySessions(status) {
-  const params = status ? `?status=${status}` : "";
-  const res = await fetch(`/api/sessions/me${params}`, {
+export async function getMySessions(status, options = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (options.page != null) params.set("page", String(options.page));
+  if (options.size != null) params.set("size", String(options.size));
+  const query = params.toString() ? `?${params}` : "";
+  const res = await fetch(`/api/sessions/me${query}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error("세션 목록 조회 실패");
@@ -220,13 +224,27 @@ export async function getFitGapAnalysis(sessionId) {
  * 멘토 종합 피드백 작성. 저장 시 report_status가 final로 변경됨.
  * @param {string} feedback
  */
-export async function saveMentorFeedback(sessionId, feedback) {
+export async function saveMentorFeedback(sessionId, feedback, mentorScore, answerEvaluations = []) {
   const res = await fetch(`/api/sessions/${sessionId}/report/mentor-feedback`, {
     method: "PATCH",
     headers: authHeaders(),
-    body: JSON.stringify({ mentor_feedback: feedback }),
+    body: JSON.stringify({
+      mentor_feedback: feedback,
+      mentor_score: mentorScore,
+      answer_evaluations: answerEvaluations,
+    }),
   });
-  if (!res.ok) throw new Error("멘토 피드백 저장 실패");
+  if (!res.ok) {
+    let message = "멘토 피드백 저장 실패";
+    try {
+      const data = await res.json();
+      message = data?.message || data?.detail || message;
+    } catch {
+      const text = await res.text().catch(() => "");
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
   return res.json();
 }
 
@@ -308,6 +326,20 @@ export async function getQuestionAnswers(sessionId, questionId) {
 export async function getAnswerAudio(sessionId, questionId, answerId) {
   const res = await fetch(
     `/api/sessions/${sessionId}/questions/${questionId}/answers/${answerId}/audio`,
+    { headers: authHeadersNoBody() }
+  );
+  if (!res.ok) throw new Error("오디오 조회 실패");
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * GET /api/sessions/{id}/answers/{answerId}/audio
+ * 최종 리포트처럼 questionId 매핑이 불안정한 화면에서 answerId로 바로 오디오를 조회한다.
+ */
+export async function getAnswerAudioByAnswerId(sessionId, answerId) {
+  const res = await fetch(
+    `/api/sessions/${sessionId}/answers/${answerId}/audio`,
     { headers: authHeadersNoBody() }
   );
   if (!res.ok) throw new Error("오디오 조회 실패");

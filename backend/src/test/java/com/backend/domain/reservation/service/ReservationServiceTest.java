@@ -8,6 +8,7 @@ import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
+import com.backend.domain.jobPosting.repository.JobPostingRepository;
 import com.backend.domain.reservation.dto.request.ReservationAcceptRequest;
 import com.backend.domain.reservation.dto.request.ReservationRequest;
 import com.backend.domain.reservation.entity.Reservation;
@@ -48,6 +49,7 @@ class ReservationServiceTest {
     @Mock private InterviewSessionRepository interviewSessionRepository;
     @Mock private SessionParticipantRepository participantRepository;
     @Mock private ResumeRepository resumeRepository;
+    @Mock private JobPostingRepository jobPostingRepository;
 
     private Member mentor;
     private Member mentee;
@@ -378,5 +380,34 @@ class ReservationServiceTest {
 
         verify(newReservation).linkSession(existingSession);
         verify(interviewSessionRepository, never()).save(any());
+    }
+
+    @Test
+    void 수락_시_예약에_담긴_채용공고_원문을_세션에_저장() {
+        MentorAvailability availability = mock(MentorAvailability.class);
+        when(availability.getMentor()).thenReturn(mentor);
+        when(availability.getStartTime()).thenReturn(LocalDateTime.now().plusDays(1));
+
+        Reservation reservation = mock(Reservation.class);
+        when(reservation.getMentorAvailability()).thenReturn(availability);
+        when(reservation.getMentee()).thenReturn(mentee);
+        when(reservation.getInterviewSession()).thenReturn(null);
+        when(reservation.getResumeContent()).thenReturn(null);
+        when(reservation.getJobPostingRawText()).thenReturn("MSSQL & MySQL, Mongo DB 개발 및 운영 경험");
+        when(reservation.getJobPostingCompany()).thenReturn("지원 기업");
+        when(reservation.getJobPostingJobCategory()).thenReturn("DBA");
+        when(reservation.getJobPostingUrl()).thenReturn(null);
+
+        given(reservationRepository.findById(57L)).willReturn(Optional.of(reservation));
+        given(reservationRepository.findAllByMentorAvailability(availability)).willReturn(List.of(reservation));
+        given(participantRepository.existsByInterviewSessionAndMember(any(), any())).willReturn(false);
+        given(jobPostingRepository.findByInterviewSession(any())).willReturn(Optional.empty());
+
+        reservationService.acceptReservation(1L, 57L, new ReservationAcceptRequest(true));
+
+        verify(jobPostingRepository).save(argThat(jobPosting ->
+                jobPosting.getRawText().contains("MSSQL")
+                        && jobPosting.getJobCategory().equals("DBA")
+        ));
     }
 }

@@ -7,6 +7,7 @@ import com.backend.domain.analysisReport.dto.response.ReportResponse;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
 import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.answerEvaluation.service.AnswerEvaluationService;
 import com.backend.domain.interviewSession.entity.AnswerStatus;
 import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.interviewSession.entity.SessionParticipant;
@@ -57,6 +58,7 @@ class ReportServiceTest {
     @Mock private JobSkillRepository jobSkillRepository;
     @Mock private ResumeRepository resumeRepository;
     @Mock private ResumeSkillRepository resumeSkillRepository;
+    @Mock private AnswerEvaluationService answerEvaluationService;
 
     private Member mentor;
     private InterviewSession session;
@@ -86,6 +88,7 @@ class ReportServiceTest {
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
         given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(answerEvaluationService.getEvaluationResponses(session)).willReturn(List.of());
 
         ReportResponse response = reportService.getReport(1L, 42L);
 
@@ -111,6 +114,7 @@ class ReportServiceTest {
         given(participantRepository.findByInterviewSessionAndMember(any(), any()))
                 .willReturn(Optional.of(participant));
         given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(answerEvaluationService.getEvaluationResponses(session)).willReturn(List.of());
 
         ReportResponse response = reportService.getReport(2L, 42L);
 
@@ -271,7 +275,10 @@ class ReportServiceTest {
 
     @Test
     void addMentorFeedback_성공_상태가_FINAL로_변경() {
-        MentorFeedbackRequest request = new MentorFeedbackRequest("전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.");
+        MentorFeedbackRequest request = new MentorFeedbackRequest(
+                "전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.",
+                4.2f
+        );
 
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
@@ -281,12 +288,14 @@ class ReportServiceTest {
         assertThat(response.id()).isEqualTo(10L);
         assertThat(response.reportStatus()).isEqualTo("final");
         assertThat(response.mentorFeedback()).isEqualTo("전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.");
+        assertThat(response.mentorScore()).isEqualTo(4.2f);
         assertThat(report.getReportStatus()).isEqualTo(ReportStatus.FINAL);
+        assertThat(report.getMentorScore()).isEqualTo(4.2f);
     }
 
     @Test
     void addMentorFeedback_세션없음_예외() {
-        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백");
+        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
 
         given(sessionRepository.findById(999L)).willReturn(Optional.empty());
 
@@ -298,7 +307,7 @@ class ReportServiceTest {
 
     @Test
     void addMentorFeedback_멘토아닌_멤버_접근_예외() {
-        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백");
+        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
 
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
 
@@ -310,7 +319,7 @@ class ReportServiceTest {
 
     @Test
     void addMentorFeedback_리포트없음_예외() {
-        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백");
+        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
 
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(reportRepository.findByInterviewSession(session)).willReturn(Optional.empty());

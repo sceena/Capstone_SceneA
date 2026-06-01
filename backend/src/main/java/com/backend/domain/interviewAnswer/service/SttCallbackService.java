@@ -1,5 +1,6 @@
 package com.backend.domain.interviewAnswer.service;
 
+import com.backend.domain.ai.client.SttTranscriptNormalizer;
 import com.backend.domain.interviewAnswer.dto.request.SttCallbackRequest;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
@@ -20,6 +21,7 @@ public class SttCallbackService {
 
     private final InterviewAnswerRepository answerRepository;
     private final InterviewQuestionRepository questionRepository;
+    private final SttTranscriptNormalizer sttTranscriptNormalizer;
 
     public void handleCallback(SttCallbackRequest request) {
         if (request.questionId() != null) {
@@ -32,7 +34,7 @@ public class SttCallbackService {
 
         if ("COMPLETED".equals(request.status())) {
             answer.completeStt(
-                    request.text(),
+                    sttTranscriptNormalizer.normalize(request.text()),
                     request.model(),
                     request.durationSec(),
                     request.audioQualityStatus(),
@@ -53,7 +55,7 @@ public class SttCallbackService {
 
         if ("COMPLETED".equals(request.status())) {
             question.completeStt(
-                    request.text(),
+                    sttTranscriptNormalizer.normalize(request.text()),
                     request.model(),
                     request.durationSec(),
                     request.audioQualityStatus(),

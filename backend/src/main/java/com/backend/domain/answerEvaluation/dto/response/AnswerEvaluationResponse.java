@@ -9,8 +9,11 @@ import java.util.List;
 public record AnswerEvaluationResponse(
         Long id,
         @JsonProperty("answer_id") Long answerId,
+        @JsonProperty("question_id") Long questionId,
+        @JsonProperty("mentee_id") Long menteeId,
         @JsonProperty("question_text") String questionText,
         @JsonProperty("answer_text") String answerText,
+        @JsonProperty("audio_url") String audioUrl,
         @JsonProperty("ai_reasoning") String aiReasoning,
         @JsonProperty("ai_score") Float aiScore,
         @JsonProperty("ai_strengths") List<String> aiStrengths,
@@ -29,8 +32,11 @@ public record AnswerEvaluationResponse(
         return new AnswerEvaluationResponse(
                 evaluation.getId(),
                 evaluation.getInterviewAnswer().getId(),
+                evaluation.getInterviewAnswer().getInterviewQuestion().getId(),
+                evaluation.getInterviewAnswer().getMember().getId(),
                 evaluation.getQuestionText(),
                 evaluation.getAnswerText(),
+                evaluation.getInterviewAnswer().getAudioUrl(),
                 evaluation.getAiReasoning(),
                 evaluation.getAiScore(),
                 jsonMapper.fromJson(evaluation.getAiStrengthsJson()),

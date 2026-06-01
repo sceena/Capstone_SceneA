@@ -9,6 +9,8 @@ import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.repository.MemberRepository;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
+import com.backend.domain.jobPosting.entity.JobPosting;
+import com.backend.domain.jobPosting.repository.JobPostingRepository;
 import com.backend.domain.reservation.dto.request.ReservationAcceptRequest;
 import com.backend.domain.reservation.dto.request.ReservationRequest;
 import com.backend.domain.reservation.dto.response.MenteeReservationResponse;
@@ -39,6 +41,7 @@ public class ReservationService {
     private final InterviewSessionRepository interviewSessionRepository;
     private final SessionParticipantRepository participantRepository;
     private final ResumeRepository resumeRepository;
+    private final JobPostingRepository jobPostingRepository;
 
     public List<ReservationSummaryResponse> getMentorReservations(Long mentorId, ReservationStatus status) {
         Member mentor = memberRepository.findById(mentorId)
@@ -108,6 +111,10 @@ public class ReservationService {
                 .interviewSession(session)
                 .resumeContent(request.resumeContent())
                 .requestNote(request.requestNote())
+                .jobPostingRawText(request.jobPostingRawText())
+                .jobPostingUrl(request.jobPostingUrl())
+                .jobPostingCompany(request.jobPostingCompany())
+                .jobPostingJobCategory(request.jobPostingJobCategory())
                 .build();
 
         Reservation saved = reservationRepository.save(reservation);
@@ -142,6 +149,7 @@ public class ReservationService {
                 if (session == null) {
                     session = InterviewSession.builder()
                             .mentor(mentor)
+                            .jobCategory(blankToNull(reservation.getJobPostingJobCategory()))
                             .scheduledAt(reservation.getMentorAvailability().getStartTime())
                             .build();
                     interviewSessionRepository.save(session);
@@ -152,6 +160,7 @@ public class ReservationService {
             }
             ensureMenteeParticipant(session, reservation.getMentee());
             saveResumeIfPresent(session, reservation.getMentee(), reservation.getResumeContent());
+            saveJobPostingIfPresent(session, reservation);
         } else {
             reservation.cancel();
             MentorAvailability availability = reservation.getMentorAvailability();
@@ -192,5 +201,33 @@ public class ReservationService {
                 .member(mentee)
                 .content(resumeContent)
                 .build());
+    }
+
+    private void saveJobPostingIfPresent(InterviewSession session, Reservation reservation) {
+        String rawText = reservation.getJobPostingRawText();
+        if (rawText == null || rawText.isBlank()) {
+            return;
+        }
+
+        if (jobPostingRepository.findByInterviewSession(session).isPresent()) {
+            return;
+        }
+
+        jobPostingRepository.save(JobPosting.builder()
+                .interviewSession(session)
+                .company(defaultIfBlank(reservation.getJobPostingCompany(), "지원 기업"))
+                .jobCategory(defaultIfBlank(reservation.getJobPostingJobCategory(),
+                        defaultIfBlank(session.getJobCategory(), "지원 직무")))
+                .rawText(rawText.trim())
+                .url(blankToNull(reservation.getJobPostingUrl()))
+                .build());
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

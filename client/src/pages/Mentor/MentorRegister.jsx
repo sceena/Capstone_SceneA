@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import useAuthStore from "../../store/authStore";
+import useAuthStore, { clearAuthUser } from "../../store/authStore";
 import { createMentorAvailability, deleteMentorAvailability, getMentorAvailabilities } from "../../api/reservations";
 import { getMyProfile, updateMyProfile } from "../../api/users";
 
@@ -109,29 +109,45 @@ const LogoIcon = ({ size=26, color=C.white }) => (
 );
 
 /* ── 헤더 ── */
-const Header = ({ userName }) => (
-  <header style={{ background: C.white, padding: "0 5%", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
-    <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: C.primaryGrad, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-          </svg>
+const Header = ({ userName, accessToken }) => {
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } }); } catch {}
+    clearAuthUser(); navigate("/");
+  };
+  return (
+    <header style={{ background: C.white, padding: "0 5%", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
+      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: C.primaryGrad, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>Scene<span style={{ color: C.navy }}>A</span></span>
         </div>
-        <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>Scene<span style={{ color: C.navy }}>A</span></span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-        {[{l:"대시보드",to:"/dashboard/mentor"},{l:"멘토 탐색",to:"/mentor/search"},{l:"마이페이지",to:"/mentor/mypage"}].map((x,i)=>(
-          <Link key={i} to={x.to} style={{ fontSize: 14, color: C.textSub, textDecoration: "none", padding: "6px 14px", borderRadius: 8, transition: "all 0.15s" }}
+        {/* 우측: 네비게이션 + 로그아웃 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {[
+            { l: "대시보드", to: "/dashboard/mentor" },
+            { l: "멘토 탐색", to: "/mentor/search" },
+            { l: "마이페이지", to: "/mentor/mypage" },
+          ].map((x, i) => (
+            <Link key={i} to={x.to} style={{ fontSize: 14, color: C.textSub, textDecoration: "none", padding: "6px 14px", borderRadius: 8, transition: "all 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; }}
+            >{x.l}</Link>
+          ))}
+          <div style={{ width: 1, height: 24, background: C.border, margin: "0 8px" }} />
+          <button onClick={handleLogout} style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
             onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; }}
-          >{x.l}</Link>
-        ))}
-      </div>
-      <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{userName} 멘토</p>
-    </nav>
-  </header>
-);
+          >로그아웃</button>
+        </div>
+      </nav>
+    </header>
+  );
+};
 
 /* ── 사이드바 단계 ── */
 const Sidebar = ({ current }) => {
@@ -542,6 +558,29 @@ export default function MentorInfoRegister() {
   useEffect(() => {
     getMyProfile()
       .then(profile => {
+        const getTag = (category) => profile.tags?.find(t => t.category === category)?.name || "";
+        const techStackTags = (profile.tags || []).filter(t => t.category === "기술스택").map(t => t.name);
+
+        const careerStr = getTag("경력");
+        let yearsStr = "";
+        if (careerStr) {
+          const exact = careerStr.match(/^(\d+)년$/);
+          const range = careerStr.match(/^(\d+)[~-](\d+)년/);
+          if (exact) yearsStr = exact[1];
+          else if (range) yearsStr = range[1];
+          else if (careerStr === "1년 미만") yearsStr = "0";
+          else if (careerStr === "10년 이상") yearsStr = "10";
+        }
+
+        setD1(prev => ({
+          ...prev,
+          company:   getTag("소속기업") || prev.company,
+          job:       getTag("직무")     || prev.job,
+          years:     yearsStr           || prev.years,
+          techStack: techStackTags.length > 0 ? techStackTags : prev.techStack,
+          bio:       profile.bio        || prev.bio,
+        }));
+
         const kept = (profile.tags || [])
           .filter(t => t.category === "코칭유형" || t.category === "집중항목")
           .map(t => ({ name: t.name, category: t.category }));
@@ -631,7 +670,7 @@ export default function MentorInfoRegister() {
         }
       `}</style>
 
-      <Header userName={userName}/>
+      <Header userName={userName} accessToken={user?.accessToken}/>
 
       {/* 페이지 타이틀 */}
       <div style={{ background:C.white, borderBottom:`1px solid ${C.border}`, padding:"14px 5%" }}>

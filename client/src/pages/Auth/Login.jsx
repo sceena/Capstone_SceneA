@@ -154,16 +154,17 @@ export default function Login() {
       const { access_token, refresh_token } = await res.json();
       const role = parseTokenRole(access_token) || "mentee";
       let name = email.split("@")[0];
+      let profileData = null;
       try {
         const profileRes = await fetch("/api/users/me", {
           headers: { Authorization: `Bearer ${access_token}` },
         });
         if (profileRes.ok) {
-          const profile = await profileRes.json();
-          if (profile.name) name = profile.name;
+          profileData = await profileRes.json();
+          if (profileData.name) name = profileData.name;
         }
       } catch {}
-      setAuthUser({ role, email, name, accessToken: access_token, refreshToken: refresh_token });
+      setAuthUser({ role, email, name, accessToken: access_token, refreshToken: refresh_token, profileData });
       navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee");
     } catch {
       setError("서버에 연결할 수 없습니다. 백엔드를 실행한 뒤 다시 로그인해 주세요.");

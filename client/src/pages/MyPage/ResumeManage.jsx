@@ -49,6 +49,7 @@ const Header = ({ userName, accessToken }) => {
             Scene<span style={{ color: C.primary }}>A</span>
           </span>
         </div>
+        {/* 우측: 네비게이션 + 로그아웃 */}
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           {[
             { label: "대시보드", to: "/dashboard/mentee" },
@@ -63,19 +64,7 @@ const Header = ({ userName, accessToken }) => {
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; }}
             >{label}</Link>
           ))}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%", background: C.primaryGrad,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 2px 8px rgba(13,34,64,0.3)",
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.white }}>{initials}</span>
-            </div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: 0 }}>{userName}님</p>
-          </div>
-          <div style={{ width: 1, height: 24, background: C.border }} />
+          <div style={{ width: 1, height: 24, background: C.border, margin: "0 8px" }} />
           <button onClick={handleLogout} style={{
             padding: "7px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
             background: "transparent", color: C.textSub, fontSize: 13,

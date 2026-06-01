@@ -77,7 +77,7 @@ const Header = ({ userName, accessToken }) => {
           </span>
         </div>
 
-        {/* 네비게이션 */}
+        {/* 우측: 네비게이션 + 로그아웃 */}
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           {[
             { label: "대시보드", to: "/dashboard/mentor", active: true },
@@ -100,25 +100,7 @@ const Header = ({ userName, accessToken }) => {
               {label}
             </Link>
           ))}
-        </div>
-
-        {/* 유저 영역 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%",
-              background: C.primaryGrad,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 2px 8px rgba(66,99,235,0.3)",
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.white }}>{initials}</span>
-            </div>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3, margin: 0 }}>{userName} 멘토</p>
-              <p style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.3, margin: 0 }}>Mentor</p>
-            </div>
-          </div>
-          <div style={{ width: 1, height: 24, background: C.border }} />
+          <div style={{ width: 1, height: 24, background: C.border, margin: "0 8px" }} />
           <button onClick={handleLogout} style={{
             padding: "7px 16px",
             borderRadius: 8,

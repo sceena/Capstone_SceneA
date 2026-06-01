@@ -661,11 +661,14 @@ export default function MentorDashboard() {
     }));
 
   const handleAccept = async id => {
+    setRequests(r => r.filter(x => x.id !== id)); // 즉시 제거 → 중복 클릭 불가
     try {
       await respondReservation({ reservationId: id, accepted: true });
-      setRequests(r => r.filter(x => x.id !== id));
       loadSessions();
-    } catch (error) { alert(error?.message || "예약 수락에 실패했습니다."); }
+    } catch (error) {
+      alert(error?.message || "예약 수락에 실패했습니다.");
+      loadReservationRequests();
+    }
   };
   const handleDecline = async id => {
     try {

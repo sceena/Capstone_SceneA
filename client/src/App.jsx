@@ -13,7 +13,6 @@ import InterviewRobby from './pages/Interview/InterviewLobby'
 import MentoringSessionPage from './pages/Interview/MentoringSession'
 import AIReportPage from './pages/Report/AIReport'
 import ReportWaitingPage from './pages/Report/ReportWaiting'
-import MentorFeedbackPage from './pages/Report/MentorFeedback'
 import MentorReviewPage from './pages/Report/MentorReview'
 import FinalReportPage from './pages/Report/FinalReport'
 import ReportGeneratingPage from './pages/Report/ReportGenerating'
@@ -46,7 +45,6 @@ export default function App() {
       <Route path="/dashboard/mentor"        element={<ProtectedRoute role="mentor" element={<MentorDashboard />} />} />
       <Route path="/mentor/register"         element={<ProtectedRoute role="mentor" element={<MentorInfoRegister />} />} />
       <Route path="/mentor/mypage"           element={<ProtectedRoute role="mentor" element={<MentorMyPage />} />} />
-      <Route path="/mentor/feedback/:sessionId" element={<ProtectedRoute role="mentor" element={<MentorFeedbackPage />} />} />
       <Route path="/interview/ready-mentor/:id" element={<ProtectedRoute role="mentor" element={<InterviewRobby role="mentor" />} />} />
       <Route path="/interview/mentor/:id"    element={<ProtectedRoute role="mentor" element={<InterviewSession role="mentor" />} />} />
       <Route path="/mentoring/mentor/:sessionId" element={<ProtectedRoute role="mentor" element={<MentoringSessionPage />} />} />
@@ -60,11 +58,11 @@ export default function App() {
       <Route path="/interview/ready/:id"     element={<ProtectedRoute role="mentee" element={<InterviewRobby role="mentee" />} />} />
       <Route path="/interview/mentee/:id"    element={<ProtectedRoute role="mentee" element={<InterviewSession role="mentee" />} />} />
       <Route path="/mentoring/mentee/:sessionId" element={<ProtectedRoute role="mentee" element={<MentoringSessionPage />} />} />
-      <Route path="/report/generating/:sessionId" element={<ProtectedRoute role="mentee" element={<ReportGeneratingPage />} />} />
+      <Route path="/report/generating/:sessionId" element={<ProtectedRoute element={<ReportGeneratingPage />} />} />
       <Route path="/report/ai/:sessionId"    element={<ProtectedRoute element={<AIReportPage />} />} />
-      <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute role="mentee" element={<ReportWaitingPage />} />} />
-      <Route path="/report/mentor-review/:sessionId" element={<ProtectedRoute role="mentee" element={<MentorReviewPage />} />} />
-      <Route path="/report/final"            element={<ProtectedRoute role="mentee" element={<FinalReportPage />} />} />
+      <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute element={<ReportWaitingPage />} />} />
+      <Route path="/report/mentor-review/:sessionId" element={<ProtectedRoute element={<MentorReviewPage />} />} />
+      <Route path="/report/final"            element={<ProtectedRoute element={<FinalReportPage />} />} />
 
       {/* 로그인만 필요 (공통) */}
       <Route path="/mypage" element={<ProtectedRoute element={<MyPage />} />} />

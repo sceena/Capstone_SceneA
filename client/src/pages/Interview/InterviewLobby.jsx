@@ -72,7 +72,31 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   /* 세션 정보 로드 */
   useEffect(() => {
-    if (!id || !/^\d+$/.test(id)) return;
+    if (!id || !/^\d+$/.test(id)) {
+      /* 더미 데이터 (로컬 UI 확인용) */
+      setSessionData({
+        title: "네이버 백엔드 모의 면접",
+        scheduledAt: "2026-06-01 14:00",
+        sessionType: "1:1 개인 세션",
+        mentorName: "김멘토",
+        mentorInfo: "네이버 5년차 백엔드 엔지니어",
+        menteeGoal: "Spring Boot 기반 경험을 중심으로 면접 준비",
+        participants: [
+          { name: "이멘티", role: "mentee", info: "네이버 지원자" },
+        ],
+      });
+      setResumeContent(
+        "[지원 동기]\n저는 대규모 트래픽 환경에서의 백엔드 개발에 관심이 많아 네이버에 지원하게 되었습니다.\n\n[프로젝트 경험]\nSpring Boot와 JPA를 활용한 카풀 서비스를 개발하였으며, AWS EC2 배포 경험이 있습니다.\n\n[강점]\n문제 해결 능력과 팀 협업 경험을 강점으로 내세울 수 있습니다."
+      );
+      setRecommendedQuestions([
+        { key: "personal-0-0", section: "개인 질문", content: "Spring Boot와 JPA를 사용하면서 N+1 문제를 경험한 적 있나요? 어떻게 해결했나요?", selected: true },
+        { key: "personal-0-1", section: "개인 질문", content: "대용량 트래픽 처리를 위해 어떤 설계 방식을 고려해본 적 있나요?", selected: true },
+        { key: "personal-0-2", section: "개인 질문", content: "카풀 서비스를 개발할 때 가장 어려웠던 기술적 문제는 무엇이었나요?", selected: true },
+        { key: "personal-0-3", section: "개인 질문", content: "AWS EC2 배포 과정에서 발생한 트러블슈팅 경험을 설명해주세요.", selected: true },
+        { key: "personal-0-4", section: "개인 질문", content: "REST API 설계 시 중요하게 생각하는 원칙은 무엇인가요?", selected: false },
+      ]);
+      return;
+    }
     getSession(id).then(setSessionData).catch(() => {});
     if (role === "mentor") {
       getQuestions(id).then(data => {
@@ -428,6 +452,10 @@ export default function InterviewRobby({ role = "mentee" }) {
         body{font-family:'Noto Sans KR',sans-serif;background:#0a1628;color:white}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+        ::-webkit-scrollbar{width:4px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:999px}
+        ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3)}
       `}</style>
 
       <div style={{ width:"100%", height:"100vh", background:"#0a1628", display:"flex", flexDirection:"column", overflow:"hidden" }}>

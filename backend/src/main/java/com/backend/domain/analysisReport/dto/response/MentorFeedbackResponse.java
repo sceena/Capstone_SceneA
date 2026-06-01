@@ -9,6 +9,7 @@ public record MentorFeedbackResponse(
         Long id,
         @JsonProperty("report_status") String reportStatus,
         @JsonProperty("mentor_feedback") String mentorFeedback,
+        @JsonProperty("mentor_score") Float mentorScore,
         @JsonProperty("updated_at") LocalDateTime updatedAt
 ) {
     public static MentorFeedbackResponse from(AnalysisReport report) {
@@ -16,6 +17,7 @@ public record MentorFeedbackResponse(
                 report.getId(),
                 report.getReportStatus().name().toLowerCase(),
                 report.getMentorFeedback(),
+                report.getMentorScore(),
                 report.getModifyDate()
         );
     }

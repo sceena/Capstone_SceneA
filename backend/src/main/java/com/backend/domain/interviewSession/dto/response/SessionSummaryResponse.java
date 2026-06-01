@@ -19,12 +19,49 @@ public record SessionSummaryResponse(
         @JsonProperty("session_type") String sessionType,
         @JsonProperty("scheduled_at") LocalDateTime scheduledAt,
         @JsonProperty("started_at") LocalDateTime startedAt,
-        @JsonProperty("ended_at") LocalDateTime endedAt
+        @JsonProperty("ended_at") LocalDateTime endedAt,
+        @JsonProperty("report_status") String reportStatus,
+        @JsonProperty("ai_score") Float aiScore
 ) {
+    public SessionSummaryResponse(
+            Long id,
+            String title,
+            String jobCategory,
+            SessionStatus status,
+            Long mentorId,
+            String mentorName,
+            String menteeName,
+            String sessionType,
+            LocalDateTime scheduledAt,
+            LocalDateTime startedAt,
+            LocalDateTime endedAt
+    ) {
+        this(id, title, jobCategory, status, mentorId, mentorName, menteeName, sessionType,
+                scheduledAt, startedAt, endedAt, null, null);
+    }
+
+    public static SessionSummaryResponse from(InterviewSession session) {
+        return from(session, List.of(), null, null, null);
+    }
+
+    public static SessionSummaryResponse from(InterviewSession session, List<SessionParticipant> participants) {
+        return from(session, participants, null, null, null);
+    }
+
     public static SessionSummaryResponse from(
             InterviewSession session,
             List<SessionParticipant> participants,
             String sessionType
+    ) {
+        return from(session, participants, sessionType, null, null);
+    }
+
+    public static SessionSummaryResponse from(
+            InterviewSession session,
+            List<SessionParticipant> participants,
+            String sessionType,
+            String reportStatus,
+            Float aiScore
     ) {
         String title = session.getJobCategory() != null && !session.getJobCategory().isBlank()
                 ? session.getJobCategory() + " 모의 면접"
@@ -45,7 +82,9 @@ public record SessionSummaryResponse(
                 sessionType,
                 session.getScheduledAt(),
                 session.getStartedAt(),
-                session.getEndedAt()
+                session.getEndedAt(),
+                reportStatus,
+                aiScore
         );
     }
 }

@@ -1,6 +1,7 @@
 package com.backend.domain.interviewAnswer.controller;
 
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
+import com.backend.domain.interviewAnswer.dto.response.AnswerAudioResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
 import com.backend.domain.interviewAnswer.dto.response.MentorScoreResponse;
@@ -11,7 +12,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.Resource;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -77,16 +77,16 @@ public class AnswerController {
             @ApiResponse(responseCode = "404", description = "답변 없음")
     })
     @GetMapping("/{answerId}/audio")
-    public ResponseEntity<Resource> getAudio(
+    public ResponseEntity<org.springframework.core.io.Resource> getAudio(
             @AuthenticationPrincipal Long memberId,
             @PathVariable Long id,
             @PathVariable Long questionId,
             @PathVariable Long answerId) {
-        Resource resource = answerService.getAudio(memberId, id, questionId, answerId);
+        AnswerAudioResponse audio = answerService.getAudio(memberId, id, questionId, answerId);
         return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
-                .body(resource);
+                .contentType(audio.contentType())
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + audio.filename() + "\"")
+                .body(audio.resource());
     }
 
     @Operation(summary = "멘토 별점 입력", description = "멘토가 답변에 별점을 입력한다. gap이 자동 계산됨.")

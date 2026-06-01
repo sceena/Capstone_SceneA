@@ -12,6 +12,29 @@ from functools import lru_cache
 from pathlib import Path
 from typing import BinaryIO
 
+os.environ.setdefault("USE_SFT", "false")
+os.environ.setdefault("WHISPER_MODEL_SIZE", "medium")
+os.environ.setdefault("WHISPER_DEVICE", "cuda")
+os.environ.setdefault("WHISPER_COMPUTE_TYPE", "float16")
+os.environ.setdefault("QUESTION_GENERATION_TIMEOUT_SEC", "60")
+os.environ.setdefault("QUESTION_GENERATION_MAX_RETRIES", "1")
+
+
+def _print_whisper_runtime_config() -> None:
+    try:
+        import torch
+        cuda_available = torch.cuda.is_available()
+    except Exception:
+        cuda_available = False
+
+    print("cuda:", cuda_available)
+    print("model:", os.environ["WHISPER_MODEL_SIZE"])
+    print("device:", os.environ["WHISPER_DEVICE"])
+    print("compute:", os.environ["WHISPER_COMPUTE_TYPE"])
+
+
+_print_whisper_runtime_config()
+
 
 class SttServiceUnavailable(RuntimeError):
     pass
@@ -56,8 +79,8 @@ def _load_model(model_size: str, device: str, compute_type: str):
 class SttService:
     def __init__(self, model_size: str | None = None):
         self.model_size = model_size or os.environ.get("WHISPER_MODEL_SIZE", "medium")
-        self.device = os.environ.get("WHISPER_DEVICE", "cpu")
-        self.compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
+        self.device = os.environ.get("WHISPER_DEVICE", "cuda")
+        self.compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "float16")
 
     def transcribe(self, filename: str | None, audio_file: BinaryIO) -> SttResult:
         suffix = Path(filename or "answer.wav").suffix or ".wav"

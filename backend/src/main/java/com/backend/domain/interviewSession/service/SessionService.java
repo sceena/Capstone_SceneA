@@ -1,5 +1,7 @@
 package com.backend.domain.interviewSession.service;
 
+import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
 import com.backend.domain.interviewSession.dto.request.ParticipantStatusRequest;
 import com.backend.domain.interviewSession.dto.request.SessionCreateRequest;
 import com.backend.domain.interviewSession.dto.request.SessionStatusRequest;
@@ -35,6 +37,7 @@ public class SessionService {
     private final SessionParticipantRepository participantRepository;
     private final ReservationRepository reservationRepository;
     private final MemberRepository memberRepository;
+    private final AnalysisReportRepository reportRepository;
 
     @Transactional
     public SessionCreateResponse createSession(Long mentorId, SessionCreateRequest request) {
@@ -128,7 +131,14 @@ public class SessionService {
 
     private SessionSummaryResponse toSummary(InterviewSession session) {
         List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
-        return SessionSummaryResponse.from(session, participants, resolveSessionType(session, participants));
+        AnalysisReport report = reportRepository.findByInterviewSession(session).orElse(null);
+        return SessionSummaryResponse.from(
+                session,
+                participants,
+                resolveSessionType(session, participants),
+                report != null ? report.getReportStatus().name().toLowerCase() : null,
+                report != null ? report.getTotalScore() : null
+        );
     }
 
     private String resolveSessionType(InterviewSession session, List<SessionParticipant> participants) {

@@ -32,20 +32,34 @@ available through `POST /api/stt`, and backend-integrated async processing uses
 
 ```bash
 pip install -r requirements-model.txt
+export USE_SFT=false
 export WHISPER_MODEL_SIZE=medium
-export WHISPER_DEVICE=cpu
-export WHISPER_COMPUTE_TYPE=int8
+export WHISPER_DEVICE=cuda
+export WHISPER_COMPUTE_TYPE=float16
+export QUESTION_GENERATION_TIMEOUT_SEC=60
+export QUESTION_GENERATION_MAX_RETRIES=1
 export STT_WORKER_COUNT=1
 ```
 
 `ffmpeg` and `ffprobe` must be installed on the AI server because uploaded
 audio is normalized to 16 kHz mono WAV before transcription.
 
-For GPU serving, configure:
+Runtime check:
 
-```bash
-export WHISPER_DEVICE=cuda
-export WHISPER_COMPUTE_TYPE=float16
+```python
+import os, torch
+
+os.environ["USE_SFT"] = "false"
+os.environ["WHISPER_MODEL_SIZE"] = "medium"
+os.environ["WHISPER_DEVICE"] = "cuda"
+os.environ["WHISPER_COMPUTE_TYPE"] = "float16"
+os.environ["QUESTION_GENERATION_TIMEOUT_SEC"] = "60"
+os.environ["QUESTION_GENERATION_MAX_RETRIES"] = "1"
+
+print("cuda:", torch.cuda.is_available())
+print("model:", os.environ["WHISPER_MODEL_SIZE"])
+print("device:", os.environ["WHISPER_DEVICE"])
+print("compute:", os.environ["WHISPER_COMPUTE_TYPE"])
 ```
 
 Async STT job request:

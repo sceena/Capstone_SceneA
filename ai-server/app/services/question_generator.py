@@ -91,7 +91,7 @@ class QuestionGenerationInvalidResponse(ValueError):
 
 class QuestionGenerator:
     model = "gemini-3-flash-preview"
-    default_max_retries = 2
+    default_max_retries = 1
     max_retry_limit = 3
     retry_delay_sec = 3.0
     thinking_level = "HIGH"
@@ -103,7 +103,7 @@ class QuestionGenerator:
         self.model = os.environ.get("QUESTION_GENERATION_MODEL", self.model)
         self.thinking_level = os.environ.get("QUESTION_GENERATION_THINKING_LEVEL", self.thinking_level).strip()
         self.fake_mode = os.environ.get("QUESTION_GENERATION_FAKE", "").strip().lower() in {"1", "true", "yes", "on"}
-        self.timeout_sec = timeout_sec or float(os.environ.get("QUESTION_GENERATION_TIMEOUT_SEC", "30"))
+        self.timeout_sec = timeout_sec or float(os.environ.get("QUESTION_GENERATION_TIMEOUT_SEC", "60"))
         configured_retries = int(os.environ.get("QUESTION_GENERATION_MAX_RETRIES", str(self.default_max_retries)))
         self.max_retries = min(max(1, configured_retries), self.max_retry_limit)
         configured_workers = int(

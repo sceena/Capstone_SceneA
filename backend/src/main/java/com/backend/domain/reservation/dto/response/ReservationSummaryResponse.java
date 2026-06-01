@@ -19,6 +19,21 @@ public record ReservationSummaryResponse(
         @JsonProperty("request_note") String requestNote,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
+    public ReservationSummaryResponse(
+            Long id,
+            Long sessionId,
+            Long menteeId,
+            String menteeName,
+            Long availabilityId,
+            LocalDateTime scheduledAt,
+            ReservationStatus status,
+            String resumeContent,
+            String requestNote,
+            LocalDateTime createdAt
+    ) {
+        this(id, sessionId, menteeId, menteeName, availabilityId, scheduledAt, 1, status, resumeContent, requestNote, createdAt);
+    }
+
     public static ReservationSummaryResponse from(Reservation reservation) {
         return new ReservationSummaryResponse(
                 reservation.getId(),

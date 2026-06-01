@@ -23,8 +23,14 @@ class ReportComposer:
         "Spring Boot",
         "Java",
         "Redis",
+        "MSSQL",
         "MySQL",
+        "Mongo",
+        "MongoDB",
+        "DB",
         "JPA",
+        "쿼리",
+        "튜닝",
         "성능",
         "장애",
         "모니터링",
@@ -34,6 +40,10 @@ class ReportComposer:
         "보안",
         "AWS",
         "Docker",
+        "예약",
+        "결제",
+        "쿠폰",
+        "빌링",
     ]
 
     def __init__(

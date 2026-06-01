@@ -1,6 +1,7 @@
 package com.backend.domain.answerEvaluation.service;
 
 import com.backend.domain.ai.dto.response.AiQuestionReportResponse;
+import com.backend.domain.analysisReport.dto.request.MentorFeedbackRequest;
 import com.backend.domain.answerEvaluation.dto.request.MentorEvaluationRequest;
 import com.backend.domain.answerEvaluation.dto.response.AnswerEvaluationResponse;
 import com.backend.domain.answerEvaluation.dto.response.EvaluationJsonMapper;
@@ -86,19 +87,34 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
                 .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
         validateAnswerInSession(answer, session);
 
-        AnswerEvaluation evaluation = evaluationRepository.findByInterviewAnswer(answer)
-                .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_EVALUATION_NOT_FOUND));
-
-        evaluation.updateMentorEvaluation(
+        AnswerEvaluation evaluation = saveMentorEvaluation(
+                answer,
                 request.reasoning(),
                 request.score(),
-                toJson(request.strengths()),
-                toJson(request.improvements())
+                request.strengths(),
+                request.improvements()
         );
 
-        answer.updateMentorScore(toFivePointScale(request.score()));
-
         return AnswerEvaluationResponse.from(evaluation, this);
+    }
+
+    @Transactional
+    public void updateMentorEvaluations(
+            Long mentorId,
+            InterviewSession session,
+            List<MentorFeedbackRequest.MentorAnswerEvaluationPayload> payloads
+    ) {
+        if (payloads == null || payloads.isEmpty()) {
+            return;
+        }
+        validateMentorAccess(mentorId, session);
+
+        for (MentorFeedbackRequest.MentorAnswerEvaluationPayload payload : payloads) {
+            InterviewAnswer answer = answerRepository.findById(payload.answerId())
+                    .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
+            validateAnswerInSession(answer, session);
+            saveMentorEvaluation(answer, payload.reasoning(), payload.score(), payload.strengths(), payload.improvements());
+        }
     }
 
     public String exportDpoJsonl() {
@@ -110,6 +126,12 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
             jsonl.append(toJsonLine(toDpoSample(evaluation))).append('\n');
         }
         return jsonl.toString();
+    }
+
+    public List<AnswerEvaluationResponse> getEvaluationResponses(InterviewSession session) {
+        return evaluationRepository.findAllByInterviewSession(session).stream()
+                .map(evaluation -> AnswerEvaluationResponse.from(evaluation, this))
+                .toList();
     }
 
     @Override
@@ -136,6 +158,30 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
         }
         validateAnswerInSession(answer, session);
         return answer;
+    }
+
+    private AnswerEvaluation saveMentorEvaluation(
+            InterviewAnswer answer,
+            String reasoning,
+            Float score,
+            List<String> strengths,
+            List<String> improvements
+    ) {
+        AnswerEvaluation evaluation = evaluationRepository.findByInterviewAnswer(answer)
+                .orElseGet(() -> AnswerEvaluation.builder()
+                        .interviewAnswer(answer)
+                        .questionText(answer.getInterviewQuestion().getContent())
+                        .answerText(answer.getSttText() == null ? "" : answer.getSttText())
+                        .build());
+
+        evaluation.updateMentorEvaluation(
+                reasoning,
+                score,
+                toJson(strengths),
+                toJson(improvements)
+        );
+        answer.updateMentorScore(toFivePointScale(score));
+        return evaluationRepository.save(evaluation);
     }
 
     private void validateMentorAccess(Long mentorId, InterviewSession session) {

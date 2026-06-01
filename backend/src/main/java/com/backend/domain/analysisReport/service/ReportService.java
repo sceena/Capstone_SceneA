@@ -77,7 +77,11 @@ public class ReportService {
         AnalysisReport report = reportRepository.findByInterviewSession(session)
                 .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
-        return ReportResponse.from(report, parseAiReport(report.getRawAiResponseJson()));
+        return ReportResponse.from(
+                report,
+                parseAiReport(report.getRawAiResponseJson()),
+                answerEvaluationService.getEvaluationResponses(session)
+        );
     }
 
     @Transactional
@@ -106,7 +110,11 @@ public class ReportService {
         );
         answerEvaluationService.saveAiDrafts(session, aiResponse.questionReports());
 
-        return ReportResponse.from(reportRepository.save(report), aiResponse);
+        return ReportResponse.from(
+                reportRepository.save(report),
+                aiResponse,
+                answerEvaluationService.getEvaluationResponses(session)
+        );
     }
 
     public FitGapResponse getFitGap(Long memberId, Long sessionId) {
@@ -173,7 +181,8 @@ public class ReportService {
         AnalysisReport report = reportRepository.findByInterviewSession(session)
                 .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
-        report.completeFinal(request.mentorFeedback());
+        answerEvaluationService.updateMentorEvaluations(memberId, session, request.answerEvaluations());
+        report.completeFinal(request.mentorFeedback(), normalizeMentorScore(request.mentorScore()));
 
         return MentorFeedbackResponse.from(report);
     }
@@ -187,6 +196,13 @@ public class ReportService {
         if (!isMentor && !isParticipant) {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
+    }
+
+    private Float normalizeMentorScore(Float mentorScore) {
+        if (mentorScore == null) {
+            return null;
+        }
+        return Math.max(1.0f, Math.min(5.0f, mentorScore));
     }
 
     private AiReportRequest buildAiReportRequest(InterviewSession session) {

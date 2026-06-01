@@ -586,6 +586,10 @@ const getScheduledAt    = s => s.scheduledAt ?? s.scheduled_at ?? "";
 const getSessionTitle   = s => s.title ?? (s.job_category ? `${s.job_category} 모의 면접` : "모의 면접");
 const getMenteeName     = s => s.menteeName ?? s.mentee_name ?? "";
 const getSessionType    = s => s.sessionType ?? s.session_type ?? "1:1 면접";
+const getReservationSessionType = r => {
+  const maxParticipants = Number(r.max_participants ?? r.maxParticipants ?? 1);
+  return maxParticipants > 1 ? "그룹 면접" : "1:1 면접";
+};
 const toDateText        = v => v ? String(v).slice(5, 10).replace("-", ".") : "";
 const toTimeText        = v => v ? String(v).slice(11, 16) : "";
 
@@ -634,7 +638,7 @@ export default function MentorDashboard() {
           message: "면접 신청이 도착했습니다. 신청 일정을 확인한 뒤 수락 또는 거절해주세요.",
           avatarColor: C.primary,
           scheduledAt: r.scheduled_at ?? r.scheduledAt ?? null,
-          sessionType: "1:1 면접",
+          sessionType: getReservationSessionType(r),
           requestedAt: r.created_at ?? r.createdAt ?? null,
           rawData: r,
         })));

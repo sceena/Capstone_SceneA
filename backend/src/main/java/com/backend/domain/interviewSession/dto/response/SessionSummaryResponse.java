@@ -21,11 +21,11 @@ public record SessionSummaryResponse(
         @JsonProperty("started_at") LocalDateTime startedAt,
         @JsonProperty("ended_at") LocalDateTime endedAt
 ) {
-    public static SessionSummaryResponse from(InterviewSession session) {
-        return from(session, List.of());
-    }
-
-    public static SessionSummaryResponse from(InterviewSession session, List<SessionParticipant> participants) {
+    public static SessionSummaryResponse from(
+            InterviewSession session,
+            List<SessionParticipant> participants,
+            String sessionType
+    ) {
         String title = session.getJobCategory() != null && !session.getJobCategory().isBlank()
                 ? session.getJobCategory() + " 모의 면접"
                 : "모의 면접";
@@ -42,7 +42,7 @@ public record SessionSummaryResponse(
                 session.getMentor().getId(),
                 session.getMentor().getName(),
                 menteeName,
-                "1:1 면접",
+                sessionType,
                 session.getScheduledAt(),
                 session.getStartedAt(),
                 session.getEndedAt()

@@ -85,7 +85,7 @@ public class SessionService {
                 })
                 .toList();
 
-        return SessionDetailResponse.of(session, participantInfos);
+        return SessionDetailResponse.of(session, participantInfos, resolveSessionType(session, participants));
     }
 
     public SessionListResponse getMySessions(Long memberId, String status, Pageable pageable) {
@@ -127,7 +127,17 @@ public class SessionService {
     }
 
     private SessionSummaryResponse toSummary(InterviewSession session) {
-        return SessionSummaryResponse.from(session, participantRepository.findAllByInterviewSession(session));
+        List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
+        return SessionSummaryResponse.from(session, participants, resolveSessionType(session, participants));
+    }
+
+    private String resolveSessionType(InterviewSession session, List<SessionParticipant> participants) {
+        boolean groupReservation = reservationRepository.findAllByInterviewSession(session).stream()
+                .anyMatch(r -> r.getMentorAvailability().getMaxParticipants() > 1);
+        long menteeCount = participants.stream()
+                .filter(p -> !p.getMember().getId().equals(session.getMentor().getId()))
+                .count();
+        return groupReservation || menteeCount > 1 ? "그룹 면접" : "1:1 면접";
     }
 
     @Transactional

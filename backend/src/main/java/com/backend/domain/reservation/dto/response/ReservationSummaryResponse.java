@@ -13,6 +13,7 @@ public record ReservationSummaryResponse(
         @JsonProperty("mentee_name") String menteeName,
         @JsonProperty("availability_id") Long availabilityId,
         @JsonProperty("scheduled_at") LocalDateTime scheduledAt,
+        @JsonProperty("max_participants") int maxParticipants,
         ReservationStatus status,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
@@ -24,6 +25,7 @@ public record ReservationSummaryResponse(
                 reservation.getMentee().getName(),
                 reservation.getMentorAvailability().getId(),
                 reservation.getMentorAvailability().getStartTime(),
+                reservation.getMentorAvailability().getMaxParticipants(),
                 reservation.getStatus(),
                 reservation.getCreateDate()
         );

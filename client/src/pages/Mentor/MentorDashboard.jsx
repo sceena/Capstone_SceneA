@@ -255,8 +255,130 @@ const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
   </div>
 );
 
+/* ── 멘티 정보 상세 모달 ── */
+const MenteeDetailModal = ({ request, onClose, onAccept, onDecline }) => {
+  const raw = request.rawData || {};
+
+  // resume_content: 백엔드가 예약 응답에 포함시켜주면 자동 표시
+  const fullContent = raw.resume_content ?? raw.resumeContent ?? raw.content ?? "";
+  const MENTOR_MSG_DIVIDER = "[멘토에게 전달할 내용]";
+  const dividerIdx    = fullContent.indexOf(MENTOR_MSG_DIVIDER);
+  const resumeContent = dividerIdx >= 0 ? fullContent.slice(0, dividerIdx).trim() : fullContent.trim();
+  const mentorMessage = dividerIdx >= 0 ? fullContent.slice(dividerIdx + MENTOR_MSG_DIVIDER.length).trim() : "";
+
+  const dateInfo = request.scheduledAt
+    ? new Date(request.scheduledAt).toLocaleDateString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "미정";
+
+  const infoRows = [
+    { label: "멘티 이름",  value: request.name || "—" },
+    { label: "면접 일정",  value: dateInfo },
+    { label: "세션 유형",  value: request.sessionType || "1:1 면접" },
+    { label: "신청일",     value: request.requestedAt ? new Date(request.requestedAt).toLocaleDateString("ko-KR") : "—" },
+  ];
+
+  const PendingBox = ({ label }) => (
+    <div style={{ textAlign: "center", padding: "36px 0" }}>
+      <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5" strokeLinecap="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </div>
+      <p style={{ fontSize: 13, color: C.textSub, marginBottom: 6 }}>{label}</p>
+      <span style={{ fontSize: 11, background: C.warningLight, color: C.warning, padding: "3px 12px", borderRadius: 99, fontWeight: 600 }}>백엔드 연동 예정</span>
+    </div>
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.48)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: C.white, borderRadius: 20, width: "100%", maxWidth: 520, maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.22)" }}>
+
+        {/* 헤더 */}
+        <div style={{ padding: "22px 28px 18px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: C.primaryGrad, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="5.5" r="2.5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.3"/>
+                <path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: C.text, margin: 0 }}>{request.name || "멘티"} 멘티</h2>
+              <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>면접 신청 정보</p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: "50%", border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.textMuted, fontSize: 16, fontFamily: "inherit" }}>✕</button>
+        </div>
+
+        {/* 콘텐츠 */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px", display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* 신청 기본 정보 */}
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: "0.07em", marginBottom: 10 }}>신청 정보</p>
+            <div style={{ background: C.bg, borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {infoRows.map((r, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: C.textMuted }}>{r.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{r.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 자소서·채용정보 */}
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: "0.07em", marginBottom: 10 }}>자소서 · 채용 정보</p>
+            {resumeContent ? (
+              <div style={{ background: C.bg, borderRadius: 12, padding: "14px 16px" }}>
+                <p style={{ fontSize: 13, color: C.text, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{resumeContent}</p>
+              </div>
+            ) : (
+              <PendingBox label="예약 응답에 resume_content 포함 시 자동 표시됩니다" />
+            )}
+          </div>
+
+          {/* 멘토에게 바라는 점 */}
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: "0.07em", marginBottom: 10 }}>멘토에게 바라는 점</p>
+            {mentorMessage ? (
+              <div style={{ background: C.bg, borderRadius: 12, padding: "14px 16px" }}>
+                <p style={{ fontSize: 13, color: C.text, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{mentorMessage}</p>
+              </div>
+            ) : (
+              <PendingBox label="백엔드 작업 완료 후 자동 표시됩니다" />
+            )}
+          </div>
+        </div>
+
+        {/* 하단 버튼 */}
+        <div style={{ padding: "16px 28px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 10 }}>
+          <button onClick={() => { onDecline(request.id); onClose(); }} style={{
+            flex: 1, padding: "11px", background: "transparent", color: C.textSub,
+            border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#ADB5BD"; e.currentTarget.style.color = C.text; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSub; }}
+          >거절</button>
+          <button onClick={() => { onAccept(request.id); onClose(); }} style={{
+            flex: 2, padding: "11px", background: C.primaryGrad, color: C.white,
+            border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
+            cursor: "pointer", fontFamily: "inherit",
+            boxShadow: "0 4px 12px rgba(66,99,235,0.3)", transition: "opacity 0.15s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
+          >수락하기</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ── 수락 대기 요청 카드 ── */
-const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline, scheduledAt, sessionType, requestedAt, disabled }) => {
+const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline, onDetail, scheduledAt, sessionType, requestedAt, disabled }) => {
   const dateInfo = scheduledAt ? (() => {
     const dt = new Date(scheduledAt);
     const days = ["일","월","화","수","목","금","토"];
@@ -354,6 +476,25 @@ const RequestCard = ({ name, company, message, avatarColor, onAccept, onDecline,
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onDetail} disabled={disabled} style={{
+          flex: 2, padding: "9px",
+          background: C.bg,
+          color: C.primary,
+          border: `1.5px solid ${C.primary}33`,
+          borderRadius: 10,
+          fontSize: 13, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          transition: "all 0.18s",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+        }}
+          onMouseEnter={e => { if (!disabled) { e.currentTarget.style.background = C.primaryLight; e.currentTarget.style.borderColor = C.primary; } }}
+          onMouseLeave={e => { if (!disabled) { e.currentTarget.style.background = C.bg; e.currentTarget.style.borderColor = `${C.primary}33`; } }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          정보 확인하기
+        </button>
         <button onClick={onAccept} disabled={disabled} style={{
           flex: 1, padding: "9px",
           background: disabled ? C.bg : C.primaryGrad,
@@ -479,6 +620,7 @@ export default function MentorDashboard() {
   const [requests, setRequests] = useState([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [requestsError, setRequestsError] = useState("");
+  const [selectedRequest, setSelectedRequest] = useState(null);
 
   const loadReservationRequests = useCallback(() => {
     setRequestsLoading(true);
@@ -494,6 +636,7 @@ export default function MentorDashboard() {
           scheduledAt: r.scheduled_at ?? r.scheduledAt ?? null,
           sessionType: "1:1 면접",
           requestedAt: r.created_at ?? r.createdAt ?? null,
+          rawData: r,
         })));
         setRequestsError("");
       })
@@ -546,6 +689,15 @@ export default function MentorDashboard() {
           .dash-bottom { grid-template-columns: 1fr !important; }
         }
       `}</style>
+
+      {selectedRequest && (
+        <MenteeDetailModal
+          request={selectedRequest}
+          onClose={() => setSelectedRequest(null)}
+          onAccept={id => { handleAccept(id); setSelectedRequest(null); }}
+          onDecline={id => { handleDecline(id); setSelectedRequest(null); }}
+        />
+      )}
 
       <Header userName={userName} accessToken={user?.accessToken}/>
 
@@ -759,6 +911,7 @@ export default function MentorDashboard() {
                   requestedAt={r.requestedAt}
                   onAccept={() => handleAccept(r.id)}
                   onDecline={() => handleDecline(r.id)}
+                  onDetail={() => setSelectedRequest(r)}
                 />
               ))
             ) : (
@@ -811,20 +964,6 @@ export default function MentorDashboard() {
               )}
             </div>
 
-            {upcoming.length > 0 && (
-              <div style={{ display: "flex", gap: 14, marginTop: 16, flexWrap: "wrap" }}>
-                {[
-                  { color: C.primary,  label: "확정" },
-                  { color: C.warning,  label: "대기 중" },
-                  { color: C.border,   label: "미확정" },
-                ].map((leg, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: leg.color }} />
-                    <span style={{ fontSize: 11, color: C.textMuted }}>{leg.label}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </DashCard>
 
         </div>

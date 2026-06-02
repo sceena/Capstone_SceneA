@@ -76,6 +76,21 @@ public class ResumeService {
         return ResumeSaveResponse.from(resume);
     }
 
+    public ResumeSaveResponse getResumeByMentee(Long memberId, Long sessionId, Long menteeId) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+        validateSessionAccess(memberId, session);
+
+        Member mentee = memberRepository.findById(menteeId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        validateMenteeAccess(session, mentee);
+
+        Resume resume = resumeRepository.findByInterviewSessionAndMember(session, mentee)
+                .orElseThrow(() -> new CustomException(ErrorCode.RESUME_NOT_FOUND));
+
+        return ResumeSaveResponse.from(resume);
+    }
+
     public ResumeSkillsResponse getResumeSkills(Long memberId, Long sessionId) {
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
@@ -119,6 +134,10 @@ public class ResumeService {
 
     private void validateSessionAccess(Long memberId, InterviewSession session) {
         boolean isMentor = session.getMentor().getId().equals(memberId);
+        if (isMentor) {
+            return;
+        }
+
         boolean isParticipant = participantRepository
                 .findByInterviewSessionAndMember(session, memberRepository.getReferenceById(memberId))
                 .isPresent();

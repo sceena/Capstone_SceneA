@@ -30,7 +30,10 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Service
@@ -58,11 +61,15 @@ public class QuestionService {
         validateMentorAccess(mentorId, session);
 
         List<QuestionCreateRequest.QuestionItem> items = request.questions();
+        validateQuestionTargets(session, items);
+
         int nextOrderIndex = questionRepository.findAllByInterviewSessionOrderByOrderIndex(session).size();
         List<InterviewQuestion> questions = IntStream.range(0, items.size())
                 .mapToObj(i -> InterviewQuestion.builder()
                         .interviewSession(session)
                         .content(items.get(i).content())
+                        .questionType(items.get(i).questionType())
+                        .candidateId(items.get(i).candidateId())
                         .orderIndex(nextOrderIndex + i)
                         .build())
                 .toList();
@@ -70,6 +77,38 @@ public class QuestionService {
         return questionRepository.saveAll(questions).stream()
                 .map(QuestionCreateResponse::from)
                 .toList();
+    }
+
+    private void validateQuestionTargets(InterviewSession session, List<QuestionCreateRequest.QuestionItem> items) {
+        if (items == null || items.isEmpty()) {
+            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        }
+
+        Set<Long> menteeIds = participantRepository.findAllByInterviewSession(session).stream()
+                .map(participant -> participant.getMember().getId())
+                .filter(memberId -> !Objects.equals(memberId, session.getMentor().getId()))
+                .collect(Collectors.toSet());
+
+        boolean isGroup = menteeIds.size() > 1;
+        for (QuestionCreateRequest.QuestionItem item : items) {
+            if (item.content() == null || item.content().isBlank()) {
+                throw new CustomException(ErrorCode.INVALID_REQUEST);
+            }
+
+            String questionType = item.questionType();
+            if ("COMMON".equals(questionType) && item.candidateId() != null) {
+                throw new CustomException(ErrorCode.INVALID_REQUEST);
+            }
+
+            if ("PERSONAL".equals(questionType)) {
+                if (isGroup && item.candidateId() == null) {
+                    throw new CustomException(ErrorCode.INVALID_REQUEST);
+                }
+                if (item.candidateId() != null && !menteeIds.contains(item.candidateId())) {
+                    throw new CustomException(ErrorCode.INVALID_REQUEST);
+                }
+            }
+        }
     }
 
     @Transactional

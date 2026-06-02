@@ -69,6 +69,91 @@ function getCachedRecommendations(sessionId) {
   }
 }
 
+function getQuestionCandidateId(question) {
+  const value = question?.candidate_id ?? question?.candidateId ?? null;
+  return value == null ? null : Number(value);
+}
+
+function getQuestionType(question) {
+  const explicitType = question?.question_type ?? question?.questionType ?? null;
+  if (explicitType) return String(explicitType).toUpperCase();
+  return getQuestionCandidateId(question) == null ? null : "PERSONAL";
+}
+
+function getParticipantId(participant) {
+  const value = participant?.user_id ?? participant?.userId ?? participant?.id ?? null;
+  return value == null ? null : Number(value);
+}
+
+function getParticipantName(participant) {
+  return participant?.name ?? participant?.nickname ?? participant?.username ?? "멘티";
+}
+
+function getMenteeParticipants(sessionData) {
+  const participants = Array.isArray(sessionData?.participants) ? sessionData.participants : [];
+  const mentees = participants.filter(participant =>
+    String(participant?.role ?? participant?.memberRole ?? "").toLowerCase() === "mentee"
+  );
+
+  if (mentees.length > 0) return mentees;
+  const fallbackName = sessionData?.menteeName ?? sessionData?.mentee_name;
+  return fallbackName ? [{ name: fallbackName, role: "mentee" }] : [];
+}
+
+function groupRecommendedQuestions(questions, sessionData) {
+  const list = Array.isArray(questions) ? questions : [];
+  const mentees = getMenteeParticipants(sessionData);
+  const groups = [];
+  const used = new Set();
+  const common = [];
+
+  list.forEach((question, index) => {
+    if (getQuestionType(question) === "COMMON") {
+      common.push(question);
+      used.add(index);
+    }
+  });
+
+  if (common.length > 0) {
+    groups.push({ key: "common", title: "공통 질문", items: common });
+  }
+
+  mentees.forEach((mentee, menteeIndex) => {
+    const menteeId = getParticipantId(mentee);
+    const items = [];
+    list.forEach((question, questionIndex) => {
+      const candidateId = getQuestionCandidateId(question);
+      if (menteeId != null && candidateId != null && Number(candidateId) === Number(menteeId)) {
+        items.push(question);
+        used.add(questionIndex);
+      }
+    });
+
+    if (items.length > 0) {
+      groups.push({
+        key: `mentee-${menteeId ?? menteeIndex}`,
+        title: `${getParticipantName(mentee)} 개인 질문`,
+        items,
+      });
+    }
+  });
+
+  const ungrouped = list.filter((question, index) => {
+    if (used.has(index)) return false;
+    return getQuestionType(question) === "PERSONAL" || getQuestionType(question) == null;
+  });
+
+  if (ungrouped.length > 0) {
+    groups.push({
+      key: "personal-ungrouped",
+      title: mentees.length === 1 ? `${getParticipantName(mentees[0])} 개인 질문` : "개인 질문",
+      items: ungrouped,
+    });
+  }
+
+  return groups;
+}
+
 function findNextSpokenQuestion(spokenQuestions, answeredQuestionIds) {
   const answered = new Set(answeredQuestionIds.map(String));
   return [...spokenQuestions].reverse().find(question => !answered.has(String(question.id))) || null;
@@ -237,7 +322,7 @@ export default function InterviewSession({ role = "mentee" }) {
   const [ending, setEnding] = useState(false);
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
   const [activeQuestion, setActiveQuestion] = useState(null);
-  const [recommendationsOpen, setRecommendationsOpen] = useState(true);
+  const [recommendationGroupOpen, setRecommendationGroupOpen] = useState({});
   const [spokenQuestions, setSpokenQuestions] = useState([]);
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState([]);
   const questionRecorderRef = useRef(null);
@@ -255,7 +340,23 @@ export default function InterviewSession({ role = "mentee" }) {
   const answerQuestionRef = useRef(null);
 
   /* ── 질문 목록 ── */
+  const [sessionData, setSessionData] = useState(null);
   const [questions, setQuestions] = useState([]);
+  useEffect(() => {
+    if (!id || !/^\d+$/.test(id)) return;
+    let cancelled = false;
+
+    getSession(id)
+      .then(data => {
+        if (!cancelled) setSessionData(data);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   useEffect(() => {
     if (!id || !/^\d+$/.test(id)) return;
     let cancelled = false;
@@ -917,6 +1018,11 @@ export default function InterviewSession({ role = "mentee" }) {
   const answerElapsed = answerTimerStart
     ? Math.max(0, Math.floor((clockNow - new Date(answerTimerStart).getTime()) / 1000))
     : 0;
+  const recommendationGroups = groupRecommendedQuestions(questions, sessionData);
+  const isRecommendationGroupOpen = (key) => recommendationGroupOpen[key] ?? true;
+  const toggleRecommendationGroup = (key) => {
+    setRecommendationGroupOpen(prev => ({ ...prev, [key]: !(prev[key] ?? true) }));
+  };
 
   return (
     <>
@@ -1201,34 +1307,66 @@ export default function InterviewSession({ role = "mentee" }) {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                     <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#F59E0B", textTransform: "uppercase" }}>AI 추천 질문</p>
-                    <button type="button" onClick={() => setRecommendationsOpen(v => !v)} style={{
-                      border: "1px solid rgba(245,158,11,0.3)", background: recommendationsOpen ? "rgba(245,158,11,0.12)" : "transparent",
-                      color: "#F59E0B", borderRadius: 99, padding: "3px 10px", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                    }}>
-                      {recommendationsOpen ? "접기" : "보기"}
-                    </button>
                   </div>
-                  {recommendationsOpen && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {questions.length > 0 ? questions.map((q, i) => (
-                        <div key={q.id ?? i} style={{
-                          background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 12px",
-                          border: "1px solid rgba(255,255,255,0.08)", borderLeft: "2px solid #F59E0B",
-                          cursor: "default", transition: "background 0.15s",
-                        }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(245,158,11,0.08)"}
-                          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                        >
-                          <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", display: "block", marginBottom: 4, letterSpacing: "0.05em" }}>추천 {i + 1}</span>
-                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.65 }}>{q.content}</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {recommendationGroups.length > 0 ? recommendationGroups.map(group => {
+                      const open = isRecommendationGroupOpen(group.key);
+                      const isCommonGroup = group.key === "common";
+                      const accentColor = isCommonGroup ? "#34D399" : "#F59E0B";
+                      const openBackground = isCommonGroup ? "rgba(52,211,153,0.1)" : "rgba(245,158,11,0.1)";
+                      const closedBackground = isCommonGroup ? "rgba(52,211,153,0.04)" : "rgba(255,255,255,0.02)";
+                      const itemHoverBackground = isCommonGroup ? "rgba(52,211,153,0.08)" : "rgba(245,158,11,0.08)";
+                      return (
+                        <div key={group.key} style={{
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: 10,
+                          overflow: "hidden",
+                          background: "rgba(255,255,255,0.035)",
+                        }}>
+                          <button type="button" onClick={() => toggleRecommendationGroup(group.key)} style={{
+                            width: "100%",
+                            border: "none",
+                            borderBottom: open ? "1px solid rgba(255,255,255,0.07)" : "none",
+                            background: open ? openBackground : closedBackground,
+                            color: accentColor,
+                            padding: "9px 11px",
+                            fontFamily: "inherit",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 8,
+                          }}>
+                            <span style={{ fontSize: 11, fontWeight: 800 }}>{group.title}</span>
+                            <span style={{ fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.55)" }}>
+                              {group.items.length}개 · {open ? "접기" : "보기"}
+                            </span>
+                          </button>
+                          {open && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 8 }}>
+                              {group.items.map((q, i) => (
+                                <div key={q.id ?? `${group.key}-${i}`} style={{
+                                  background: "rgba(255,255,255,0.04)", borderRadius: 9, padding: "10px 12px",
+                                  border: "1px solid rgba(255,255,255,0.08)", borderLeft: `2px solid ${accentColor}`,
+                                  cursor: "default", transition: "background 0.15s",
+                                }}
+                                  onMouseEnter={e => e.currentTarget.style.background = itemHoverBackground}
+                                  onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                                >
+                                  <span style={{ fontSize: 9, fontWeight: 700, color: accentColor, display: "block", marginBottom: 4, letterSpacing: "0.05em" }}>추천 {i + 1}</span>
+                                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.65 }}>{q.content}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )) : (
-                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>
-                          준비 화면에서 생성한 AI 추천 질문이 여기에 표시됩니다.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                      );
+                    }) : (
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>
+                        준비 화면에서 생성한 AI 추천 질문이 여기에 표시됩니다.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* 실제 질문 기록 */}

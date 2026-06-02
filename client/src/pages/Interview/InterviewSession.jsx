@@ -29,6 +29,14 @@ function getAudioRecorderOptions() {
   return mimeType ? { mimeType } : {};
 }
 
+const SPEECH_AUDIO_CONSTRAINTS = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  channelCount: 1,
+  sampleRate: { ideal: 48000 },
+};
+
 function createAudioBlob(chunks) {
   const type = chunks.find(chunk => chunk?.type)?.type || "audio/webm";
   return new Blob(chunks, { type });
@@ -757,7 +765,7 @@ export default function InterviewSession({ role = "mentee" }) {
       answerStartRef.current = new Date().toISOString();
       answerQuestionRef.current = activeQuestion;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: SPEECH_AUDIO_CONSTRAINTS });
         audioChunksRef.current = [];
         const recorder = new MediaRecorder(stream, getAudioRecorderOptions());
         recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
@@ -849,7 +857,7 @@ export default function InterviewSession({ role = "mentee" }) {
     try {
       const locked = await requestRecordingLock("QUESTION");
       if (!locked) return;
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: SPEECH_AUDIO_CONSTRAINTS });
       questionCancelRef.current = false;
       questionStartRef.current = new Date().toISOString();
       questionAudioChunksRef.current = [];

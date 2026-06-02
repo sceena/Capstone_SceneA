@@ -1,7 +1,8 @@
 package com.backend.domain.interviewQuestion.service;
 
-import com.backend.domain.ai.client.AiSttJobClient;
-import com.backend.domain.ai.dto.request.AiSttJobRequest;
+import com.backend.domain.ai.client.AiSttClient;
+import com.backend.domain.ai.client.SttTranscriptNormalizer;
+import com.backend.domain.ai.dto.response.AiSttResponse;
 import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewQuestion.dto.request.QuestionCreateRequest;
 import com.backend.domain.interviewQuestion.dto.request.QuestionUpdateRequest;
@@ -47,13 +48,11 @@ public class QuestionService {
     private final SessionParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
-    private final AiSttJobClient aiSttJobClient;
+    private final AiSttClient aiSttClient;
+    private final SttTranscriptNormalizer sttTranscriptNormalizer;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
-
-    @Value("${app.callback-base-url:http://localhost:8080}")
-    private String callbackBaseUrl;
 
     @Transactional
     public List<QuestionCreateResponse> createQuestions(Long mentorId, Long sessionId, QuestionCreateRequest request) {
@@ -126,7 +125,7 @@ public class QuestionService {
         String key = uploadToS3(audio);
         question.updateAudio(key);
         InterviewQuestion saved = questionRepository.save(question);
-        submitQuestionSttJob(saved);
+        transcribeQuestion(saved, audio);
         return QuestionCreateResponse.from(saved);
     }
 
@@ -225,15 +224,18 @@ public class QuestionService {
         }
     }
 
-    private void submitQuestionSttJob(InterviewQuestion question) {
+    private void transcribeQuestion(InterviewQuestion question, MultipartFile audio) {
         question.updateSttStatus(SttStatus.PROCESSING);
         try {
-            aiSttJobClient.submitJob(AiSttJobRequest.forQuestion(
-                    question.getId(),
-                    question.getAudioUrl(),
-                    callbackBaseUrl + "/api/internal/stt/callback"
-            ));
-            log.info("Question STT job submitted for questionId={}", question.getId());
+            AiSttResponse response = aiSttClient.transcribe(audio);
+            question.completeStt(
+                    sttTranscriptNormalizer.normalize(response.text()),
+                    response.model(),
+                    response.durationSec(),
+                    response.audioQualityStatus(),
+                    response.audioQualityMessage()
+            );
+            log.info("Question STT completed synchronously for questionId={}", question.getId());
         } catch (RuntimeException e) {
             question.failStt("AI STT server request failed");
             log.warn("Failed to transcribe questionId={}; sttStatus set to FAILED", question.getId(), e);

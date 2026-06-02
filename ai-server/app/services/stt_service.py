@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -34,6 +35,8 @@ def _print_whisper_runtime_config() -> None:
 
 
 _print_whisper_runtime_config()
+
+logger = logging.getLogger(__name__)
 
 
 TECH_INTERVIEW_INITIAL_PROMPT = """
@@ -196,10 +199,13 @@ class SttService:
         bucket: str | None = None,
     ) -> None:
         id_payload = {"answer_id": answer_id} if answer_id is not None else {"question_id": question_id}
+        target_label = f"answer_id={answer_id}" if answer_id is not None else f"question_id={question_id}"
+        logger.info("STT job started for %s audio_key=%s callback_url=%s", target_label, audio_key, callback_url)
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 local_path = self._download_s3_audio(audio_key, Path(temp_dir), bucket)
                 result = self.transcribe_path(local_path)
+            logger.info("STT job completed for %s text_length=%s", target_label, len(result.text or ""))
             self._send_callback(
                 callback_url,
                 {
@@ -214,15 +220,21 @@ class SttService:
                     "segments": [segment.__dict__ for segment in result.segments],
                 },
             )
+            logger.info("STT callback sent for %s", target_label)
         except Exception as exc:
-            self._send_callback(
-                callback_url,
-                {
-                    **id_payload,
-                    "status": "FAILED",
-                    "error_message": str(exc),
-                },
-            )
+            logger.exception("STT job failed for %s: %s", target_label, exc)
+            try:
+                self._send_callback(
+                    callback_url,
+                    {
+                        **id_payload,
+                        "status": "FAILED",
+                        "error_message": str(exc),
+                    },
+                )
+                logger.info("STT failure callback sent for %s", target_label)
+            except Exception as callback_exc:
+                logger.exception("STT failure callback failed for %s: %s", target_label, callback_exc)
 
     def _convert_to_wav(self, audio_path: Path, wav_path: Path) -> None:
         self._run_command(

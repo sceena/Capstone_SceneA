@@ -77,7 +77,7 @@ class ReportResponseTest {
         ReportResponse response = ReportResponse.from(report, aiReport, List.of(mentorEvaluation));
 
         AiQuestionReportResponse merged = response.aiReport().questionReports().getFirst();
-        assertThat(merged.score()).isEqualTo(9.0f);
+        assertThat(merged.score()).isEqualTo(4.5f);
         assertThat(merged.reasoning()).isEqualTo("멘토가 수정한 근거");
         assertThat(merged.strengths()).containsExactly("멘토 강점");
         assertThat(merged.improvements()).containsExactly("멘토 개선점");

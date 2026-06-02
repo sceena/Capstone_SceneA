@@ -2,6 +2,7 @@ package com.backend.domain.member.service;
 
 import com.backend.domain.analysisReport.entity.AnalysisReport;
 import com.backend.domain.analysisReport.entity.MenteeReportFeedback;
+import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
 import com.backend.domain.analysisReport.repository.MenteeReportFeedbackRepository;
 import com.backend.domain.interviewSession.entity.InterviewSession;
@@ -116,7 +117,11 @@ public class UserService {
         List<InterviewSession> sessions = sessionPage.getContent();
         Map<Long, AnalysisReport> reportMap = sessions.isEmpty() ? Map.of() :
                 reportRepository.findAllByInterviewSessionIn(sessions).stream()
-                        .collect(Collectors.toMap(r -> r.getInterviewSession().getId(), r -> r));
+                        .collect(Collectors.toMap(
+                                r -> r.getInterviewSession().getId(),
+                                r -> r,
+                                (a, b) -> b.getReportStatus() == ReportStatus.FINAL ? b : a
+                        ));
         Map<Long, MenteeReportFeedback> feedbackMap = sessions.isEmpty() || member.getRole() == Role.MENTOR ? Map.of() :
                 menteeReportFeedbackRepository.findAllByInterviewSessionIn(sessions).stream()
                         .filter(feedback -> feedback.getMentee().getId().equals(memberId))

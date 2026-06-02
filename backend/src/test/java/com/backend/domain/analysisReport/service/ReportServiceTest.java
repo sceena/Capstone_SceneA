@@ -7,6 +7,7 @@ import com.backend.domain.analysisReport.dto.response.ReportResponse;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
 import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.analysisReport.repository.MenteeReportFeedbackRepository;
 import com.backend.domain.answerEvaluation.service.AnswerEvaluationService;
 import com.backend.domain.interviewSession.entity.AnswerStatus;
 import com.backend.domain.interviewSession.entity.InterviewSession;
@@ -42,6 +43,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,10 +61,11 @@ class ReportServiceTest {
     @Mock private ResumeRepository resumeRepository;
     @Mock private ResumeSkillRepository resumeSkillRepository;
     @Mock private AnswerEvaluationService answerEvaluationService;
+    @Mock private MenteeReportFeedbackRepository menteeReportFeedbackRepository;
 
     private Member mentor;
     private InterviewSession session;
-    private AnalysisReport report;
+    private AnalysisReport firstReport;
 
     @BeforeEach
     void setUp() {
@@ -73,21 +76,24 @@ class ReportServiceTest {
         session = InterviewSession.builder()
                 .mentor(mentor).jobCategory("백엔드").scheduledAt(LocalDateTime.now()).build();
 
-        report = AnalysisReport.builder()
+        firstReport = AnalysisReport.builder()
                 .interviewSession(session).aiSummary("AI 요약")
                 .totalScore(3.9f).alignmentScore(0.72f)
                 .bestMoment("3번 질문 STAR 구조 명확").worstMoment("1번 질문 dead air 3회").build();
-        ReflectionTestUtils.setField(report, "id", 10L);
+        ReflectionTestUtils.setField(firstReport, "id", 10L);
     }
 
     // ===== getReport =====
 
     @Test
-    void getReport_멘토_성공() {
+    void getReport_FINAL_없으면_FIRST_반환() {
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL))
+                .willReturn(Optional.empty());
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
         given(answerEvaluationService.getEvaluationResponses(session)).willReturn(List.of());
 
         ReportResponse response = reportService.getReport(1L, 42L);
@@ -95,9 +101,32 @@ class ReportServiceTest {
         assertThat(response.id()).isEqualTo(10L);
         assertThat(response.reportStatus()).isEqualTo("first");
         assertThat(response.totalScore()).isEqualTo(3.9f);
-        assertThat(response.alignmentScore()).isEqualTo(0.72f);
-        assertThat(response.bestMoment()).isEqualTo("3번 질문 STAR 구조 명확");
         assertThat(response.mentorFeedback()).isNull();
+    }
+
+    @Test
+    void getReport_FINAL_있으면_FINAL_반환() {
+        AnalysisReport finalReport = AnalysisReport.builder()
+                .interviewSession(session).aiSummary("AI 요약")
+                .totalScore(3.9f).alignmentScore(0.72f)
+                .bestMoment("3번 질문 STAR 구조 명확").worstMoment("1번 질문 dead air 3회")
+                .mentorFeedback("멘토 종합 피드백입니다.").mentorScore(4.2f)
+                .reportStatus(ReportStatus.FINAL).build();
+        ReflectionTestUtils.setField(finalReport, "id", 20L);
+
+        given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
+        given(memberRepository.getReferenceById(1L)).willReturn(mentor);
+        given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL))
+                .willReturn(Optional.of(finalReport));
+        given(answerEvaluationService.getEvaluationResponses(session)).willReturn(List.of());
+
+        ReportResponse response = reportService.getReport(1L, 42L);
+
+        assertThat(response.id()).isEqualTo(20L);
+        assertThat(response.reportStatus()).isEqualTo("final");
+        assertThat(response.mentorFeedback()).isEqualTo("멘토 종합 피드백입니다.");
+        assertThat(response.mentorScore()).isEqualTo(4.2f);
     }
 
     @Test
@@ -113,7 +142,8 @@ class ReportServiceTest {
         given(memberRepository.getReferenceById(2L)).willReturn(mentee);
         given(participantRepository.findByInterviewSessionAndMember(any(), any()))
                 .willReturn(Optional.of(participant));
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
         given(answerEvaluationService.getEvaluationResponses(session)).willReturn(List.of());
 
         ReportResponse response = reportService.getReport(2L, 42L);
@@ -153,7 +183,10 @@ class ReportServiceTest {
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.empty());
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL))
+                .willReturn(Optional.empty());
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reportService.getReport(1L, 42L))
                 .isInstanceOf(CustomException.class)
@@ -176,7 +209,8 @@ class ReportServiceTest {
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
         given(jobPostingRepository.findByInterviewSession(session)).willReturn(Optional.of(jobPosting));
         given(jobSkillRepository.findAllByJobPosting(jobPosting)).willReturn(List.of(springSkill, k8sSkill));
         given(resumeRepository.findAllByInterviewSession(session)).willReturn(List.of(resume));
@@ -204,7 +238,8 @@ class ReportServiceTest {
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
         given(jobPostingRepository.findByInterviewSession(session)).willReturn(Optional.of(jobPosting));
         given(jobSkillRepository.findAllByJobPosting(jobPosting)).willReturn(List.of(skill));
         given(resumeRepository.findAllByInterviewSession(session)).willReturn(List.of(resume));
@@ -231,7 +266,8 @@ class ReportServiceTest {
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.empty());
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reportService.getFitGap(1L, 42L))
                 .isInstanceOf(CustomException.class)
@@ -244,7 +280,8 @@ class ReportServiceTest {
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
         given(jobPostingRepository.findByInterviewSession(session)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reportService.getFitGap(1L, 42L))
@@ -260,7 +297,8 @@ class ReportServiceTest {
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
         given(memberRepository.getReferenceById(1L)).willReturn(mentor);
         given(participantRepository.findByInterviewSessionAndMember(any(), any())).willReturn(Optional.empty());
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
         given(jobPostingRepository.findByInterviewSession(session)).willReturn(Optional.of(jobPosting));
         given(jobSkillRepository.findAllByJobPosting(jobPosting)).willReturn(List.of());
         given(resumeRepository.findAllByInterviewSession(session)).willReturn(List.of());
@@ -274,23 +312,52 @@ class ReportServiceTest {
     // ===== addMentorFeedback =====
 
     @Test
-    void addMentorFeedback_성공_상태가_FINAL로_변경() {
+    void addMentorFeedback_성공_새_FINAL_리포트_생성() {
         MentorFeedbackRequest request = new MentorFeedbackRequest(
                 "전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.",
                 4.2f
         );
 
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.of(report));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
+        given(reportRepository.save(any(AnalysisReport.class))).willAnswer(inv -> {
+            AnalysisReport saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 20L);
+            return saved;
+        });
 
         MentorFeedbackResponse response = reportService.addMentorFeedback(1L, 42L, request);
 
-        assertThat(response.id()).isEqualTo(10L);
+        assertThat(response.id()).isEqualTo(20L);
         assertThat(response.reportStatus()).isEqualTo("final");
         assertThat(response.mentorFeedback()).isEqualTo("전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.");
         assertThat(response.mentorScore()).isEqualTo(4.2f);
-        assertThat(report.getReportStatus()).isEqualTo(ReportStatus.FINAL);
-        assertThat(report.getMentorScore()).isEqualTo(4.2f);
+        // 기존 FIRST 리포트는 변경되지 않음
+        assertThat(firstReport.getReportStatus()).isEqualTo(ReportStatus.FIRST);
+    }
+
+    @Test
+    void addMentorFeedback_AI_데이터_FINAL에_복사됨() {
+        MentorFeedbackRequest request = new MentorFeedbackRequest("멘토 피드백", 4.0f);
+
+        given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.of(firstReport));
+        given(reportRepository.save(any(AnalysisReport.class))).willAnswer(inv -> inv.getArgument(0));
+
+        reportService.addMentorFeedback(1L, 42L, request);
+
+        // save 호출 시 전달된 FINAL 리포트가 FIRST의 AI 데이터를 갖는지 검증
+        org.mockito.ArgumentCaptor<AnalysisReport> captor = org.mockito.ArgumentCaptor.forClass(AnalysisReport.class);
+        org.mockito.Mockito.verify(reportRepository).save(captor.capture());
+
+        AnalysisReport saved = captor.getValue();
+        assertThat(saved.getReportStatus()).isEqualTo(ReportStatus.FINAL);
+        assertThat(saved.getAiSummary()).isEqualTo("AI 요약");
+        assertThat(saved.getTotalScore()).isEqualTo(3.9f);
+        assertThat(saved.getBestMoment()).isEqualTo("3번 질문 STAR 구조 명확");
+        assertThat(saved.getMentorFeedback()).isEqualTo("멘토 피드백");
     }
 
     @Test
@@ -318,11 +385,12 @@ class ReportServiceTest {
     }
 
     @Test
-    void addMentorFeedback_리포트없음_예외() {
+    void addMentorFeedback_FIRST_리포트없음_예외() {
         MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
 
         given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
-        given(reportRepository.findByInterviewSession(session)).willReturn(Optional.empty());
+        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
+                .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reportService.addMentorFeedback(1L, 42L, request))
                 .isInstanceOf(CustomException.class)

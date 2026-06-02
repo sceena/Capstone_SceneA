@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   createQuestions,
+  deleteQuestion,
   getQuestions,
   getRecommendedQuestions,
   getResume,
@@ -47,6 +48,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [recommendedQuestions, setRecommendedQuestions] = useState([]);
   const [recommendLoading, setRecommendLoading] = useState(false);
   const [recommendSaving, setRecommendSaving] = useState(false);
+  const [deletingQuestionId, setDeletingQuestionId] = useState(null);
   const [recommendError, setRecommendError] = useState("");
   const [resumeContent, setResumeContent] = useState("");
   const [resumeOpen, setResumeOpen] = useState(false);
@@ -100,7 +102,7 @@ export default function InterviewRobby({ role = "mentee" }) {
     getSession(id).then(setSessionData).catch(() => {});
     if (role === "mentor") {
       getQuestions(id).then(data => {
-        setQuestions(normalizeQuestionList(data));
+        setQuestions(normalizeSavedQuestionList(data));
       }).catch(() => {});
     }
     getResume(id).then(data => {
@@ -278,6 +280,13 @@ export default function InterviewRobby({ role = "mentee" }) {
     return [];
   };
 
+  const normalizeSavedQuestionList = (data) =>
+    normalizeQuestionList(data).map(item => ({
+      ...item,
+      content: item.content ?? item.question ?? "",
+      selected: item.selected ?? true,
+    }));
+
   const flattenRecommendedQuestions = (data) => {
     const isGroup = data?.session_type === "GROUP";
     const commonItems = isGroup ? (data?.common_questions ?? []).map((content, index) => ({
@@ -318,24 +327,38 @@ export default function InterviewRobby({ role = "mentee" }) {
     }
   };
 
-  const handleRecommendedQuestionChange = (index, value) => {
+  const handleRecommendedQuestionChange = (key, value) => {
     setRecommendedQuestions(prev =>
-      prev.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, content: value } : item
+      prev.map(item =>
+        item.key === key ? { ...item, content: value } : item
       )
     );
   };
 
-  const handleRecommendedQuestionToggle = (index) => {
+  const handleRecommendedQuestionToggle = (key) => {
     setRecommendedQuestions(prev =>
-      prev.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, selected: !item.selected } : item
+      prev.map(item =>
+        item.key === key ? { ...item, selected: item.selected === false } : item
       )
     );
   };
 
-  const handleSaveRecommendedQuestions = async () => {
-    const contents = recommendedQuestions
+  const handleDeleteSavedQuestion = async (questionId) => {
+    if (!questionId) return;
+    setDeletingQuestionId(questionId);
+    setRecommendError("");
+    try {
+      await deleteQuestion(id, questionId);
+      setQuestions(prev => prev.filter(item => item.id !== questionId));
+    } catch (error) {
+      setRecommendError(error?.message || "질문을 삭제하지 못했습니다.");
+    } finally {
+      setDeletingQuestionId(null);
+    }
+  };
+
+  const handleSaveRecommendedQuestions = async (targetRecommendedQuestions = recommendedQuestions) => {
+    const contents = targetRecommendedQuestions
       .filter(item => item.selected)
       .map(item => item.content.trim())
       .filter(Boolean);
@@ -351,11 +374,11 @@ export default function InterviewRobby({ role = "mentee" }) {
       const data = await createQuestions(id, contents);
       const savedQuestions = normalizeQuestionList(data);
       if (savedQuestions.length > 0) {
-        setQuestions(savedQuestions);
+        setQuestions(normalizeSavedQuestionList(savedQuestions));
         cacheRecommendedQuestions(savedQuestions);
       } else {
         const latest = await getQuestions(id);
-        const latestQuestions = normalizeQuestionList(latest);
+        const latestQuestions = normalizeSavedQuestionList(latest);
         setQuestions(latestQuestions);
         cacheRecommendedQuestions(latestQuestions);
       }
@@ -379,7 +402,7 @@ export default function InterviewRobby({ role = "mentee" }) {
           try {
             const data = await createQuestions(id, contents);
             const savedQuestions = normalizeQuestionList(data);
-            setQuestions(savedQuestions);
+            setQuestions(normalizeSavedQuestionList(savedQuestions));
             cacheRecommendedQuestions(savedQuestions.length > 0 ? savedQuestions : recommendedQuestions);
           } catch {
             cacheRecommendedQuestions(recommendedQuestions);
@@ -669,7 +692,7 @@ export default function InterviewRobby({ role = "mentee" }) {
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {parseResumeContent(resumeContent).map((item, i) => (
                             <div key={i} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.15)" }}>
-                              <button type="button" onClick={() => setOpenResumeIndex(openResumeIndex === i ? null : i)} style={{
+                              <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setOpenResumeIndex(openResumeIndex === i ? null : i); }} style={{
                                 width: "100%", background: "#1e3a5a", border: "none", cursor: "pointer",
                                 display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", gap: 8, fontFamily: "inherit",
                               }}>
@@ -702,17 +725,18 @@ export default function InterviewRobby({ role = "mentee" }) {
                         : questions;
                       return (
                         <Accordion
-                          title={isGroup ? `🎯 AI 질문 — ${selectedMentee?.name ?? "멘티"}` : "🎯 AI 예상 질문 리스트"}
+                          title={isGroup ? `AI 질문 - ${selectedMentee?.name ?? "멘티"}` : "AI 예상 질문 리스트"}
                           accentColor="#F59E0B"
                           defaultOpen={true}
                         >
-                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                            <div style={{ display: "flex", gap: 8 }}>
-                              <button type="button" onClick={handleLoadRecommendedQuestions} disabled={recommendLoading} style={{
-                                flex: 1, padding: "9px 12px", borderRadius: 8,
-                                border: "1px solid rgba(245,158,11,0.4)", background: recommendLoading ? "rgba(245,158,11,0.1)" : "rgba(245,158,11,0.18)",
-                                color: "#F59E0B", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative", zIndex: 3 }}>
+                              <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions(); }} disabled={recommendLoading} style={{
+                                flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
+                                border: "1px solid rgba(245,158,11,0.45)", background: recommendLoading ? "rgba(245,158,11,0.10)" : "#251a05",
+                                color: "#FBBF24", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                                position: "relative", zIndex: 4, pointerEvents: "auto",
                               }}>
                                 {recommendLoading && (
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
@@ -722,10 +746,11 @@ export default function InterviewRobby({ role = "mentee" }) {
                                 {recommendLoading ? "AI 질문 생성 중..." : "AI 추천 질문 불러오기"}
                               </button>
                               {shownRecommended.length > 0 && (
-                                <button type="button" onClick={handleSaveRecommendedQuestions} disabled={recommendSaving} style={{
-                                  padding: "9px 12px", borderRadius: 8,
-                                  border: "1px solid rgba(29,158,117,0.4)", background: "rgba(29,158,117,0.18)",
-                                  color: C_teal, cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                                <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendSaving) handleSaveRecommendedQuestions(shownRecommended); }} disabled={recommendSaving} style={{
+                                  minHeight: 38, padding: "9px 14px", borderRadius: 8,
+                                  border: "1px solid rgba(29,158,117,0.55)", background: recommendSaving ? "rgba(29,158,117,0.10)" : "#083529",
+                                  color: "#34D399", cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
+                                  whiteSpace: "nowrap", position: "relative", zIndex: 4, pointerEvents: "auto",
                                 }}>
                                   {recommendSaving ? "저장 중..." : "선택 저장"}
                                 </button>
@@ -733,37 +758,47 @@ export default function InterviewRobby({ role = "mentee" }) {
                             </div>
                             {recommendError && <p style={{ fontSize: 11, color: "#EF4444" }}>{recommendError}</p>}
                             {shownRecommended.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
                                 {shownRecommended.map((item, i) => {
-                                  const globalIdx = recommendedQuestions.indexOf(item);
+                                  const selected = item.selected !== false;
                                   return (
-                                    <label key={item.key} style={{
-                                      background: item.selected ? "#2a1e00" : "#162030",
-                                      border: `1px solid ${item.selected ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.15)"}`,
-                                      borderRadius: 10, padding: "10px 12px", display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer",
+                                    <div key={item.key} style={{
+                                      background: selected ? "#201803" : "#101b2a",
+                                      border: `1px solid ${selected ? "rgba(245,158,11,0.48)" : "rgba(255,255,255,0.12)"}`,
+                                      borderRadius: 8, padding: "11px 12px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1,
                                     }}>
-                                      <input type="checkbox" checked={item.selected} onChange={() => handleRecommendedQuestionToggle(globalIdx)} style={{ accentColor: "#F59E0B", width: 14, height: 14, marginTop: 6, flexShrink: 0 }} />
+                                      <input type="checkbox" checked={selected} readOnly onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleRecommendedQuestionToggle(item.key); }} style={{ accentColor: "#F59E0B", width: 15, height: 15, marginTop: 5, flexShrink: 0, cursor: "pointer", position: "relative", zIndex: 5, pointerEvents: "auto" }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 5 }}>
-                                          <span style={{ fontSize: 10, color: item.section === "공통" ? C_teal : "#F59E0B", fontWeight: 700 }}>{item.section}</span>
-                                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>추천 {i + 1}</span>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                                          <span style={{ fontSize: 11, color: item.section === "공통" ? "#34D399" : "#FBBF24", fontWeight: 800 }}>{item.section}</span>
+                                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.38)", fontWeight: 700 }}>추천 {i + 1}</span>
                                         </div>
-                                        <textarea value={item.content ?? ""} onChange={e => handleRecommendedQuestionChange(globalIdx, e.target.value)}
+                                        <textarea value={item.content ?? ""} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} onChange={e => handleRecommendedQuestionChange(item.key, e.target.value)}
                                           rows={Math.max(2, Math.ceil(String(item.content ?? "").length / 34))}
-                                          style={{ width: "100%", resize: "none", minHeight: 60, border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "8px 10px", background: "rgba(13,34,64,0.9)", color: "rgba(255,255,255,0.92)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.65, outline: "none", boxSizing: "border-box" }}
+                                          style={{ width: "100%", resize: "vertical", minHeight: 66, border: "1px solid rgba(255,255,255,0.18)", borderRadius: 8, padding: "9px 10px", background: "#0b1726", color: "rgba(255,255,255,0.94)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.65, outline: "none", boxSizing: "border-box", position: "relative", zIndex: 3, pointerEvents: "auto" }}
                                         />
                                       </div>
-                                    </label>
+                                    </div>
                                   );
                                 })}
                               </div>
                             )}
                             {shownSaved.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
                                 {shownSaved.map((q, i) => (
-                                  <div key={q.id ?? i} style={{ background: "#1e1400", border: "1px solid rgba(245,158,11,0.45)", borderRadius: 10, padding: "11px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                                    <span style={{ fontSize: 11, fontWeight: 800, color: "#F59E0B", flexShrink: 0, marginTop: 2 }}>Q{i + 1}</span>
-                                    <p style={{ fontSize: 13, color: "rgba(255,255,255,0.95)", lineHeight: 1.65, margin: 0 }}>{q.content ?? q.question ?? q}</p>
+                                  <div key={q.id ?? i} style={{ background: "#101b2a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "12px 13px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1 }}>
+                                    <span style={{ minWidth: 28, textAlign: "center", fontSize: 11, fontWeight: 800, color: "#FBBF24", flexShrink: 0, marginTop: 3 }}>Q{i + 1}</span>
+                                    <p style={{ flex: 1, minWidth: 0, fontSize: 13, color: "rgba(255,255,255,0.95)", lineHeight: 1.65, margin: 0 }}>{q.content ?? q.question ?? q}</p>
+                                    {q.id && (
+                                      <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (deletingQuestionId !== q.id) handleDeleteSavedQuestion(q.id); }} disabled={deletingQuestionId === q.id} style={{
+                                        flexShrink: 0, minHeight: 30, padding: "6px 10px", borderRadius: 7,
+                                        border: "1px solid rgba(239,68,68,0.50)", background: deletingQuestionId === q.id ? "rgba(239,68,68,0.08)" : "#2a1012",
+                                        color: "#F87171", cursor: deletingQuestionId === q.id ? "default" : "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 800,
+                                        position: "relative", zIndex: 5, pointerEvents: "auto",
+                                      }}>
+                                        {deletingQuestionId === q.id ? "삭제 중" : "삭제"}
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>

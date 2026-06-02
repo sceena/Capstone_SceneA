@@ -446,9 +446,9 @@ export default function ReportGeneratingPage() {
       <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "40px 5%", width: "100%" }}>
         <div className="rg-grid" style={{
           width: "100%",
-          maxWidth: isMentorRole ? 640 : 1100,
+          maxWidth: 1100,
           display: "grid",
-          gridTemplateColumns: isMentorRole ? "1fr" : "1fr 1fr",
+          gridTemplateColumns: "1fr 1fr",
           gap: 20,
           alignItems: "start",
         }}>
@@ -505,7 +505,7 @@ export default function ReportGeneratingPage() {
           </div>
 
           {/* 오른쪽: 테트리스 */}
-          {!isMentorRole && <TetrisPanel />}
+          <TetrisPanel />
         </div>
       </div>
     </div>

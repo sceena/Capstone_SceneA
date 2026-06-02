@@ -38,7 +38,9 @@ export default function OAuthCallback() {
           name = profile.name || "";
           email = profile.email || "";
         }
-      } catch {}
+      } catch (err) {
+        console.error("[OAuthCallback] 프로필 조회 실패:", err);
+      }
 
       setAuthUser({ role, name, email, accessToken, refreshToken });
       navigate(role === "mentor" ? "/dashboard/mentor" : "/dashboard/mentee", { replace: true });

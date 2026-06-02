@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getAnswerAudio, getAnswerAudioByAnswerId, getFitGapAnalysis, getQuestionAnswers } from "../../api/sessions";
+import { getAuthUser } from "../../store/authStore";
 
 const NAVY = "#0D2240";
 const GREEN = "#0CA678";
@@ -11,15 +12,9 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const VIEWED_KEY = "scena_viewed_finals";
 
 function getAuthHeaders() {
-  const raw = localStorage.getItem("scena_auth");
-  if (!raw) return {};
-  try {
-    const user = JSON.parse(raw);
-    const token = user?.accessToken || user?.token || user?.access_token;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
-    return {};
-  }
+  const user = getAuthUser();
+  const token = user?.accessToken || user?.token || user?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function AudioPlayer({ sessionId, questionId, answerId, audioUrl, menteeId }) {
@@ -513,37 +508,39 @@ export default function FinalReportPage() {
       `}</style>
 
       {/* ── 헤더 ── */}
-      <header style={{ background: NAVY, padding: "0 32px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={() => navigate(-1)} style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "white", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+      <header style={{ background: CARD, padding: "0 5%", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 1200, width: "100%" }}>
+          <button onClick={() => navigate(-1)} style={{ background: "transparent", border: "1px solid #E9ECEF", color: "#495057", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: 500 }}>
             ← 뒤로
           </button>
-          <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>최종 리포트</span>
-          <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: GREEN, color: "white", fontWeight: 700 }}>멘토 코멘트 포함</span>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {role === "mentor" && (
-            <button onClick={() => setNotified(true)} disabled={notified}
-              style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: notified ? "#555" : GREEN, color: "white", fontSize: 13, fontWeight: 700, cursor: notified ? "default" : "pointer", fontFamily: "inherit", transition: "background 0.2s" }}>
-              {notified ? "✓ 멘티에게 전송 완료" : "멘티에게 전송하기"}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: NAVY, letterSpacing: "-0.02em" }}>최종 리포트</span>
+            <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: "rgba(12,166,120,0.1)", color: GREEN, fontWeight: 700, border: `1px solid rgba(12,166,120,0.25)` }}>멘토 코멘트 포함</span>
+          </div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {role === "mentor" && (
+              <button onClick={() => setNotified(true)} disabled={notified}
+                style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: notified ? "#E9ECEF" : PRIMARY_GRAD, color: notified ? "#868E96" : "white", fontSize: 13, fontWeight: 700, cursor: notified ? "default" : "pointer", fontFamily: "inherit", boxShadow: notified ? "none" : "0 2px 8px rgba(13,34,64,0.25)" }}>
+                {notified ? "✓ 멘티에게 전송 완료" : "멘티에게 전송하기"}
+              </button>
+            )}
+            <button onClick={() => exportToPDF(resolvedSession, reportData)}
+              style={{ padding: "8px 16px", borderRadius: 9, border: `1px solid rgba(12,166,120,0.4)`, background: "rgba(12,166,120,0.08)", color: GREEN, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+              PDF 저장
             </button>
-          )}
-          <button onClick={() => exportToPDF(resolvedSession, reportData)}
-            style={{ padding: "8px 16px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-            PDF 저장
-          </button>
+          </div>
         </div>
       </header>
 
-      <div id="final-report-content" style={{ maxWidth: 820, margin: "0 auto", padding: "32px 24px" }}>
+      <div id="final-report-content" style={{ maxWidth: 920, margin: "0 auto", padding: "36px 24px" }}>
         {/* ── 메타 ── */}
-        <div style={{ marginBottom: 10 }}>
-          <Tag bg={NAVY} color="white">최종 리포트</Tag>
-          <Tag bg={GREEN} color="white">멘토 수정 반영</Tag>
-          <Tag bg="#E8E5DF" color="#555">AI 초안 보존</Tag>
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center" }}>
+          {[["최종 리포트", GREEN], ["멘토 수정 반영", NAVY], ["AI 초안 보존", "#868E96"]].map(([label, color]) => (
+            <span key={label} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, background: "transparent", border: `1px solid ${color}33`, color, fontWeight: 600, letterSpacing: "0.02em" }}>{label}</span>
+          ))}
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111", marginBottom: 6 }}>{resolvedSession.title}</h1>
-        <p style={{ color: "#888", fontSize: 13, marginBottom: 32 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: NAVY, margin: "0 0 8px", letterSpacing: "-0.02em" }}>{resolvedSession.title}</h1>
+        <p style={{ color: "#868E96", fontSize: 14, margin: "0 0 36px" }}>
           {resolvedSession.date} · {resolvedSession.type} · {resolvedSession.duration}
           {aiReport?.overall_score != null && (
             <span style={{ marginLeft: 10, color: GREEN, fontWeight: 700 }}>AI 종합 {toFivePointScore(aiReport.overall_score)} / 5</span>
@@ -803,7 +800,7 @@ export default function FinalReportPage() {
             </div>
           </div>
 
-          <div style={{ background: "#F8FFFE", borderRadius: 10, padding: "16px 18px", borderLeft: `4px solid ${GREEN}` }}>
+          <div style={{ background: "#F8FFFE", borderRadius: 10, padding: "16px 18px", borderTop: `4px solid ${GREEN}` }}>
             <p style={{ fontSize: 14, lineHeight: 1.9, color: "#333", whiteSpace: "pre-wrap" }}>
               {totalFeedback || "멘토 총평이 작성되지 않았습니다."}
             </p>

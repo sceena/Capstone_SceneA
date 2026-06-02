@@ -938,18 +938,13 @@ export default function InterviewSession({ role = "mentee" }) {
         }
         try {
           const blob = createAudioBlob(questionAudioChunksRef.current);
-          console.log("[mentor] blob size:", blob.size, "type:", blob.type);
           if (!blob.size) throw new Error("녹음된 질문 오디오가 없습니다. 질문 시작 후 1초 이상 말한 뒤 완료해주세요.");
           let question;
           try {
-            console.log("[mentor] uploadQuestionAudio 시작");
             question = await uploadQuestionAudio(id, blob);
-            console.log("[mentor] uploadQuestionAudio 성공:", question);
           } catch (uploadErr) {
-            console.warn("[mentor] uploadQuestionAudio 실패, fallback 시도:", uploadErr);
             const fallback = await createQuestions(id, ["(음성 변환 실패)"]);
             question = Array.isArray(fallback) ? fallback[0] : fallback?.questions?.[0];
-            console.log("[mentor] fallback question:", question);
           }
           if (!question?.id) throw new Error("질문을 생성하지 못했습니다.");
           setSpokenQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);

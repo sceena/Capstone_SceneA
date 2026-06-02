@@ -7,6 +7,7 @@ import com.backend.domain.ai.dto.request.AiCompanyContext;
 import com.backend.domain.ai.dto.request.AiInterviewAnswerRequest;
 import com.backend.domain.ai.dto.request.AiReportRequest;
 import com.backend.domain.ai.dto.response.AiReportResponse;
+import com.backend.domain.answerEvaluation.dto.response.AnswerEvaluationResponse;
 import com.backend.domain.answerEvaluation.service.AnswerEvaluationService;
 import com.backend.domain.analysisReport.dto.request.MentorFeedbackRequest;
 import com.backend.domain.analysisReport.dto.response.FitGapResponse;
@@ -15,8 +16,10 @@ import com.backend.domain.analysisReport.dto.response.MentorFeedbackResponse;
 import com.backend.domain.analysisReport.dto.response.ReportResponse;
 import com.backend.domain.analysisReport.dto.response.ResumeSkillInfo;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.entity.MenteeReportFeedback;
 import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.analysisReport.repository.MenteeReportFeedbackRepository;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
 import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
@@ -31,6 +34,7 @@ import com.backend.domain.jobPosting.entity.JobSkill;
 import com.backend.domain.jobPosting.repository.JobPostingRepository;
 import com.backend.domain.jobPosting.repository.JobSkillRepository;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.member.entity.Member;
 import com.backend.domain.resume.entity.Resume;
 import com.backend.domain.resume.entity.ResumeSkill;
 import com.backend.domain.resume.repository.ResumeRepository;
@@ -57,6 +61,7 @@ public class ReportService {
     private static final int CONTEXT_MAX_LENGTH = 5000;
 
     private final AnalysisReportRepository reportRepository;
+    private final MenteeReportFeedbackRepository menteeReportFeedbackRepository;
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
@@ -75,17 +80,31 @@ public class ReportService {
                 .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
 
         validateAccess(memberId, session);
+        Member targetMentee = session.getMentor().getId().equals(memberId)
+                ? null
+                : memberRepository.getReferenceById(memberId);
 
-        AnalysisReport report = reportRepository
-                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL)
-                .orElseGet(() -> reportRepository
-                        .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
-                        .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND)));
+        MenteeReportFeedback selectedFeedback = targetMentee == null
+                ? null
+                : menteeReportFeedbackRepository.findByInterviewSessionAndMentee(session, targetMentee).orElse(null);
+        AnalysisReport report = findReportForViewer(session, targetMentee, selectedFeedback);
+
+        AiReportResponse aiReport = parseAiReport(report.getRawAiResponseJson());
+        List<AnswerEvaluationResponse> evaluations = answerEvaluationService.getEvaluationResponses(session);
+        List<MenteeReportFeedback> allMenteeFeedbacks = menteeReportFeedbackRepository.findAllByInterviewSession(session);
+
+        if (targetMentee != null) {
+            Long menteeId = targetMentee.getId();
+            aiReport = filterAiReportByMentee(aiReport, menteeId);
+            evaluations = filterEvaluationsByMentee(evaluations, menteeId);
+        }
 
         return ReportResponse.from(
                 report,
-                parseAiReport(report.getRawAiResponseJson()),
-                answerEvaluationService.getEvaluationResponses(session)
+                aiReport,
+                evaluations,
+                selectedFeedback,
+                allMenteeFeedbacks
         );
     }
 
@@ -119,7 +138,9 @@ public class ReportService {
         return ReportResponse.from(
                 reportRepository.save(report),
                 aiResponse,
-                answerEvaluationService.getEvaluationResponses(session)
+                answerEvaluationService.getEvaluationResponses(session),
+                null,
+                menteeReportFeedbackRepository.findAllByInterviewSession(session)
         );
     }
 
@@ -189,7 +210,18 @@ public class ReportService {
                 .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
                 .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
+        Member targetMentee = resolveFeedbackMentee(session, request.answerEvaluations());
         answerEvaluationService.updateMentorEvaluations(memberId, session, request.answerEvaluations());
+        if (targetMentee != null) {
+            MenteeReportFeedback menteeFeedback = menteeReportFeedbackRepository
+                    .findByInterviewSessionAndMentee(session, targetMentee)
+                    .orElseGet(() -> MenteeReportFeedback.builder()
+                            .interviewSession(session)
+                            .mentee(targetMentee)
+                            .build());
+            menteeFeedback.updateFinal(request.mentorFeedback(), normalizeMentorScore(request.mentorScore()));
+            menteeReportFeedbackRepository.save(menteeFeedback);
+        }
 
         AnalysisReport finalReport = AnalysisReport.builder()
                 .interviewSession(session)
@@ -205,6 +237,93 @@ public class ReportService {
                 .build();
 
         return MentorFeedbackResponse.from(reportRepository.save(finalReport));
+    }
+
+    private AnalysisReport findReportForViewer(
+            InterviewSession session,
+            Member targetMentee,
+            MenteeReportFeedback selectedFeedback
+    ) {
+        if (targetMentee != null && selectedFeedback == null) {
+            return reportRepository
+                    .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
+                    .orElseGet(() -> reportRepository
+                            .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL)
+                            .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND)));
+        }
+
+        return reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL)
+                .orElseGet(() -> reportRepository
+                        .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
+                        .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND)));
+    }
+
+    private AiReportResponse filterAiReportByMentee(AiReportResponse aiReport, Long menteeId) {
+        if (aiReport == null || aiReport.questionReports() == null) {
+            return aiReport;
+        }
+
+        List<com.backend.domain.ai.dto.response.AiQuestionReportResponse> directMatches = aiReport.questionReports().stream()
+                .filter(report -> report.menteeId() != null && report.menteeId().equals(menteeId))
+                .toList();
+        List<com.backend.domain.ai.dto.response.AiQuestionReportResponse> filtered = directMatches.isEmpty()
+                ? aiReport.questionReports().stream()
+                        .filter(report -> report.menteeId() == null)
+                        .toList()
+                : directMatches;
+
+        return new AiReportResponse(
+                aiReport.sessionId(),
+                aiReport.overallScore(),
+                aiReport.topSummary(),
+                aiReport.fitGap(),
+                filtered
+        );
+    }
+
+    private List<AnswerEvaluationResponse> filterEvaluationsByMentee(
+            List<AnswerEvaluationResponse> evaluations,
+            Long menteeId
+    ) {
+        return evaluations.stream()
+                .filter(evaluation -> evaluation.menteeId() != null && evaluation.menteeId().equals(menteeId))
+                .toList();
+    }
+
+    private Member resolveFeedbackMentee(
+            InterviewSession session,
+            List<MentorFeedbackRequest.MentorAnswerEvaluationPayload> payloads
+    ) {
+        if (payloads != null && !payloads.isEmpty()) {
+            Member mentee = null;
+            for (MentorFeedbackRequest.MentorAnswerEvaluationPayload payload : payloads) {
+                InterviewAnswer answer = answerRepository.findById(payload.answerId())
+                        .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
+                if (!answer.getInterviewQuestion().getInterviewSession().getId().equals(session.getId())) {
+                    throw new CustomException(ErrorCode.ANSWER_NOT_FOUND);
+                }
+                if (mentee == null) {
+                    mentee = answer.getMember();
+                } else if (!mentee.getId().equals(answer.getMember().getId())) {
+                    throw new CustomException(ErrorCode.INVALID_REQUEST);
+                }
+            }
+            if (mentee != null) {
+                return mentee;
+            }
+        }
+
+        List<SessionParticipant> mentees = participantRepository.findAllByInterviewSession(session).stream()
+                .filter(participant -> !participant.getMember().getId().equals(session.getMentor().getId()))
+                .toList();
+        if (mentees.isEmpty()) {
+            return null;
+        }
+        if (mentees.size() == 1) {
+            return mentees.get(0).getMember();
+        }
+        throw new CustomException(ErrorCode.INVALID_REQUEST);
     }
 
     private void validateAccess(Long memberId, InterviewSession session) {
@@ -227,10 +346,12 @@ public class ReportService {
 
     private AiReportRequest buildAiReportRequest(InterviewSession session) {
         List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
-        SessionParticipant candidate = participants.stream()
+        List<SessionParticipant> candidates = participants.stream()
                 .filter(participant -> !participant.getMember().getId().equals(session.getMentor().getId()))
-                .findFirst()
-                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new CustomException(ErrorCode.MEMBER_NOT_FOUND);
+        }
 
         List<Resume> resumes = resumeRepository.findAllByInterviewSession(session);
         Optional<JobPosting> jobPosting = jobPostingRepository.findByInterviewSession(session);
@@ -246,12 +367,16 @@ public class ReportService {
         validateReportInputsReady(questions, answers);
 
         AiCandidateContext candidateContext = new AiCandidateContext(
-                candidate.getMember().getId(),
-                candidate.getMember().getName(),
+                candidates.size() == 1 ? candidates.get(0).getMember().getId() : null,
+                candidates.size() == 1
+                        ? candidates.get(0).getMember().getName()
+                        : candidates.stream()
+                                .map(participant -> participant.getMember().getName())
+                                .collect(Collectors.joining(", ")),
                 "junior",
                 session.getJobCategory(),
                 resumes.stream()
-                        .map(resume -> summarize(resume.getContent()))
+                        .map(resume -> resume.getMember().getName() + ": " + summarize(resume.getContent()))
                         .toList()
         );
 

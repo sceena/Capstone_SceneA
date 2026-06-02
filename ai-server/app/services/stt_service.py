@@ -40,41 +40,29 @@ logger = logging.getLogger(__name__)
 
 
 TECH_INTERVIEW_INITIAL_PROMPT = """
-이 음성은 한국어 개발자 기술 면접 대화입니다. 면접관이 질문하고 지원자가 답변합니다.
-한국어 문장 안에 영어 기술 용어, 약어, 프레임워크명, 데이터베이스명, 클라우드 서비스명, 회사명, 직무명이 자주 섞여 나옵니다.
-기술 용어는 가능한 한 표준 표기로 인식합니다.
-
-자주 등장하는 기술 용어:
-Spring, Spring Boot, Spring MVC, Spring Security, Spring Batch, JPA, Hibernate, QueryDSL, MyBatis, JDBC,
-Java, Kotlin, Python, JavaScript, TypeScript, Node.js, React, Vue, Next.js, Express, NestJS,
-REST API, GraphQL, WebSocket, gRPC, JSON, JWT, OAuth, OAuth2, SSO, CORS,
-MySQL, PostgreSQL, MariaDB, MongoDB, Redis, Elasticsearch, OpenSearch, DynamoDB, Oracle, MSSQL,
-RDBMS, NoSQL, SQL, DDL, DML, ERD, ORM, ACID, 트랜잭션, 인덱스, 정규화, 반정규화, 조인, 락, 데드락,
-쿼리 튜닝, 실행 계획, 커넥션 풀, N+1 문제, 캐시, 캐싱, 세션, 쿠키,
-AWS, EC2, S3, RDS, Lambda, ECS, EKS, CloudFront, Route 53, IAM, VPC, IDC,
-Docker, Kubernetes, Jenkins, GitHub Actions, CI/CD, Nginx, Apache, Linux,
-MSA, 모놀리식, 마이크로서비스, 이벤트 드리븐, Kafka, RabbitMQ, 메시지 큐,
-TDD, DDD, 클린 아키텍처, 헥사고날 아키텍처, MVC, MVVM,
-Git, GitHub, GitLab, Jira, Notion, Slack,
-성능 개선, 장애 대응, 모니터링, 로깅, 알림, 배포, 롤백, 테스트 코드, 단위 테스트, 통합 테스트,
-백엔드, 프론트엔드, 풀스택, 데이터 엔지니어, DevOps, 인프라, 서버 개발, DB 개발, 플랫폼 개발.
-
-DB 개발 및 운영 면접에서 자주 등장하는 표현:
-MSSQL, MySQL, MongoDB, ERD 설계, 예약, 결제, 쿠폰, 무인화 서비스, 빌링, 회원 DB,
-쿼리 성능 개선, 쿼리 튜닝, AWS, IDC DB 서버 운영, 데이터베이스 신규 개발, 운영 유지보수.
-
-자주 나오는 답변 표현:
-제가 맡았던 역할은, 문제를 해결하기 위해, 성능을 개선했습니다, 병목을 분석했습니다, 쿼리를 튜닝했습니다,
-트랜잭션 범위를 조정했습니다, 인덱스를 추가했습니다, 장애 원인을 분석했습니다, 로그를 확인했습니다,
-협업 과정에서, 코드 리뷰를 통해, 테스트 코드를 작성했습니다, 배포 자동화를 구축했습니다.
+한국어 IT 개발자 면접 녹취입니다. 들리는 말만 그대로 받아쓰세요.
+예시 문장이나 질문을 새로 만들지 마세요. 들리지 않는 내용은 추측하지 마세요.
+자주 나오는 기술 용어 표기:
+Java, Spring Boot, JPA, QueryDSL, MyBatis, REST API, JWT, OAuth2, MySQL, MSSQL, MongoDB, Redis, AWS, EC2, S3, RDS, Docker, Kubernetes, CI/CD, GitHub Actions, Nginx, Linux, ERD, SQL, 트랜잭션, 인덱스, 데드락, 커넥션 풀, 쿼리 튜닝, 실행 계획, N+1 문제, 캐시, 로그, 장애 대응, 배포, 테스트 코드, 백엔드, 프론트엔드, API, 서버, 데이터베이스.
+채용 공고 관련 용어:
+스크린 골프, 타석 예약, 결제, 쿠폰, 무인화 서비스, 빌링, 회원 DB, DB 개발, DB 운영, 성능 개선, IDC.
 """.strip()
 
 
 def _build_initial_prompt() -> str:
+    if os.environ.get("WHISPER_DISABLE_INITIAL_PROMPT", "false").lower() == "true":
+        return ""
     extra_terms = os.environ.get("WHISPER_INITIAL_PROMPT_EXTRA", "").strip()
     if not extra_terms:
         return TECH_INTERVIEW_INITIAL_PROMPT
-    return f"{TECH_INTERVIEW_INITIAL_PROMPT}\n\n추가 채용공고/면접 키워드:\n{extra_terms}"
+    return f"{TECH_INTERVIEW_INITIAL_PROMPT}\n\n추가 용어 표기: {extra_terms}"
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "y", "on"}
 
 
 class SttServiceUnavailable(RuntimeError):
@@ -122,6 +110,8 @@ class SttService:
         self.model_size = model_size or os.environ.get("WHISPER_MODEL_SIZE", "medium")
         self.device = os.environ.get("WHISPER_DEVICE", "cuda")
         self.compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "float16")
+        self.vad_filter = _env_bool("WHISPER_VAD_FILTER", True)
+        self.condition_on_previous_text = _env_bool("WHISPER_CONDITION_ON_PREVIOUS_TEXT", False)
 
     def transcribe(self, filename: str | None, audio_file: BinaryIO) -> SttResult:
         suffix = Path(filename or "answer.wav").suffix or ".wav"
@@ -158,8 +148,15 @@ class SttService:
                 initial_prompt=_build_initial_prompt(),
                 beam_size=5,
                 temperature=0,
-                vad_filter=True,
-                condition_on_previous_text=False,
+                vad_filter=self.vad_filter,
+                vad_parameters={
+                    "min_silence_duration_ms": 700,
+                    "speech_pad_ms": 400,
+                },
+                condition_on_previous_text=self.condition_on_previous_text,
+                no_speech_threshold=0.6,
+                compression_ratio_threshold=2.4,
+                log_prob_threshold=-1.0,
             )
 
             segment_results: list[SttSegmentResult] = []
@@ -180,8 +177,19 @@ class SttService:
             duration = getattr(info, "duration", None) or measured_duration
             duration_sec = int(round(duration)) if duration is not None else None
 
+            result_text = " ".join(text_parts).strip()
+            logger.info(
+                "STT completed path=%s duration=%s text_length=%s segments=%s quality=%s message=%s",
+                audio_path.name,
+                duration_sec,
+                len(result_text),
+                len(segment_results),
+                quality_status,
+                quality_message,
+            )
+
             return SttResult(
-                text=" ".join(text_parts).strip(),
+                text=result_text,
                 model=f"faster-whisper-{self.model_size}",
                 language=getattr(info, "language", None),
                 duration_sec=duration_sec,
@@ -248,6 +256,8 @@ class SttService:
                 "1",
                 "-ar",
                 "16000",
+                "-af",
+                "highpass=f=80,lowpass=f=7800,dynaudnorm=f=150:g=15",
                 str(wav_path),
             ],
             "ffmpeg audio normalization failed",

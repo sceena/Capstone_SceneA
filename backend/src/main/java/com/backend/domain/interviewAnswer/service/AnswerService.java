@@ -132,8 +132,10 @@ public class AnswerService {
         boolean ready = !answers.isEmpty()
                 && pending == 0
                 && processing == 0
+                && failed == 0
                 && questionPending == 0
-                && questionProcessing == 0;
+                && questionProcessing == 0
+                && questionFailed == 0;
 
         return new SessionSttStatusResponse(
                 sessionId,

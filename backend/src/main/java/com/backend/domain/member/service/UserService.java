@@ -1,8 +1,10 @@
 package com.backend.domain.member.service;
 
 import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.entity.MenteeReportFeedback;
 import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.analysisReport.repository.MenteeReportFeedbackRepository;
 import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.interviewSession.entity.SessionParticipant;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
@@ -49,6 +51,7 @@ public class UserService {
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
     private final AnalysisReportRepository reportRepository;
+    private final MenteeReportFeedbackRepository menteeReportFeedbackRepository;
     private final PasswordEncoder passwordEncoder;
 
     public MentorListResponse.PageResponse getMentors(String keyword, Pageable pageable) {
@@ -119,7 +122,11 @@ public class UserService {
                                 r -> r,
                                 (a, b) -> b.getReportStatus() == ReportStatus.FINAL ? b : a
                         ));
+        Map<Long, MenteeReportFeedback> feedbackMap = sessions.isEmpty() || member.getRole() == Role.MENTOR ? Map.of() :
+                menteeReportFeedbackRepository.findAllByInterviewSessionIn(sessions).stream()
+                        .filter(feedback -> feedback.getMentee().getId().equals(memberId))
+                        .collect(Collectors.toMap(feedback -> feedback.getInterviewSession().getId(), feedback -> feedback));
 
-        return MySessionHistoryResponse.of(sessionPage, reportMap);
+        return MySessionHistoryResponse.of(sessionPage, reportMap, feedbackMap);
     }
 }

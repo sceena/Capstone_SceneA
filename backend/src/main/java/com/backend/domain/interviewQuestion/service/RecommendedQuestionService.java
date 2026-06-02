@@ -72,6 +72,7 @@ public class RecommendedQuestionService {
         }
 
         List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session).stream()
+                .filter(participant -> !participant.getMember().getId().equals(session.getMentor().getId()))
                 .sorted(Comparator.comparing(participant -> participant.getMember().getId()))
                 .toList();
 
@@ -228,13 +229,15 @@ public class RecommendedQuestionService {
                 ? List.of(
                 "각자 제출한 서류에서 가장 핵심이라고 생각하는 프로젝트를 하나씩 고르고, 본인의 역할과 결과를 비교해 설명해 주세요.",
                 "팀 프로젝트에서 기술 선택이 갈렸던 상황이 있다면 어떤 기준으로 의사결정했는지 설명해 주세요.",
-                "운영 중 장애나 성능 문제가 발생했을 때 원인을 좁혀 가는 방식을 구체적으로 설명해 주세요.")
+                "운영 중 장애나 성능 문제가 발생했을 때 원인을 좁혀 가는 방식을 구체적으로 설명해 주세요.",
+                "협업 과정에서 의견 충돌이 있었던 경험을 바탕으로 조율 방식과 결과를 설명해 주세요.",
+                "각자의 경험을 비교했을 때 이 직무에서 가장 중요하다고 생각하는 역량은 무엇인지 설명해 주세요.")
                 : List.of();
 
         List<AiPersonalQuestionResponse> personalQuestions = candidates.stream()
                 .map(candidate -> new AiPersonalQuestionResponse(
                         candidate.candidateId(),
-                        buildFallbackPersonalQuestions(candidate.content())))
+                        buildFallbackPersonalQuestions(candidate.content(), ONE_TO_ONE.equals(sessionType) ? 10 : 5)))
                 .toList();
 
         return new AiSessionQuestionGenerationResponse(
@@ -244,15 +247,21 @@ public class RecommendedQuestionService {
         );
     }
 
-    private List<String> buildFallbackPersonalQuestions(String resumeContent) {
+    private List<String> buildFallbackPersonalQuestions(String resumeContent, int questionCount) {
         String focus = extractResumeFocus(resumeContent);
-        return List.of(
+        List<String> questions = List.of(
                 "자소서에서 언급한 " + focus + " 경험에서 본인이 직접 맡은 역할과 의사결정을 구체적으로 설명해 주세요.",
                 focus + " 과정에서 가장 어려웠던 기술적 문제는 무엇이었고, 어떤 방식으로 원인을 분석했나요?",
                 focus + " 결과를 수치나 사용자 관점의 변화로 설명할 수 있다면 어떤 지표를 제시할 수 있나요?",
                 "해당 경험을 다시 수행한다면 구조, 성능, 협업 방식 중 무엇을 가장 먼저 개선하고 싶나요?",
-                "이 경험이 지원 직무에서 요구하는 역량과 어떻게 연결된다고 생각하나요?"
+                "이 경험이 지원 직무에서 요구하는 역량과 어떻게 연결된다고 생각하나요?",
+                focus + " 경험에서 본인이 주도적으로 세운 기준이나 원칙이 있었다면 무엇이었나요?",
+                "문제가 예상과 다르게 흘러갔던 순간이 있다면 어떤 근거로 다음 행동을 결정했나요?",
+                "동료나 사용자에게 받은 피드백 중 가장 의미 있었던 것은 무엇이고, 어떻게 반영했나요?",
+                focus + " 경험을 통해 새롭게 익힌 기술이나 업무 방식이 있다면 실제로 어떻게 적용했나요?",
+                "면접관에게 이 경험의 성과를 가장 설득력 있게 보여주기 위해 어떤 근거를 제시하겠나요?"
         );
+        return questions.subList(0, Math.min(questionCount, questions.size()));
     }
 
     private String extractResumeFocus(String resumeContent) {

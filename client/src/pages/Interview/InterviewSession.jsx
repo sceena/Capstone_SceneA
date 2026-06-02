@@ -642,7 +642,7 @@ export default function InterviewSession({ role = "mentee" }) {
       await updateSessionStatus(id, "completed");
     } catch {}
     await new Promise(r => setTimeout(r, 800));
-    navigate(`/report/ai/${id}`, { state: { role: "mentor" } });
+    navigate(`/report/generating/${id}`, { state: { role: "mentor" } });
   };
 
   useEffect(() => {

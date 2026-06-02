@@ -27,23 +27,32 @@ import java.time.Duration;
 public class FastApiAiSttClient implements AiSttClient {
 
     private final RestClient restClient;
+    private final String baseUrl;
 
     public FastApiAiSttClient(
             RestClient.Builder restClientBuilder,
             @Value("${ai.server.base-url:http://localhost:8000}") String baseUrl) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(5));
-        requestFactory.setReadTimeout(Duration.ofSeconds(45));
+        requestFactory.setReadTimeout(Duration.ofSeconds(180));
 
+        this.baseUrl = baseUrl;
         this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
                 .requestFactory(requestFactory)
                 .build();
+        log.info("AI STT client configured with baseUrl={}", baseUrl);
     }
 
     @Override
     public AiSttResponse transcribe(MultipartFile audio) {
         try {
+            log.info(
+                    "Requesting AI STT /api/stt baseUrl={} filename={} size={}",
+                    baseUrl,
+                    resolveFilename(audio),
+                    audio.getSize()
+            );
             AiSttResponse response = restClient.post()
                     .uri("/api/stt")
                     .contentType(MediaType.MULTIPART_FORM_DATA)

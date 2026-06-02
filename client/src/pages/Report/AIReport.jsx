@@ -69,16 +69,11 @@ async function loadReport(sessionId) {
   try {
     return await requestJson(`/api/sessions/${sessionId}/report`);
   } catch (error) {
-    try {
-      if (error.status !== 404) throw error;
-      return await requestJson(`/api/sessions/${sessionId}/report/generate`, { method: "POST" });
-    } catch (finalError) {
-      if (USE_MOCK_REPORT) {
-        console.warn("Using mock AI report because the report API is unavailable.", finalError);
-        return createMockReport(sessionId);
-      }
-      throw finalError;
+    if (USE_MOCK_REPORT && error.status !== 404) {
+      console.warn("Using mock AI report because the report API is unavailable.", error);
+      return createMockReport(sessionId);
     }
+    throw error;
   }
 }
 
@@ -445,7 +440,6 @@ function RecommendationList({ items = [] }) {
 
 // ─── Mentee Report ────────────────────────────────────────────────
 function MenteeReport({ sessionId, report }) {
-  const navigate = useNavigate();
   const aiReport = report?.ai_report;
   const questionReports = aiReport?.question_reports || [];
   const topSummary = aiReport?.top_summary;
@@ -579,20 +573,11 @@ function MenteeReport({ sessionId, report }) {
           ))}
         </div>
 
-        {/* 멘토링 세션 입장 */}
-        <div style={{ marginTop: 32, background: PRIMARY_GRAD, borderRadius: 16, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, boxShadow: "0 4px 20px rgba(13,34,64,0.2)" }}>
-          <div>
-            <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, margin: "0 0 6px" }}>AI 리포트 분석이 완료되었습니다</p>
-            <p style={{ color: "white", fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>멘토와 함께 리포트를 리뷰하는 시간을 가져보세요</p>
-          </div>
-          <button
-            onClick={() => navigate(`/mentoring/mentee/${sessionId}`)}
-            style={{ flex: "0 0 auto", padding: "14px 28px", borderRadius: 12, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.2s" }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-          >
-            멘토링 세션 입장하기 →
-          </button>
+        <div style={{ marginTop: 32, background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 16, padding: 24, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
+          <p style={{ color: NAVY, fontSize: 15, fontWeight: 800, margin: "0 0 6px" }}>멘토 리뷰 대기 중</p>
+          <p style={{ color: "#495057", fontSize: 13, lineHeight: 1.7, margin: 0 }}>
+            멘토가 리포트를 검토하고 최종 피드백을 제출하면 마이페이지에서 최종 리포트를 확인할 수 있습니다.
+          </p>
         </div>
       </div>
     </div>
@@ -745,6 +730,10 @@ export default function AIReportPage() {
         setPhase("report");
       } catch (err) {
         if (cancelled) return;
+        if (err.status === 404) {
+          navigate(`/report/generating/${sessionId}`, { state: { role }, replace: true });
+          return;
+        }
         setError(err.status === 401 ? "로그인이 필요하거나 인증이 만료되었습니다." : "AI 리포트를 불러오지 못했습니다.");
         setPhase("error");
       }
@@ -754,7 +743,7 @@ export default function AIReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, navigate, role]);
 
   useEffect(() => {
     if (role !== "mentee" || !sessionId || !/^\d+$/.test(String(sessionId))) return;

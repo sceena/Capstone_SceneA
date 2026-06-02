@@ -19,7 +19,7 @@ public record MentorFeedbackRequest(
             @NotBlank String reasoning,
             @NotNull
             @DecimalMin("1.0")
-            @DecimalMax("10.0")
+            @DecimalMax("5.0")
             Float score,
             List<String> strengths,
             List<String> improvements

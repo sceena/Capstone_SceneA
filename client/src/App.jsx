@@ -65,6 +65,7 @@ export default function App() {
       <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute element={<ReportWaitingPage />} />} />
       <Route path="/report/mentor-review/:sessionId" element={<ProtectedRoute element={<MentorReviewPage />} />} />
       <Route path="/report/final"            element={<ProtectedRoute element={<FinalReportPage />} />} />
+      <Route path="/report/final/:sessionId" element={<ProtectedRoute element={<FinalReportPage />} />} />
 
       {/* 로그인만 필요 (공통) */}
       <Route path="/mypage" element={<ProtectedRoute element={<MyPage />} />} />

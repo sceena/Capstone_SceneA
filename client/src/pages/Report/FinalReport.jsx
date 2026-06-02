@@ -3,8 +3,10 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getAnswerAudio, getAnswerAudioByAnswerId, getFitGapAnalysis, getQuestionAnswers } from "../../api/sessions";
 
 const NAVY = "#0D2240";
-const GREEN = "#1D9E75";
-const BG = "#FAF8F4";
+const GREEN = "#0CA678";
+const BG = "#F0F4F8";
+const CARD = "#FFFFFF";
+const PRIMARY_GRAD = "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const VIEWED_KEY = "scena_viewed_finals";
 
@@ -503,9 +505,7 @@ export default function FinalReportPage() {
           header, nav, button, [data-no-print] { display: none !important; }
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; margin: 0 !important; padding: 10mm 12mm !important; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          #final-report-content > div,
-          #final-report-content [style*="borderRadius"],
-          #final-report-content [style*="border-radius"] {
+          #final-report-content p, #final-report-content li, #final-report-content span {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }

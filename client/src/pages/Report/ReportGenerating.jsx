@@ -22,16 +22,16 @@ const NAVY  = C.primary;
 const GREEN = C.success;
 const COLS = 10;
 const ROWS = 20;
-const CELL = 22;
+const CELL = 24;
 
 const PIECES = [
-  { shape: [[1, 1, 1, 1]], color: "#26C6DA" },
-  { shape: [[1, 1], [1, 1]], color: "#FDD835" },
-  { shape: [[0, 1, 0], [1, 1, 1]], color: "#AB47BC" },
-  { shape: [[0, 1, 1], [1, 1, 0]], color: "#66BB6A" },
-  { shape: [[1, 1, 0], [0, 1, 1]], color: "#EF5350" },
-  { shape: [[1, 0, 0], [1, 1, 1]], color: "#42A5F5" },
-  { shape: [[0, 0, 1], [1, 1, 1]], color: "#FFA726" },
+  { shape: [[1, 1, 1, 1]], color: "#0D2240" },
+  { shape: [[1, 1], [1, 1]], color: "#1B4F7A" },
+  { shape: [[0, 1, 0], [1, 1, 1]], color: "#2563EB" },
+  { shape: [[0, 1, 1], [1, 1, 0]], color: "#1E3A5F" },
+  { shape: [[1, 1, 0], [0, 1, 1]], color: "#3B82F6" },
+  { shape: [[1, 0, 0], [1, 1, 1]], color: "#60A5FA" },
+  { shape: [[0, 0, 1], [1, 1, 1]], color: "#93C5FD" },
 ];
 
 const ANALYSIS_STEPS = [
@@ -90,9 +90,9 @@ function drawCell(ctx, x, y, color) {
 function drawBoard(canvas, grid, piece) {
   const ctx = canvas?.getContext("2d");
   if (!ctx) return;
-  ctx.fillStyle = "#111827";
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.strokeStyle = "rgba(13,34,64,0.04)";
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       ctx.strokeRect(col * CELL, row * CELL, CELL, CELL);
@@ -107,18 +107,49 @@ function drawBoard(canvas, grid, piece) {
   });
 }
 
+const NEXT_CELL = 20  ;
+const NEXT_SIZE = 6;
+
+function drawNextCanvas(canvas, piece) {
+  const ctx = canvas?.getContext("2d");
+  if (!ctx || !piece) return;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, NEXT_SIZE * NEXT_CELL, NEXT_SIZE * NEXT_CELL);
+  const offX = Math.floor((NEXT_SIZE - piece.shape[0].length) / 2);
+  const offY = Math.floor((NEXT_SIZE - piece.shape.length) / 2);
+  piece.shape.forEach((line, row) => {
+    line.forEach((filled, col) => {
+      if (!filled) return;
+      const px = (offX + col) * NEXT_CELL + 1;
+      const py = (offY + row) * NEXT_CELL + 1;
+      const s = NEXT_CELL - 2;
+      ctx.fillStyle = piece.color;
+      ctx.fillRect(px, py, s, s);
+      ctx.fillStyle = "rgba(255,255,255,0.22)";
+      ctx.fillRect(px, py, s, 3);
+      ctx.fillRect(px, py, 3, s);
+    });
+  });
+}
+
 function TetrisPanel() {
   const canvasRef = useRef(null);
-  const gameRef = useRef({ grid: createGrid(), piece: randomPiece(), score: 0, over: false });
-  const [score, setScore] = useState(0);
-  const [over, setOver] = useState(false);
+  const nextRef = useRef(null);
+  const gameRef = useRef({ grid: createGrid(), piece: randomPiece(), next: randomPiece(), score: 0, lines: 0, level: 1, over: false, paused: false });
+  const [display, setDisplay] = useState({ score: 0, lines: 0, level: 1, over: false, paused: false });
+
+  const refresh = useCallback(() => {
+    const g = gameRef.current;
+    setDisplay({ score: g.score, lines: g.lines, level: g.level, over: g.over, paused: g.paused });
+  }, []);
 
   const restart = useCallback(() => {
-    gameRef.current = { grid: createGrid(), piece: randomPiece(), score: 0, over: false };
-    setScore(0);
-    setOver(false);
+    const next = randomPiece();
+    gameRef.current = { grid: createGrid(), piece: randomPiece(), next, score: 0, lines: 0, level: 1, over: false, paused: false };
     drawBoard(canvasRef.current, gameRef.current.grid, gameRef.current.piece);
-  }, []);
+    drawNextCanvas(nextRef.current, next);
+    refresh();
+  }, [refresh]);
 
   const lockPiece = useCallback(() => {
     const game = gameRef.current;
@@ -131,37 +162,90 @@ function TetrisPanel() {
     const kept = grid.filter(row => row.some(cell => !cell));
     const cleared = ROWS - kept.length;
     game.grid = [...Array.from({ length: cleared }, () => Array(COLS).fill(null)), ...kept];
-    game.score += cleared * 100;
-    game.piece = randomPiece();
+    game.lines += cleared;
+    game.score += [0, 100, 300, 500, 800][cleared] || 0;
+    game.level = Math.floor(game.lines / 10) + 1;
+    game.piece = game.next;
+    game.next = randomPiece();
+    drawNextCanvas(nextRef.current, game.next);
     if (!isValid(game.grid, game.piece.shape, game.piece.x, game.piece.y)) {
       game.over = true;
-      setOver(true);
     }
-    setScore(game.score);
+    refresh();
+  }, [refresh]);
+
+  const getGhostY = useCallback((piece, grid) => {
+    let gy = piece.y;
+    while (isValid(grid, piece.shape, piece.x, gy + 1)) gy++;
+    return gy;
   }, []);
+
+  const drawFull = useCallback(() => {
+    const { grid, piece } = gameRef.current;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+    ctx.strokeStyle = "rgba(13,34,64,0.04)";
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        ctx.strokeRect(col * CELL, row * CELL, CELL, CELL);
+        if (grid[row][col]) drawCell(ctx, col, row, grid[row][col]);
+      }
+    }
+    if (!piece) return;
+    const gy = getGhostY(piece, grid);
+    if (gy !== piece.y) {
+      piece.shape.forEach((line, row) => {
+        line.forEach((filled, col) => {
+          if (!filled) return;
+          const px = (piece.x + col) * CELL + 1;
+          const py = (gy + row) * CELL + 1;
+          const s = CELL - 2;
+          ctx.fillStyle = "rgba(13,34,64,0.12)";
+          ctx.strokeStyle = "rgba(13,34,64,0.25)";
+          ctx.lineWidth = 1;
+          ctx.fillRect(px, py, s, s);
+          ctx.strokeRect(px, py, s, s);
+        });
+      });
+    }
+    piece.shape.forEach((line, row) => {
+      line.forEach((filled, col) => {
+        if (filled) drawCell(ctx, piece.x + col, piece.y + row, piece.color);
+      });
+    });
+  }, [getGhostY]);
 
   const stepDown = useCallback(() => {
     const game = gameRef.current;
-    if (game.over) return;
+    if (game.over || game.paused) return;
     const nextY = game.piece.y + 1;
     if (isValid(game.grid, game.piece.shape, game.piece.x, nextY)) {
       game.piece.y = nextY;
     } else {
       lockPiece();
     }
-    drawBoard(canvasRef.current, game.grid, game.piece);
-  }, [lockPiece]);
+    drawFull();
+  }, [lockPiece, drawFull]);
 
   useEffect(() => {
-    drawBoard(canvasRef.current, gameRef.current.grid, gameRef.current.piece);
-    const timer = window.setInterval(stepDown, 700);
+    drawFull();
+    drawNextCanvas(nextRef.current, gameRef.current.next);
+    const speed = Math.max(100, 700 - (gameRef.current.level - 1) * 60);
+    const timer = window.setInterval(stepDown, speed);
     return () => window.clearInterval(timer);
-  }, [stepDown]);
+  }, [stepDown, drawFull, display.level]);
 
   useEffect(() => {
     const onKey = (event) => {
       const game = gameRef.current;
-      if (game.over || !game.piece) return;
+      if (event.key === "p" || event.key === "P") {
+        game.paused = !game.paused;
+        refresh();
+        return;
+      }
+      if (game.over || game.paused || !game.piece) return;
       const { piece, grid } = game;
       if (event.key === "ArrowLeft" && isValid(grid, piece.shape, piece.x - 1, piece.y)) piece.x -= 1;
       if (event.key === "ArrowRight" && isValid(grid, piece.shape, piece.x + 1, piece.y)) piece.x += 1;
@@ -170,49 +254,67 @@ function TetrisPanel() {
         const rotated = rotate(piece.shape);
         if (isValid(grid, rotated, piece.x, piece.y)) piece.shape = rotated;
       }
+      if (event.key === " ") {
+        let dropY = piece.y;
+        while (isValid(grid, piece.shape, piece.x, dropY + 1)) dropY++;
+        piece.y = dropY;
+        lockPiece();
+        event.preventDefault();
+        drawFull();
+        return;
+      }
       if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp"].includes(event.key)) {
         event.preventDefault();
-        drawBoard(canvasRef.current, game.grid, game.piece);
+        drawFull();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [lockPiece, drawFull, refresh]);
 
   return (
-    <div style={{ background: C.white, borderRadius: 20, border: `1px solid ${C.border}`, padding: "22px 20px", boxShadow: C.shadow }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div>
-          <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: "0 0 3px", letterSpacing: "-0.02em" }}>기다리는 동안 테트리스 한 판</p>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>리포트 완성되면 자동으로 이동해요</p>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <p style={{ fontSize: 10, color: C.textMuted, margin: "0 0 2px", fontWeight: 700, letterSpacing: "0.06em" }}>SCORE</p>
-          <p style={{ fontSize: 20, fontWeight: 900, color: C.primary, margin: 0, fontVariantNumeric: "tabular-nums" }}>{score}</p>
-        </div>
+    <div style={{ background: C.white, borderRadius: 20, border: `1px solid ${C.border}`, padding: "22px 20px", boxShadow: C.shadow, display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div style={{ width: "100%", marginBottom: 16 }}>
+        <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: "0 0 3px", letterSpacing: "-0.02em", textAlign: "center" }}>기다리는 동안 테트리스 한 판</p>
+        <p style={{ fontSize: 12, color: C.textMuted, margin: 0, textAlign: "center" }}>리포트 완성되면 자동으로 이동해요</p>
       </div>
-      <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
-        <canvas
-          ref={canvasRef}
-          width={COLS * CELL}
-          height={ROWS * CELL}
-          style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", maxWidth: "100%", background: "#111827" }}
-        />
-        {over && (
-          <div style={{
-            position: "absolute", inset: 0, borderRadius: 12, background: "rgba(0,0,0,0.68)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10,
-          }}>
-            <p style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>GAME OVER</p>
-            <button onClick={restart} style={{ border: "none", borderRadius: 9, background: GREEN, color: "white", padding: "9px 18px", fontWeight: 800, cursor: "pointer" }}>
-              다시 시작
-            </button>
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        <div style={{ position: "relative" }}>
+          <canvas ref={canvasRef} width={COLS * CELL} height={ROWS * CELL}
+            style={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", display: "block", background: "#ffffff" }} />
+          {(display.over || display.paused) && (
+            <div style={{
+              position: "absolute", inset: 0, borderRadius: 10, background: "rgba(0,0,0,0.72)",
+              display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10,
+            }}>
+              <p style={{ fontSize: 18, fontWeight: 900, color: "#fff", margin: 0 }}>{display.over ? "GAME OVER" : "PAUSED"}</p>
+              {display.over && <p style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", margin: 0 }}>점수: {display.score}</p>}
+              <button onClick={display.over ? restart : () => { gameRef.current.paused = false; refresh(); }}
+                style={{ border: "none", borderRadius: 9, background: GREEN, color: "white", padding: "9px 18px", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>
+                {display.over ? "다시 시작" : "계속하기"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 우측 패널: NEXT + 스탯 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 140, flexShrink: 0 }}>
+          <div>
+            <p style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, letterSpacing: "0.08em", margin: "0 0 6px" }}>NEXT</p>
+            <canvas ref={nextRef} width={NEXT_SIZE * NEXT_CELL} height={NEXT_SIZE * NEXT_CELL}
+              style={{ borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, display: "block" }} />
           </div>
-        )}
+          {[["SCORE", display.score], ["LINES", display.lines], ["LEVEL", display.level]].map(([label, val]) => (
+            <div key={label} style={{ background: C.bg, borderRadius: 10, padding: "8px 12px", border: `1px solid ${C.border}` }}>
+              <p style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, letterSpacing: "0.08em", margin: "0 0 3px" }}>{label}</p>
+              <p style={{ fontSize: 18, fontWeight: 900, color: C.primary, margin: 0, fontVariantNumeric: "tabular-nums" }}>{val}</p>
+            </div>
+          ))}
+          <p style={{ fontSize: 9, color: C.textMuted, margin: 0, lineHeight: 1.6 }}>
+            ←→ 이동<br/>↑ 회전<br/>↓ 내리기<br/>Space 즉시낙하<br/>P 일시정지
+          </p>
+        </div>
       </div>
-      <p style={{ fontSize: 11, color: C.textMuted, margin: "10px 0 0", textAlign: "center" }}>
-        방향키로 이동 · 회전할 수 있어요
-      </p>
     </div>
   );
 }
@@ -243,7 +345,8 @@ export default function ReportGeneratingPage() {
   // STT 완료 대기 -> 리포트 생성 -> 완료 시 리포트 화면 이동
   useEffect(() => {
     if (!sessionId) return;
-    if (USE_MOCK) { goToReport(); return; }
+    if (USE_MOCK && /^\d+$/.test(String(sessionId))) { goToReport(); return; }
+    if (!sessionId || !/^\d+$/.test(String(sessionId))) return;
 
     let cancelled = false;
 
@@ -343,100 +446,62 @@ export default function ReportGeneratingPage() {
       <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "40px 5%", width: "100%" }}>
         <div className="rg-grid" style={{
           width: "100%",
-          maxWidth: isMentorRole ? 680 : 1060,
+          maxWidth: isMentorRole ? 640 : 1100,
           display: "grid",
-          gridTemplateColumns: isMentorRole ? "1fr" : "minmax(0, 1fr) 300px",
+          gridTemplateColumns: isMentorRole ? "1fr" : "1fr 1fr",
           gap: 20,
           alignItems: "start",
         }}>
 
           {/* 왼쪽: 상태 카드 */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ background: C.white, borderRadius: 20, border: `1px solid ${C.border}`, padding: "24px 26px", boxShadow: C.shadow, display: "flex", flexDirection: "column", gap: 16 }}>
 
-            {/* 메인 상태 카드 */}
-            <div style={{ background: C.white, borderRadius: 20, border: `1px solid ${C.border}`, padding: "28px 30px", boxShadow: C.shadow }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-                <div style={{ width: 52, height: 52, borderRadius: "50%", border: `4px solid ${C.border}`, borderTopColor: C.success, animation: "spin 1s linear infinite", flexShrink: 0 }} />
-                <div>
-                  <p style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: "0 0 4px", letterSpacing: "-0.03em" }}>AI 리포트 생성 중</p>
-                  <p style={{ fontSize: 13, color: C.textMuted, margin: 0 }}>{statusText}</p>
-                </div>
-              </div>
-
-              {/* 진행 단계 배너 */}
-              <div style={{ background: C.successLight, border: `1px solid ${C.success}33`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: C.success, margin: "0 0 4px", letterSpacing: "0.04em" }}>{progressLabel}</p>
-                <p style={{ fontSize: 13, color: C.textSub, lineHeight: 1.7, margin: 0 }}>
-                  STT가 끝나면 AI 리포트가 자동 생성되고, 완료 즉시 리포트 화면으로 이동합니다.
-                </p>
-              </div>
-
-              {/* 단계 리스트 */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {ANALYSIS_STEPS.map((step, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, opacity: i <= stepIdx ? 1 : 0.35, transition: "opacity 0.4s" }}>
-                    <div style={{
-                      width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                      background: i < stepIdx ? C.success : i === stepIdx ? C.primary : C.border,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      transition: "background 0.4s",
-                    }}>
-                      {i < stepIdx && (
-                        <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-                          <path d="M2 5l2 2.5 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </div>
-                    <span style={{ fontSize: 13, color: i <= stepIdx ? C.text : C.textMuted }}>{step}</span>
-                  </div>
-                ))}
+            {/* 타이틀 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", border: `3px solid ${C.border}`, borderTopColor: C.success, animation: "spin 1s linear infinite", flexShrink: 0 }} />
+              <div>
+                <p style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 2px", letterSpacing: "-0.03em" }}>AI 리포트 생성 중</p>
+                <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>{statusText}</p>
               </div>
             </div>
 
-            {/* STT 상태 카드 */}
-            {statusSummary && (
-              <div style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.border}`, padding: "18px 20px", boxShadow: C.shadow }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 12px" }}>STT 처리 상태</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {[
-                    ["완료", statusSummary.completed_count, C.success],
-                    ["진행 중", statusSummary.processing_count, C.primary],
-                    ["대기", statusSummary.pending_count, "#F59E0B"],
-                    ["실패", statusSummary.failed_count, "#E03131"],
-                  ].map(([label, value, color]) => (
-                    <div key={label} style={{ background: C.bg, borderRadius: 10, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 12, color: C.textSub }}>{label}</span>
-                      <span style={{ fontSize: 14, fontWeight: 800, color }}>{value ?? 0}</span>
-                    </div>
-                  ))}
+            {/* 진행 단계 배너 */}
+            <div style={{ background: C.successLight, border: `1px solid ${C.success}33`, borderRadius: 10, padding: "10px 14px" }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: C.success, margin: "0 0 2px" }}>{progressLabel}</p>
+              <p style={{ fontSize: 12, color: C.textSub, lineHeight: 1.6, margin: 0 }}>STT가 끝나면 AI 리포트가 자동 생성됩니다.</p>
+            </div>
+
+            {/* 단계 리스트 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {ANALYSIS_STEPS.map((step, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, opacity: i <= stepIdx ? 1 : 0.35, transition: "opacity 0.4s" }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, background: i < stepIdx ? C.success : i === stepIdx ? C.primary : C.border, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.4s" }}>
+                    {i < stepIdx && <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2.5 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <span style={{ fontSize: 12, color: i <= stepIdx ? C.text : C.textMuted }}>{step}</span>
                 </div>
-                {(statusSummary.question_pending_count > 0 || statusSummary.question_processing_count > 0 || statusSummary.question_failed_count > 0) && (
-                  <p style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.6, margin: "10px 0 0" }}>
-                    질문 대기 {statusSummary.question_pending_count} · 진행 {statusSummary.question_processing_count} · 실패 {statusSummary.question_failed_count}
-                  </p>
-                )}
+              ))}
+            </div>
+
+            {/* STT 상태 */}
+            {statusSummary && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                {[["완료", statusSummary.completed_count, C.success], ["진행 중", statusSummary.processing_count, C.primary], ["대기", statusSummary.pending_count, "#F59E0B"], ["실패", statusSummary.failed_count, "#E03131"]].map(([label, value, color]) => (
+                  <div key={label} style={{ background: C.bg, borderRadius: 8, padding: "8px 12px", display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, color: C.textSub }}>{label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color }}>{value ?? 0}</span>
+                  </div>
+                ))}
               </div>
             )}
 
-            {error && (
-              <div style={{ background: "#FFF5F5", border: "1px solid #FCA5A5", borderRadius: 12, padding: "14px 16px" }}>
-                <p style={{ fontSize: 13, color: "#B91C1C", lineHeight: 1.6, margin: 0 }}>{error}</p>
-              </div>
-            )}
+            {error && <p style={{ fontSize: 12, color: "#B91C1C", background: "#FFF5F5", border: "1px solid #FCA5A5", borderRadius: 8, padding: "10px 12px", margin: 0 }}>{error}</p>}
 
-            <button
-              onClick={goToReport}
-              style={{
-                padding: "13px 20px", borderRadius: 12,
-                border: `1.5px solid ${C.border}`, background: C.white,
-                color: C.textSub, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                fontFamily: "inherit", transition: "all 0.15s", boxShadow: C.shadow,
-              }}
+            {/* 건너뛰기 버튼 */}
+            <button onClick={goToReport} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textSub, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSub; }}
-            >
-              건너뛰고 리포트 보기 →
-            </button>
+            >건너뛰고 리포트 보기 →</button>
           </div>
 
           {/* 오른쪽: 테트리스 */}

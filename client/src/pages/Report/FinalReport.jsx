@@ -118,7 +118,7 @@ function AudioPlayer({ sessionId, questionId, answerId, audioUrl }) {
 function toFivePointScore(score) {
   const numeric = Number(score);
   if (!Number.isFinite(numeric)) return 0;
-  return Math.max(1, Math.min(5, numeric / 2));
+  return Math.max(1, Math.min(5, numeric > 5 ? numeric / 2 : numeric));
 }
 
 function toFivePointMentorScore(score) {
@@ -539,7 +539,7 @@ export default function FinalReportPage() {
         <p style={{ color: "#888", fontSize: 13, marginBottom: 32 }}>
           {resolvedSession.date} · {resolvedSession.type} · {resolvedSession.duration}
           {aiReport?.overall_score != null && (
-            <span style={{ marginLeft: 10, color: GREEN, fontWeight: 700 }}>AI 종합 {aiReport.overall_score}점</span>
+            <span style={{ marginLeft: 10, color: GREEN, fontWeight: 700 }}>AI 종합 {toFivePointScore(aiReport.overall_score)} / 5</span>
           )}
         </p>
 
@@ -668,13 +668,22 @@ export default function FinalReportPage() {
         {enrichedQnas.map((qna, idx) => {
           const fb = feedbacks[qna.id] || {};
           const isBad = qna.aiScore <= 2.5;
-          const mentorScore_q = fb.score || qna.mentorScore || qna.aiScore;
+          const mentorScoreValue = fb.score ?? qna.mentorScore;
+          const hasMentorScoreRevision = qna.hasMentorRevision && Number.isFinite(Number(mentorScoreValue));
+          const displayScore = hasMentorScoreRevision ? Number(mentorScoreValue) : qna.aiScore;
           const hasDifferentAiReasoning = qna.hasMentorRevision
             && qna.aiReasoning
             && qna.aiReasoning !== qna.reasoning;
           return (
             <div key={qna.id ?? idx} style={{ background: "white", border: `1px solid ${isBad ? "#FED7D7" : "#E0DDD8"}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 10 }}>Q{idx + 1} · {qna.question}</p>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, margin: 0, lineHeight: 1.6 }}>Q{idx + 1} · {qna.question}</p>
+                {qna.hasMentorRevision && (
+                  <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, color: GREEN, background: "#E1F5EE", border: "1px solid #BBF7D0", borderRadius: 99, padding: "3px 8px" }}>
+                    멘토 수정됨
+                  </span>
+                )}
+              </div>
               <p style={{ fontSize: 13, lineHeight: 1.8, color: "#333", marginBottom: 14 }}>{qna.transcript}</p>
 
               {qna.reasoning && (
@@ -701,13 +710,17 @@ export default function FinalReportPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                   {qna.strengths.length > 0 && (
                     <div style={{ background: "#F0FDF4", borderRadius: 8, padding: 12 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: GREEN, marginBottom: 6 }}>강점</p>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: GREEN, marginBottom: 6 }}>
+                        강점 {qna.hasMentorRevision && <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 600 }}>· 멘토 검토 반영</span>}
+                      </p>
                       {qna.strengths.map((s, i) => <p key={i} style={{ fontSize: 12, color: "#3F5F4B", margin: "0 0 4px", lineHeight: 1.6 }}>• {s}</p>)}
                     </div>
                   )}
                   {qna.improvements.length > 0 && (
                     <div style={{ background: "#FFF5F5", borderRadius: 8, padding: 12 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: "#E24B4A", marginBottom: 6 }}>개선점</p>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: "#E24B4A", marginBottom: 6 }}>
+                        개선점 {qna.hasMentorRevision && <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 600 }}>· 멘토 검토 반영</span>}
+                      </p>
                       {qna.improvements.map((s, i) => <p key={i} style={{ fontSize: 12, color: "#6F4545", margin: "0 0 4px", lineHeight: 1.6 }}>• {s}</p>)}
                     </div>
                   )}
@@ -716,21 +729,33 @@ export default function FinalReportPage() {
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, borderTop: "1px solid #FAF8F4" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div>
-                    <p style={{ fontSize: 10, color: "#aaa", marginBottom: 3 }}>AI 점수</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <Stars score={qna.aiScore} color="#D1D5DB" />
-                      <span style={{ fontSize: 12, color: "#aaa", textDecoration: "line-through" }}>{Number(qna.aiScore).toFixed(1)}</span>
+                  {hasMentorScoreRevision ? (
+                    <>
+                      <div>
+                        <p style={{ fontSize: 10, color: "#aaa", marginBottom: 3 }}>AI 초안 점수</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Stars score={qna.aiScore} color="#D1D5DB" />
+                          <span style={{ fontSize: 12, color: "#aaa", textDecoration: "line-through" }}>{Number(qna.aiScore).toFixed(1)}</span>
+                        </div>
+                      </div>
+                      <span style={{ color: "#999", fontSize: 16 }}>→</span>
+                      <div>
+                        <p style={{ fontSize: 10, color: "#888", marginBottom: 3, fontWeight: 700 }}>멘토 수정 점수</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Stars score={displayScore} color="#F59E0B" />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>{Number(displayScore).toFixed(1)}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize: 10, color: "#888", marginBottom: 3, fontWeight: 700 }}>AI 평가 점수</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <Stars score={displayScore} color="#F59E0B" />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>{Number(displayScore).toFixed(1)}</span>
+                      </div>
                     </div>
-                  </div>
-                  <span style={{ color: "#999", fontSize: 16 }}>→</span>
-                  <div>
-                    <p style={{ fontSize: 10, color: "#888", marginBottom: 3, fontWeight: 700 }}>멘토 점수</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <Stars score={mentorScore_q} color="#F59E0B" />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>{Number(mentorScore_q).toFixed(1)}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
                 <AudioPlayer
                   sessionId={sessionId}

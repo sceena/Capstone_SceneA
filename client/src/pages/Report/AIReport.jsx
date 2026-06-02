@@ -762,9 +762,7 @@ export default function AIReportPage() {
           header, nav, button, [data-no-print] { display: none !important; }
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; margin: 0 !important; padding: 10mm 12mm !important; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          #report-content > div > div,
-          #report-content [style*="borderRadius"],
-          #report-content [style*="border-radius"] {
+          #report-content p, #report-content li, #report-content span {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }

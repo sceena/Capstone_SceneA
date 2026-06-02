@@ -27,7 +27,7 @@ import {
    - role prop: "mentee" | "mentor"
    ============================================================ */
 
-export default function InterviewRobby({ role = "mentee" }) {
+export default function InterviewLobby({ role = "mentee" }) {
   const navigate  = useNavigate();
   const { id }    = useParams();
   const videoRef  = useRef(null);

@@ -1,10 +1,21 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { getQuestionAnswers, getSession, getSessionReport, saveMentorFeedback } from "../../api/sessions";
+import mockAiReport from "./mockAiReport";
+
+const USE_MOCK = import.meta.env.VITE_USE_MOCK_REPORT === "true";
+
+function autoResize(e) {
+  const el = e.target;
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
 
 const NAVY = "#0D2240";
-const GREEN = "#1D9E75";
-const BG = "#FAF8F4";
+const GREEN = "#0CA678";
+const BG = "#F0F4F8";
+const CARD = "#FFFFFF";
+const PRIMARY_GRAD = "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)";
 
 const DEFAULT_SESSION_INFO = {
   title: "세션 로딩 중...",
@@ -50,17 +61,17 @@ function StarPicker({ value, onChange }) {
 function QuestionCard({ qna, feedbacks, onChange }) {
   const fb = feedbacks[qna.id] || { score: qna.mentorScore ?? qna.aiScore, reasoning: "", strengths: "", improvements: "", comment: "" };
   return (
-    <div style={{ background: "white", borderRadius: 14, border: "1px solid #E0DDD8", overflow: "hidden", marginBottom: 16 }}>
-      <div style={{ background: "#F8F7F4", padding: "14px 20px", borderBottom: "1px solid #E0DDD8" }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 6 }}>{qna.question}</p>
-        <p style={{ fontSize: 12, color: "#666", lineHeight: 1.6, fontStyle: "italic" }}>"{qna.transcript}"</p>
+    <div style={{ background: CARD, borderRadius: 14, border: "1px solid #E9ECEF", overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ background: "#d4e7f2ca", padding: "14px 20px", borderBottom: "1px solid #7DD3FC" }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: "#0C4A6E", marginBottom: 6 }}>{qna.question}</p>
+        <p style={{ fontSize: 12, color: "#0369A1", lineHeight: 1.6, fontStyle: "italic" }}>"{qna.transcript}"</p>
       </div>
       <div style={{ padding: "16px 20px" }}>
-        <div style={{ background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: "#0C4A6E", marginBottom: 4, letterSpacing: "0.5px" }}>AI 분석 (참고용)</p>
+        <div style={{ background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "#14532D", marginBottom: 4, letterSpacing: "0.5px" }}>AI 분석 (참고용)</p>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <p style={{ fontSize: 12, color: "#0369A1" }}>{qna.aiComment}</p>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#0C4A6E", background: "#E0F2FE", padding: "2px 10px", borderRadius: 99, whiteSpace: "nowrap", marginLeft: 12 }}>
+            <p style={{ fontSize: 12, color: "#166534" }}>{qna.aiComment}</p>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#14532D", background: "#DCFCE7", padding: "2px 10px", borderRadius: 99, whiteSpace: "nowrap", marginLeft: 12 }}>
               AI {qna.aiScore.toFixed(1)}점
             </span>
           </div>
@@ -80,11 +91,12 @@ function QuestionCard({ qna, feedbacks, onChange }) {
           <textarea
             value={fb.reasoning}
             onChange={(e) => onChange(qna.id, "reasoning", e.target.value)}
+            onInput={autoResize}
             placeholder="AI 평가를 현직자 관점에서 어떻게 수정했는지 근거를 작성해주세요."
             style={{
               width: "100%", borderRadius: 8, border: "1px solid #D1D5DB",
               padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333",
-              fontFamily: "inherit", resize: "vertical", outline: "none",
+              fontFamily: "inherit", resize: "none", overflow: "hidden", outline: "none",
               minHeight: 72, transition: "border-color 0.15s", boxSizing: "border-box",
             }}
             onFocus={(e) => (e.target.style.borderColor = GREEN)}
@@ -97,8 +109,9 @@ function QuestionCard({ qna, feedbacks, onChange }) {
             <textarea
               value={fb.strengths}
               onChange={(e) => onChange(qna.id, "strengths", e.target.value)}
+              onInput={autoResize}
               placeholder="한 줄에 하나씩 작성"
-              style={{ width: "100%", minHeight: 72, borderRadius: 8, border: "1px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+              style={{ width: "100%", minHeight: 72, borderRadius: 8, background: "#FFFFFF", border: "1.5px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "none", overflow: "hidden", boxSizing: "border-box", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
             />
           </div>
           <div>
@@ -106,8 +119,9 @@ function QuestionCard({ qna, feedbacks, onChange }) {
             <textarea
               value={fb.improvements}
               onChange={(e) => onChange(qna.id, "improvements", e.target.value)}
+              onInput={autoResize}
               placeholder="한 줄에 하나씩 작성"
-              style={{ width: "100%", minHeight: 72, borderRadius: 8, border: "1px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" }}
+              style={{ width: "100%", minHeight: 72, borderRadius: 8, background: "#FFFFFF", border: "1.5px solid #D1D5DB", padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333", fontFamily: "inherit", resize: "none", overflow: "hidden", boxSizing: "border-box", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
             />
           </div>
         </div>
@@ -283,8 +297,12 @@ export default function MentorFeedbackPage() {
 
         if (reportData.status === "fulfilled" && reportData.value) {
           applyReportData(reportData.value);
+        } else if (USE_MOCK) {
+          applyReportData(mockAiReport);
         }
-      } catch {}
+      } catch {
+        if (USE_MOCK) applyReportData(mockAiReport);
+      }
       if (!cancelled) setLoading(false);
     };
 
@@ -471,55 +489,49 @@ export default function MentorFeedbackPage() {
 
       {/* Header */}
       <header style={{
-        background: NAVY, padding: "0 32px", height: 64,
+        background: CARD, padding: "0 5%", height: 64,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        position: "sticky", top: 0, zIndex: 50,
+        position: "sticky", top: 0, zIndex: 100,
+        boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)",
       }}>
-        {/* 좌측: 로고 + 페이지명 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link to="/dashboard/mentor" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: GREEN, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M6 12L2 8l4-4M10 4l4 4-4 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, fontWeight: 500 }}>대시보드</span>
-          </Link>
-          <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>/</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN }} />
-            <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>멘토 최종 코멘트 작성</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: PRIMARY_GRAD, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>Scene<span style={{ color: NAVY }}>A</span></span>
+          <span style={{ color: "#E9ECEF", fontSize: 18 }}>|</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: GREEN }} />
+            <span style={{ fontWeight: 700, fontSize: 14, color: NAVY }}>멘토 최종 코멘트 작성</span>
           </div>
         </div>
 
-        {/* 우측: 타이머 + 진행 상황 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          {/* Countdown */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 8,
-            background: timeLeft < 300 ? "rgba(239,68,68,0.15)" : timeLeft < 900 ? "rgba(245,158,11,0.15)" : "rgba(29,158,117,0.15)",
-            border: `1px solid ${timerColor}40`, borderRadius: 10, padding: "6px 16px",
+            background: timeLeft < 300 ? "#FFF5F5" : timeLeft < 900 ? "#FFFBEB" : "#F0FDF4",
+            border: `1px solid ${timerColor}40`, borderRadius: 10, padding: "6px 14px",
             animation: timerUrgent ? "pulse-border 1.5s ease-in-out infinite" : "none",
           }}>
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>⏱ 남은 시간</span>
-            <span style={{ fontSize: 17, fontWeight: 800, color: timerColor, fontVariantNumeric: "tabular-nums", letterSpacing: "0.04em" }}>
+            <span style={{ fontSize: 11, color: "#868E96" }}>⏱ 남은 시간</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: timerColor, fontVariantNumeric: "tabular-nums" }}>
               {formatTime(timeLeft)}
             </span>
           </div>
           <div style={{ textAlign: "right" }}>
-            <p style={{ color: "#93C5FD", fontSize: 12 }}>{sessionInfo.title}</p>
-            <p style={{ color: "#60A5FA", fontSize: 11 }}>
-              {sentMentees.size} / {menteeList.length}명 전송 완료
-            </p>
+            <p style={{ color: NAVY, fontSize: 12, fontWeight: 600, margin: 0 }}>{sessionInfo.title}</p>
+            <p style={{ color: "#868E96", fontSize: 11, margin: 0 }}>{sentMentees.size} / {menteeList.length}명 전송 완료</p>
           </div>
         </div>
       </header>
 
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 24px 80px" }}>
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 24px 80px" }}>
 
         {/* Mentee tabs */}
-        <div style={{ background: "white", borderRadius: 14, border: "1px solid #E0DDD8", marginBottom: 24, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid #F0EDE8", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ background: CARD, borderRadius: 16, border: "1px solid #E9ECEF", marginBottom: 24, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05)" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid #E9ECEF", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>멘티 선택</p>
             <p style={{ fontSize: 11, color: "#888" }}>멘티별로 피드백 작성 후 각각 전송해주세요</p>
           </div>
@@ -550,7 +562,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Mentee info banner */}
-        <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 16, padding: "20px 24px", marginBottom: 28, display: "flex", alignItems: "center", gap: 20 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 16, padding: "20px 24px", marginBottom: 28, display: "flex", alignItems: "center", gap: 20 }}>
           <div style={{ width: 52, height: 52, borderRadius: "50%", background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 18, flexShrink: 0 }}>
             {currentMentee?.menteeName.slice(0, 1)}
           </div>
@@ -580,7 +592,7 @@ export default function MentorFeedbackPage() {
               <p style={{ fontWeight: 700, fontSize: 15, color: "#111" }}>질문별 멘토 평가 수정</p>
               <p style={{ fontSize: 12, color: "#888" }}>AI 초안은 보존하고, 멘토의 점수·근거·좋은 점·개선점을 DPO용 수정본으로 저장합니다</p>
             </div>
-            <div style={{ marginLeft: "auto", background: "#F8F7F4", borderRadius: 99, padding: "4px 14px" }}>
+            <div style={{ marginLeft: "auto", background: "#D6E4F0", borderRadius: 99, padding: "4px 14px" }}>
               <span style={{ fontSize: 12, color: "#888" }}>Q 평균 </span>
               <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>{avgQScore}</span>
             </div>
@@ -591,7 +603,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Section 2: Overall score */}
-        <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: "20px 24px", marginBottom: 16 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>2</div>
             <div>
@@ -603,7 +615,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Section 3: Total feedback */}
-        <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: "20px 24px", marginBottom: 28 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 28 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>3</div>
             <div>
@@ -625,11 +637,13 @@ export default function MentorFeedbackPage() {
           <textarea
             value={currentFbData.totalFeedback}
             onChange={(e) => handleTotalFeedbackChange(e.target.value)}
+            onInput={autoResize}
             placeholder="전반적인 면접 인상, 강점, 개선 포인트, 다음 세션 전 준비사항 등을 자유롭게 작성해주세요."
             style={{
-              width: "100%", borderRadius: 10, border: "1px solid #D1D5DB",
+              width: "100%", borderRadius: 10, border: "1.5px solid #D1D5DB",
+              background: "#FFFFFF", boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
               padding: "14px 16px", fontSize: 14, lineHeight: 1.8, color: "#333",
-              fontFamily: "inherit", resize: "vertical", outline: "none",
+              fontFamily: "inherit", resize: "none", overflow: "hidden", outline: "none",
               minHeight: 160, transition: "border-color 0.15s", boxSizing: "border-box",
             }}
             onFocus={(e) => (e.target.style.borderColor = GREEN)}
@@ -641,7 +655,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Send button for current mentee */}
-        <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: "20px 24px", display: "flex", alignItems: "center", gap: 16, marginBottom: allSent ? 16 : 0 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", display: "flex", alignItems: "center", gap: 16, marginBottom: allSent ? 16 : 0 }}>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>
               {currentMentee?.menteeName}에게 최종 리포트 전송

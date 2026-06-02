@@ -2,17 +2,19 @@ import { getAuthUser } from "../store/authStore";
 
 function authHeaders() {
   const user = getAuthUser();
-  if (!user?.accessToken) throw Object.assign(new Error("로그인 토큰 없음"), { status: 401 });
+  const token = user?.accessToken || user?.token || user?.access_token;
+  if (!token) throw Object.assign(new Error("로그인 토큰 없음"), { status: 401 });
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${user.accessToken}`,
+    Authorization: `Bearer ${token}`,
   };
 }
 
 function authToken() {
   const user = getAuthUser();
-  if (!user?.accessToken) throw Object.assign(new Error("로그인 토큰 없음"), { status: 401 });
-  return user.accessToken;
+  const token = user?.accessToken || user?.token || user?.access_token;
+  if (!token) throw Object.assign(new Error("로그인 토큰 없음"), { status: 401 });
+  return token;
 }
 
 /**

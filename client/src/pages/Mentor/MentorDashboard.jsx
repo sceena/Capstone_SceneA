@@ -38,7 +38,9 @@ const Header = ({ userName, accessToken }) => {
         method: "POST",
         headers: { "Authorization": `Bearer ${accessToken}` },
       });
-    } catch {}
+    } catch (err) {
+      console.error("[MentorDashboard] 로그아웃 API 실패:", err);
+    }
     clearAuthUser();
     navigate("/");
   };
@@ -598,10 +600,16 @@ export default function MentorDashboard() {
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [allSessions, setAllSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const loadSessions = useCallback(() => {
+    setSessionsLoading(true);
     getMySessions()
       .then(data => setAllSessions(Array.isArray(data) ? data : []))
-      .catch(() => setAllSessions([]));
+      .catch(err => {
+        console.error("[MentorDashboard] 세션 목록 조회 실패:", err);
+        setAllSessions([]);
+      })
+      .finally(() => setSessionsLoading(false));
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
@@ -825,6 +833,19 @@ export default function MentorDashboard() {
             </svg>
           }
         >
+          {sessionsLoading ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontSize: 14 }}>
+              <div style={{
+                width: 36, height: 36,
+                border: `3px solid ${C.border}`,
+                borderTop: `3px solid ${C.primary}`,
+                borderRadius: "50%",
+                margin: "0 auto 12px",
+                animation: "spin 0.8s linear infinite",
+              }} />
+              불러오는 중...
+            </div>
+          ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {sessions.map(s => (
               <SessionCard
@@ -857,6 +878,7 @@ export default function MentorDashboard() {
               </div>
             )}
           </div>
+          )}
         </DashCard>
 
         {/* ── 하단 2열 ── */}

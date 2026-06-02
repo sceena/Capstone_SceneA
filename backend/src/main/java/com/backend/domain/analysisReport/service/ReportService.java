@@ -17,6 +17,7 @@ import com.backend.domain.analysisReport.dto.response.ResumeSkillInfo;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
+import com.backend.domain.interviewAnswer.entity.SttStatus;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
 import com.backend.domain.interviewQuestion.entity.InterviewQuestion;
 import com.backend.domain.interviewQuestion.repository.InterviewQuestionRepository;
@@ -215,16 +216,15 @@ public class ReportService {
         List<Resume> resumes = resumeRepository.findAllByInterviewSession(session);
         Optional<JobPosting> jobPosting = jobPostingRepository.findByInterviewSession(session);
 
-        List<AiInterviewAnswerRequest> answers = questionRepository
-                .findAllByInterviewSessionOrderByOrderIndex(session)
-                .stream()
-                .flatMap(question -> answerRepository.findAllByInterviewQuestion(question).stream()
-                        .map(answer -> toAiAnswerRequest(question, answer)))
+        List<InterviewQuestion> questions = questionRepository.findAllByInterviewSessionOrderByOrderIndex(session);
+        List<InterviewAnswer> answers = questions.stream()
+                .flatMap(question -> answerRepository.findAllByInterviewQuestion(question).stream())
                 .toList();
 
         if (answers.isEmpty()) {
             throw new CustomException(ErrorCode.ANSWER_NOT_FOUND);
         }
+        validateReportInputsReady(questions, answers);
 
         AiCandidateContext candidateContext = new AiCandidateContext(
                 candidate.getMember().getId(),
@@ -243,7 +243,28 @@ public class ReportService {
                 jobPosting.map(JobPosting::getUrl).orElse(null)
         );
 
-        return new AiReportRequest(session.getId(), candidateContext, companyContext, answers);
+        List<AiInterviewAnswerRequest> aiAnswers = answers.stream()
+                .map(answer -> toAiAnswerRequest(answer.getInterviewQuestion(), answer))
+                .toList();
+
+        return new AiReportRequest(session.getId(), candidateContext, companyContext, aiAnswers);
+    }
+
+    private void validateReportInputsReady(List<InterviewQuestion> questions, List<InterviewAnswer> answers) {
+        boolean hasUnfinishedQuestionStt = questions.stream()
+                .filter(question -> question.getAudioUrl() != null && !question.getAudioUrl().isBlank())
+                .anyMatch(question -> question.getSttStatus() != SttStatus.COMPLETED
+                        || question.getContent() == null
+                        || question.getContent().isBlank()
+                        || "질문 음성 변환 중입니다.".equals(question.getContent()));
+        boolean hasUnfinishedAnswerStt = answers.stream()
+                .anyMatch(answer -> answer.getSttStatus() != SttStatus.COMPLETED
+                        || answer.getSttText() == null
+                        || answer.getSttText().isBlank());
+
+        if (hasUnfinishedQuestionStt || hasUnfinishedAnswerStt) {
+            throw new CustomException(ErrorCode.REPORT_NOT_READY);
+        }
     }
 
     private AiInterviewAnswerRequest toAiAnswerRequest(InterviewQuestion question, InterviewAnswer answer) {

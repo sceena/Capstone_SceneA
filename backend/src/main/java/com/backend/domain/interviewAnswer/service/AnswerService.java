@@ -1,7 +1,8 @@
 package com.backend.domain.interviewAnswer.service;
 
-import com.backend.domain.ai.client.AiSttJobClient;
-import com.backend.domain.ai.dto.request.AiSttJobRequest;
+import com.backend.domain.ai.client.AiSttClient;
+import com.backend.domain.ai.client.SttTranscriptNormalizer;
+import com.backend.domain.ai.dto.response.AiSttResponse;
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
 import com.backend.domain.interviewAnswer.dto.response.AnswerAudioResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
@@ -54,13 +55,11 @@ public class AnswerService {
     private final SessionParticipantRepository participantRepository;
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
-    private final AiSttJobClient aiSttJobClient;
+    private final AiSttClient aiSttClient;
+    private final SttTranscriptNormalizer sttTranscriptNormalizer;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
-
-    @Value("${app.callback-base-url:http://localhost:8080}")
-    private String callbackBaseUrl;
 
     @Transactional
     public AnswerUploadResponse uploadAnswer(Long memberId, Long sessionId, Long questionId,
@@ -96,7 +95,7 @@ public class AnswerService {
                     .build());
         }
 
-        submitAnswerSttJob(answer);
+        transcribeAnswer(answer, audio);
 
         return AnswerUploadResponse.from(answer, sessionId);
     }
@@ -269,15 +268,18 @@ public class AnswerService {
         }
     }
 
-    private void submitAnswerSttJob(InterviewAnswer answer) {
+    private void transcribeAnswer(InterviewAnswer answer, MultipartFile audio) {
         answer.updateSttStatus(SttStatus.PROCESSING);
         try {
-            aiSttJobClient.submitJob(AiSttJobRequest.forAnswer(
-                    answer.getId(),
-                    answer.getAudioUrl(),
-                    callbackBaseUrl + "/api/internal/stt/callback"
-            ));
-            log.info("STT job submitted for answerId={}", answer.getId());
+            AiSttResponse response = aiSttClient.transcribe(audio);
+            answer.completeStt(
+                    sttTranscriptNormalizer.normalize(response.text()),
+                    response.model(),
+                    response.durationSec(),
+                    response.audioQualityStatus(),
+                    response.audioQualityMessage()
+            );
+            log.info("STT completed synchronously for answerId={}", answer.getId());
         } catch (RuntimeException e) {
             answer.failStt("AI STT server request failed");
             log.warn("Failed to transcribe answerId={}; sttStatus set to FAILED", answer.getId(), e);

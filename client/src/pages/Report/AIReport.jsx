@@ -69,8 +69,7 @@ async function loadReport(sessionId) {
   try {
     return await requestJson(`/api/sessions/${sessionId}/report`);
   } catch (error) {
-    if (USE_MOCK_REPORT && error.status !== 404) {
-      console.warn("Using mock AI report because the report API is unavailable.", error);
+    if (USE_MOCK_REPORT) {
       return createMockReport(sessionId);
     }
     throw error;
@@ -270,7 +269,7 @@ function Header({ onExportWord, role }) {
           </span>
         </div>
         <button onClick={onExportWord} style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 13, cursor: "pointer", fontWeight: 700, boxShadow: "0 2px 8px rgba(12,166,120,0.3)", whiteSpace: "nowrap" }}>
-          Word 내보내기
+          PDF 저장
         </button>
       </div>
     </header>
@@ -693,24 +692,7 @@ function MentorReport({ sessionId, report }) {
 }
 
 function exportWord(role) {
-  const el = document.getElementById("report-content");
-  const bodyHtml = el ? el.innerHTML : "<p>리포트 내용을 불러올 수 없습니다.</p>";
-
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <style>
-    body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; max-width: 860px; margin: 40px auto; color: #111; line-height: 1.8; background: #FAF8F4; }
-    button { display: none !important; }
-    svg { display: none !important; }
-  </style>
-  </head><body>${bodyHtml}</body></html>`;
-
-  const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `면접_리포트_${role === "mentee" ? "멘티" : "멘토"}_${new Date().toISOString().slice(0, 10)}.doc`;
-  a.click();
-  URL.revokeObjectURL(url);
+  window.print();
 }
 
 // ─── Page Root ────────────────────────────────────────────────────
@@ -775,6 +757,19 @@ export default function AIReportPage() {
 
   return (
     <div style={{ fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
+      <style>{`
+        @media print {
+          header, nav, button, [data-no-print] { display: none !important; }
+          body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; margin: 0 !important; padding: 10mm 12mm !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          #report-content > div > div,
+          #report-content [style*="borderRadius"],
+          #report-content [style*="border-radius"] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+        }
+      `}</style>
       {phase === "loading" ? (
         <LoadingScreen onDone={() => {}} />
       ) : phase === "error" ? (

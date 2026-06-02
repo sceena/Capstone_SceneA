@@ -40,12 +40,32 @@ logger = logging.getLogger(__name__)
 
 
 TECH_INTERVIEW_INITIAL_PROMPT = """
-한국어 IT 개발자 면접 녹취입니다. 들리는 말만 그대로 받아쓰세요.
-예시 문장이나 질문을 새로 만들지 마세요. 들리지 않는 내용은 추측하지 마세요.
-자주 나오는 기술 용어 표기:
-Java, Spring Boot, JPA, QueryDSL, MyBatis, REST API, JWT, OAuth2, MySQL, MSSQL, MongoDB, Redis, AWS, EC2, S3, RDS, Docker, Kubernetes, CI/CD, GitHub Actions, Nginx, Linux, ERD, SQL, 트랜잭션, 인덱스, 데드락, 커넥션 풀, 쿼리 튜닝, 실행 계획, N+1 문제, 캐시, 로그, 장애 대응, 배포, 테스트 코드, 백엔드, 프론트엔드, API, 서버, 데이터베이스.
-채용 공고 관련 용어:
-스크린 골프, 타석 예약, 결제, 쿠폰, 무인화 서비스, 빌링, 회원 DB, DB 개발, DB 운영, 성능 개선, IDC.
+한국어 IT 개발자 면접 음성 받아쓰기입니다.
+들리는 음성의 의미와 순서를 그대로 전사합니다. 없는 말을 만들지 않습니다. 답변을 보완하거나 요약하지 않습니다.
+발음이 불명확한 단어만 IT 개발자 면접 맥락에 맞는 자연스러운 기술 용어로 표기합니다.
+문맥상 전혀 말이 되지 않는 오인식은 가장 가까운 실제 발화와 기술 용어 표기로 바로잡습니다.
+기술 용어가 실제로 들릴 때만 아래 표기를 참고합니다. 들리지 않은 용어를 추가하지 않습니다.
+
+면접 진행 표현:
+질문 드리겠습니다, 답변하겠습니다, 다시 말씀드리겠습니다, 잘 모르겠습니다, 경험이 없습니다, 추가로 설명드리면, 예를 들어, 프로젝트에서, 개발했습니다, 운영했습니다, 개선했습니다.
+
+개발 공통:
+IT, 개발자, 백엔드, 프론트엔드, 풀스택, 서버, 클라이언트, API, REST API, GraphQL, gRPC, JSON, XML, HTTP, HTTPS, WebSocket, TCP, UDP, DNS, TLS, SSL, CORS, 인증, 인가, 세션, 쿠키, JWT, OAuth, OAuth2, SSO.
+
+언어와 프레임워크:
+Java, Kotlin, Python, JavaScript, TypeScript, Node.js, React, Vue, Next.js, Spring, Spring Boot, Spring MVC, Spring Security, JPA, Hibernate, QueryDSL, MyBatis, Gradle, Maven.
+
+데이터베이스:
+DB, RDBMS, NoSQL, MySQL, MSSQL, PostgreSQL, MongoDB, Redis, Elasticsearch, SQL, DDL, DML, ERD, 정규화, 비정규화, 인덱스, 복합 인덱스, 트랜잭션, ACID, 격리 수준, 락, 데드락, 커넥션 풀, N+1 문제, 쿼리 튜닝, 실행 계획, 파티셔닝, 샤딩, 레플리케이션.
+
+인프라와 운영:
+AWS, EC2, S3, RDS, VPC, IAM, CloudWatch, Docker, Kubernetes, Nginx, Linux, Ubuntu, CI/CD, Git, GitHub, GitHub Actions, Jenkins, 배포, 롤백, 모니터링, 로깅, 장애 대응, 로드 밸런서, CDN, Kafka, RabbitMQ, 메시지 큐.
+
+테스트와 품질:
+테스트 코드, 단위 테스트, 통합 테스트, E2E 테스트, JUnit, Mockito, TDD, 리팩터링, 코드 리뷰, 성능 개선, 병목, 동시성, 캐시, 아키텍처, MSA, 모놀리식.
+
+채용 공고 도메인:
+스크린 골프, 타석 예약, 결제, 쿠폰, 무인화 서비스, 매장 관리 플랫폼, 빌링, 회원 DB, 국내 서비스, 글로벌 서비스, DB 개발, DB 운영, 유지보수, IDC.
 """.strip()
 
 

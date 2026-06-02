@@ -189,16 +189,26 @@ public class QuestionService {
         question.updateSttStatus(SttStatus.PROCESSING);
         try {
             AiSttResponse response = aiSttClient.transcribe(audio);
+            String normalizedText = sttTranscriptNormalizer.normalize(response.text());
+            if (normalizedText == null || normalizedText.isBlank()) {
+                throw new IllegalStateException("AI STT returned empty transcript");
+            }
             question.completeStt(
-                    sttTranscriptNormalizer.normalize(response.text()),
+                    normalizedText,
                     response.model(),
                     response.durationSec(),
                     response.audioQualityStatus(),
                     response.audioQualityMessage()
             );
-            log.info("Question STT completed synchronously for questionId={}", question.getId());
+            log.info(
+                    "Question STT completed synchronously for questionId={} textLength={} quality={} message={}",
+                    question.getId(),
+                    normalizedText.length(),
+                    response.audioQualityStatus(),
+                    response.audioQualityMessage()
+            );
         } catch (RuntimeException e) {
-            question.failStt("AI STT server request failed");
+            question.failStt(e.getMessage() != null ? e.getMessage() : "AI STT server request failed");
             log.warn("Failed to transcribe questionId={}; sttStatus set to FAILED", question.getId(), e);
         }
     }

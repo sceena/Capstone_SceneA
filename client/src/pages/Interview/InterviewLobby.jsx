@@ -300,6 +300,7 @@ export default function InterviewRobby({ role = "mentee" }) {
       (item.questions ?? []).map((content, index) => ({
         key: `personal-${item.candidate_id}-${index}`,
         section: isGroup ? `지원자 ${item.candidate_id}` : "개인 질문",
+        candidateId: item.candidate_id,
         content,
         selected: true,
       }))
@@ -737,13 +738,18 @@ export default function InterviewRobby({ role = "mentee" }) {
                   {/* 오른쪽 열: AI 질문 */}
                   <div style={{ flex: 1, overflowY: "auto" }}>
                     {(() => {
-                      const sectionKey = isGroup ? `지원자 ${selectedMenteeIdx + 1}` : null;
-                      const shownRecommended = sectionKey
-                        ? recommendedQuestions.filter(q => q.section === "공통" || q.section === sectionKey)
-                        : recommendedQuestions;
-                      const shownSaved = sectionKey
-                        ? questions.filter(q => !q.section || q.section === "공통" || q.section === sectionKey)
-                        : questions;
+                      const selectedMenteeId = selectedMentee?.user_id ?? selectedMentee?.userId ?? selectedMentee?.id ?? null;
+                      const isQuestionForSelectedMentee = (q) => {
+                        if (!isGroup) return true;
+                        if (q.section === "공통") return true;
+                        const candidateId = q.candidateId ?? q.candidate_id;
+                        if (candidateId != null && selectedMenteeId != null) {
+                          return String(candidateId) === String(selectedMenteeId);
+                        }
+                        return true;
+                      };
+                      const shownRecommended = recommendedQuestions.filter(isQuestionForSelectedMentee);
+                      const shownSaved = questions.filter(isQuestionForSelectedMentee);
                       return (
                         <Accordion
                           title={isGroup ? `AI 질문 - ${selectedMentee?.name ?? "멘티"}` : "AI 예상 질문 리스트"}

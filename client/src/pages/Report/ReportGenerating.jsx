@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { generateSessionReport, getSessionReport, getSessionSttStatus } from "../../api/sessions";
+import { generateSessionReport, getSessionSttStatus } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
 
 const NAVY = "#0D2240";
@@ -235,13 +235,6 @@ export default function ReportGeneratingPage() {
     const poll = async () => {
       if (generatingRef.current || cancelled) return;
       try {
-        const existingReport = await getSessionReport(sessionId).catch(() => null);
-        if (cancelled) return;
-        if (existingReport?.ai_report) {
-          goToReport();
-          return;
-        }
-
         const summary = await getSessionSttStatus(sessionId);
         if (cancelled) return;
         setStatusSummary(summary);

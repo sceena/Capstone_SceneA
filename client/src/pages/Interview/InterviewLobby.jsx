@@ -264,6 +264,14 @@ export default function InterviewRobby({ role = "mentee" }) {
     return [{ title: "자기소개서", content: content.trim() }].filter(item => item.content);
   };
 
+  const findResumeSectionContent = (content, titleCandidates) => {
+    const normalizedTitles = titleCandidates.map(title => title.replace(/\s+/g, "").toLowerCase());
+    return parseResumeContent(content)
+      .find(section => normalizedTitles.includes((section.title || "").replace(/\s+/g, "").toLowerCase()))
+      ?.content
+      ?.trim() || "";
+  };
+
   const normalizeQuestionList = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.questions)) return data.questions;
@@ -419,6 +427,13 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   const isMentor = role === "mentor";
   const isGroup  = mentees.length > 1 || session.type?.includes("그룹");
+  const menteePreInterviewNote = findResumeSectionContent(resumeContent, [
+    "멘토에게 전달할 내용",
+    "하고 싶은 말",
+    "하고싶은 말",
+    "사전 전달 내용",
+    "자기소개",
+  ]);
 
   /* ── 아코디언 헬퍼 ── */
   const Accordion = ({ title, accentColor = "#fff", defaultOpen = false, children }) => {
@@ -613,6 +628,22 @@ export default function InterviewRobby({ role = "mentee" }) {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* 멘티 사전 전달 내용 (멘토만) */}
+              {isMentor && (
+                <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(99,102,241,0.2)" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#818CF8", textTransform: "uppercase", marginBottom: 10 }}>
+                    {selectedMentee?.name ? `${selectedMentee.name} 사전 전달 내용` : "멘티 사전 전달 내용"}
+                  </p>
+                  {menteePreInterviewNote ? (
+                    <p style={{ fontSize: 13, color: "rgba(255,255,255,0.76)", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{menteePreInterviewNote}</p>
+                  ) : (
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.42)", lineHeight: 1.7 }}>
+                      멘티가 따로 남긴 하고 싶은 말은 없습니다. 제출한 자기소개서는 오른쪽에서 확인할 수 있습니다.
+                    </p>
+                  )}
                 </div>
               )}
 

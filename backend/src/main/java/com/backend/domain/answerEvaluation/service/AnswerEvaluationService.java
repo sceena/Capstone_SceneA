@@ -59,7 +59,7 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
                     questionReport.question(),
                     questionReport.answer(),
                     questionReport.reasoning(),
-                    questionReport.score(),
+                    toFivePointScale(questionReport.score()),
                     toJson(questionReport.strengths()),
                     toJson(questionReport.improvements()),
                     questionReport.aiModelName(),
@@ -174,13 +174,15 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
                         .answerText(answer.getSttText() == null ? "" : answer.getSttText())
                         .build());
 
+        Float normalizedScore = toFivePointScale(score);
+
         evaluation.updateMentorEvaluation(
                 reasoning,
-                score,
+                normalizedScore,
                 toJson(strengths),
                 toJson(improvements)
         );
-        answer.updateMentorScore(toFivePointScale(score));
+        answer.updateMentorScore(normalizedScore);
         return evaluationRepository.save(evaluation);
     }
 
@@ -274,10 +276,11 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
         return left == null ? right == null : left.equals(right);
     }
 
-    private Float toFivePointScale(Float tenPointScore) {
-        if (tenPointScore == null) {
+    private Float toFivePointScale(Float score) {
+        if (score == null) {
             return null;
         }
-        return Math.max(1.0f, Math.min(5.0f, tenPointScore / 2.0f));
+        Float fivePointScore = score > 5.0f ? score / 2.0f : score;
+        return Math.max(1.0f, Math.min(5.0f, fivePointScore));
     }
 }

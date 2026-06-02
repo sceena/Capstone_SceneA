@@ -261,6 +261,14 @@ export default function InterviewRobby({ role = "mentee" }) {
     return [{ title: "자기소개서", content: content.trim() }].filter(item => item.content);
   };
 
+  const findResumeSectionContent = (content, titleCandidates) => {
+    const normalizedTitles = titleCandidates.map(title => title.replace(/\s+/g, "").toLowerCase());
+    return parseResumeContent(content)
+      .find(section => normalizedTitles.includes((section.title || "").replace(/\s+/g, "").toLowerCase()))
+      ?.content
+      ?.trim() || "";
+  };
+
   const normalizeQuestionList = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.questions)) return data.questions;
@@ -466,10 +474,29 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   const [selectedMenteeIdx, setSelectedMenteeIdx] = useState(0);
 
+  const formatScheduledTime = (value) => {
+    if (!value) return "";
+    const normalized = typeof value === "string" ? value.replace(" ", "T") : value;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    return `${month}월 ${day}일 ${hour}시${minute ? ` ${String(minute).padStart(2, "0")}분` : ""}`;
+  };
+
+  const resolveMenteeGoal = (value) => {
+    const fallback = "완벽하게 말하려고 애쓰기보다, 지금까지 해온 경험을 차분히 꺼내면 충분합니다. 오늘은 답변의 방향과 보완할 지점을 분명히 가져가는 시간이에요.";
+    const genericGoal = "멘토에게 전달한 자기소개서와 지원 정보를 바탕으로 면접을 준비합니다.";
+    const text = value?.trim?.() || "";
+    return !text || text === genericGoal ? fallback : text;
+  };
+
   const scheduledAt = sessionData?.scheduledAt ?? sessionData?.scheduled_at ?? "";
   const mentorName  = sessionData?.mentorName ?? sessionData?.mentor_name ?? "멘토";
   const mentorInfo  = sessionData?.mentorInfo ?? sessionData?.mentor_info ?? "면접 준비를 함께 진행합니다.";
-  const menteeGoal  = sessionData?.menteeGoal ?? sessionData?.mentee_goal ?? "멘토에게 전달한 자소서와 지원 정보를 바탕으로 면접을 준비합니다.";
+  const menteeGoal  = resolveMenteeGoal(sessionData?.menteeGoal ?? sessionData?.mentee_goal);
 
   /* 참여자 목록에서 멘티들 추출 (그룹 면접 대응) */
   const allParticipants = sessionData?.participants ?? [];
@@ -515,7 +542,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   /* API 데이터 우선, 없으면 fallback */
   const session = {
     title:      sessionData?.title ?? (sessionData?.job_category ? `${sessionData.job_category} 모의 면접` : "세션 로딩 중..."),
-    date:       scheduledAt,
+    date:       formatScheduledTime(scheduledAt),
     type:       sessionData?.sessionType ?? sessionData?.session_type ?? "1:1 개인 세션",
     menteeName: selectedMentee?.name ?? fallbackMenteeName,
     menteeInfo: sessionData?.menteeInfo ?? sessionData?.mentee_info ?? "",
@@ -527,24 +554,33 @@ export default function InterviewRobby({ role = "mentee" }) {
 
   const isMentor = role === "mentor";
   const isGroup  = mentees.length > 1 || session.type?.includes("그룹");
+  const sessionStatus = String(sessionData?.status ?? "").toUpperCase();
+  const canModifyQuestions = !sessionStatus || sessionStatus === "SCHEDULED";
+  const menteePreInterviewNote = findResumeSectionContent(resumeContent, [
+    "멘토에게 전달할 내용",
+    "하고 싶은 말",
+    "하고싶은 말",
+    "사전 전달 내용",
+    "자기소개",
+  ]);
 
   /* ── 아코디언 헬퍼 ── */
   const Accordion = ({ title, accentColor = "#fff", defaultOpen = false, children }) => {
     const [open, setOpen] = useState(defaultOpen);
     return (
-      <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)", overflow: "hidden", background: "#112338", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
+      <div style={{ borderRadius: 14, border: "1px solid #E5E5E5", overflow: "hidden", background: "#FFFFFF", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
         <button type="button" onClick={() => setOpen(v => !v)} style={{
-          width: "100%", padding: "14px 18px", background: "#1a3352",
-          border: "none", borderBottom: open ? "1px solid rgba(255,255,255,0.1)" : "none",
+          width: "100%", padding: "14px 18px", background: "#FFFFFF",
+          border: "none", borderBottom: open ? "1px solid #E5E5E5" : "none",
           cursor: "pointer", fontFamily: "inherit",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
         }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: accentColor }}>{title}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#202123" }}>{title}</span>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>
-            <path d="M2 5l5 5 5-5" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 5l5 5 5-5" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        {open && <div style={{ padding: "16px 18px", background: "#0e1e30" }}>{children}</div>}
+        {open && <div style={{ padding: "16px 18px", background: "#FFFFFF" }}>{children}</div>}
       </div>
     );
   };
@@ -609,30 +645,35 @@ export default function InterviewRobby({ role = "mentee" }) {
   const renderQuestionSection = ({ title, accentColor, loadScope, loadLabel, recommendedItems, savedItems }) => (
     <Accordion title={title} accentColor={accentColor} defaultOpen={true}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative", zIndex: 3 }}>
-          <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions(loadScope); }} disabled={recommendLoading} style={{
-            flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
-            border: `1px solid ${loadScope === "common" ? "rgba(52,211,153,0.55)" : "rgba(245,158,11,0.55)"}`,
-            background: loadScope === "common" ? "#083529" : "#251a05",
-            color: loadScope === "common" ? "#34D399" : "#FBBF24", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-            position: "relative", zIndex: 4, pointerEvents: "auto",
-          }}>
-            {recommendLoading && recommendScope === loadScope ? "AI 질문 생성 중.." : loadLabel}
-          </button>
-          {recommendedItems.length > 0 && (
-            <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendSaving) handleSaveRecommendedQuestions(recommendedItems); }} disabled={recommendSaving} style={{
-              minHeight: 38, padding: "9px 14px", borderRadius: 8,
-              border: "1px solid rgba(29,158,117,0.55)", background: recommendSaving ? "rgba(29,158,117,0.10)" : "#083529",
-              color: "#34D399", cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-              whiteSpace: "nowrap", position: "relative", zIndex: 4, pointerEvents: "auto",
+        {canModifyQuestions ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative", zIndex: 3 }}>
+            <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions(loadScope); }} disabled={recommendLoading} style={{
+              flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
+              border: "1px solid #D1D5DB", background: recommendLoading && recommendScope === loadScope ? "#F1F1F3" : "#FFFFFF",
+              color: "#202123", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+              position: "relative", zIndex: 4, pointerEvents: "auto",
             }}>
-              {recommendSaving ? "저장 중.." : "선택 저장"}
+              {recommendLoading && recommendScope === loadScope ? "AI 질문 생성 중..." : loadLabel}
             </button>
-          )}
-        </div>
+            {recommendedItems.length > 0 && (
+              <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendSaving) handleSaveRecommendedQuestions(recommendedItems); }} disabled={recommendSaving} style={{
+                minHeight: 38, padding: "9px 14px", borderRadius: 8,
+                border: "1px solid #202123", background: recommendSaving ? "#F1F1F3" : "#202123",
+                color: recommendSaving ? "#6B7280" : "#FFFFFF", cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
+                whiteSpace: "nowrap", position: "relative", zIndex: 4, pointerEvents: "auto",
+              }}>
+                {recommendSaving ? "저장 중..." : "선택 저장"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.6 }}>
+            면접이 시작된 이후에는 저장된 질문만 확인할 수 있습니다.
+          </p>
+        )}
         {recommendError && recommendScope === loadScope && <p style={{ fontSize: 11, color: "#EF4444" }}>{recommendError}</p>}
-        {renderRecommendedQuestionList(recommendedItems)}
+        {canModifyQuestions && renderRecommendedQuestionList(recommendedItems)}
         {renderSavedQuestionList(savedItems)}
       </div>
     </Accordion>
@@ -645,32 +686,32 @@ export default function InterviewRobby({ role = "mentee" }) {
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         html,body{height:100%;margin:0;overflow:hidden}
         #root{height:100%;width:100%;max-width:100%;margin:0;min-height:0;display:block;text-align:left}
-        body{font-family:'Noto Sans KR',sans-serif;background:#0a1628;color:white}
+        body{font-family:'Noto Sans KR',sans-serif;background:#F7F7F8;color:#202123}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:999px}
-        ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3)}
+        ::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:999px}
+        ::-webkit-scrollbar-thumb:hover{background:#9CA3AF}
       `}</style>
 
-      <div style={{ width:"100%", height:"100vh", background:"#0a1628", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      <div style={{ width:"100%", height:"100vh", background:"#F7F7F8", display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
         {/* ── 헤더 ── */}
         <div style={{
           height: 64, padding: "0 32px", flexShrink: 0,
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          borderBottom: "1px solid #E5E5E5",
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "#0D2240",
+          background: "#FFFFFF",
         }}>
           {/* 로고 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#0D2240,#1B4F7A)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "#F1F1F3", color: "#202123", border: "1px solid #E5E5E5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
             </div>
-            <span style={{ fontSize: 16, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>Scene<span style={{ color: C_teal }}>A</span></span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#202123", letterSpacing: "-0.03em" }}>Scene<span style={{ color: C_teal }}>A</span></span>
           </div>
 
           {/* 스텝 인디케이터 */}
@@ -679,31 +720,31 @@ export default function InterviewRobby({ role = "mentee" }) {
               <div key={s.n} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{
                   width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
-                  background: step >= s.n ? C_teal : "rgba(255,255,255,0.08)",
-                  border: `1.5px solid ${step >= s.n ? C_teal : "rgba(255,255,255,0.2)"}`,
+                  background: step >= s.n ? "#202123" : "#F1F1F3",
+                  border: `1.5px solid ${step >= s.n ? "#202123" : "#E5E5E5"}`,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 11, fontWeight: 700,
-                  color: step >= s.n ? "#fff" : "rgba(255,255,255,0.35)",
+                  color: step >= s.n ? "#fff" : "#9CA3AF",
                   transition: "all 0.3s",
                 }}>
                   {step > s.n ? "✓" : s.n}
                 </div>
-                <span style={{ fontSize: 13, fontWeight: step === s.n ? 700 : 400, color: step === s.n ? "#fff" : "rgba(255,255,255,0.4)", transition: "all 0.3s" }}>{s.l}</span>
-                {i < 1 && <div style={{ width: 36, height: 1, background: step > s.n ? C_teal : "rgba(255,255,255,0.15)", transition: "background 0.3s", margin: "0 4px" }} />}
+                <span style={{ fontSize: 13, fontWeight: step === s.n ? 700 : 400, color: step === s.n ? "#202123" : "#6B7280", transition: "all 0.3s" }}>{s.l}</span>
+                {i < 1 && <div style={{ width: 36, height: 1, background: step > s.n ? "#202123" : "#E5E5E5", transition: "background 0.3s", margin: "0 4px" }} />}
               </div>
             ))}
           </div>
 
           {/* 세션 제목 */}
           <div style={{ textAlign: "right" }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{session.title}</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: "#202123" }}>{session.title}</p>
             <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
               <span style={{
                 fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
                 background: session.type?.includes("그룹") ? "rgba(245,158,11,0.2)" : "rgba(29,158,117,0.2)",
                 color: session.type?.includes("그룹") ? "#F59E0B" : C_teal,
               }}>{session.type?.includes("그룹") ? "그룹" : "1:1"}</span>
-              {session.date && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{session.date}</span>}
+              {session.date && <span style={{ fontSize: 11, color: "#6B7280" }}>{session.date}</span>}
             </div>
           </div>
         </div>
@@ -720,11 +761,11 @@ export default function InterviewRobby({ role = "mentee" }) {
             <div style={{ width: 270, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", paddingRight: 4 }}>
 
               {/* 세션 참여자 카드 */}
-              <div style={{ background: "#112338", borderRadius: 16, padding: "20px 22px", border: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
+              <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "20px 22px", border: "1px solid #E5E5E5", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>참여자</p>
+                  <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "#6B7280", textTransform: "uppercase" }}>참여자</p>
                   {isGroup && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#F59E0B", background: "rgba(245,158,11,0.18)", padding: "2px 10px", borderRadius: 99, border: "1px solid rgba(245,158,11,0.3)" }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#202123", background: "#F1F1F3", padding: "2px 10px", borderRadius: 99, border: "1px solid #E5E5E5" }}>
                       그룹 면접 · 멘티 {mentees.length}명
                     </span>
                   )}
@@ -732,17 +773,17 @@ export default function InterviewRobby({ role = "mentee" }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
                   {/* 멘토 */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1px solid ${isMentor ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.07)"}`, background: isMentor ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#0F6E56", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1px solid ${isMentor ? "#D1D5DB" : "#E5E5E5"}`, background: isMentor ? "#F1F1F3" : "#F7F7F8" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#202123", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
                       {session.mentorName?.[0] ?? "M"}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{session.mentorName}</p>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: C_teal, background: "rgba(29,158,117,0.18)", padding: "2px 8px", borderRadius: 99 }}>멘토</span>
-                        {isMentor && <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.08)", padding: "2px 8px", borderRadius: 99 }}>나</span>}
+                        <p style={{ fontSize: 14, fontWeight: 700, color: "#202123" }}>{session.mentorName}</p>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#067A5F", background: "#ECFDF5", padding: "2px 8px", borderRadius: 99 }}>멘토</span>
+                        {isMentor && <span style={{ fontSize: 10, fontWeight: 600, color: "#6B7280", background: "#FFFFFF", padding: "2px 8px", borderRadius: 99, border: "1px solid #E5E5E5" }}>나</span>}
                       </div>
-                      {session.mentorInfo && <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.mentorInfo}</p>}
+                      {session.mentorInfo && <p style={{ fontSize: 11, color: "#6B7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.mentorInfo}</p>}
                     </div>
                   </div>
 
@@ -756,32 +797,32 @@ export default function InterviewRobby({ role = "mentee" }) {
                         style={{
                           display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
                           borderRadius: 12,
-                          border: `1px solid ${isSelected ? "rgba(165,180,252,0.5)" : isMe ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.07)"}`,
-                          background: isSelected ? "rgba(165,180,252,0.12)" : isMe ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
+                          border: `1px solid ${isSelected ? "#202123" : isMe ? "#D1D5DB" : "#E5E5E5"}`,
+                          background: isSelected ? "#F1F1F3" : isMe ? "#F1F1F3" : "#F7F7F8",
                           cursor: isMentor ? "pointer" : "default",
                           transition: "all 0.18s",
                           position: "relative",
                         }}
-                        onMouseEnter={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "rgba(165,180,252,0.07)"; e.currentTarget.style.borderColor = "rgba(165,180,252,0.3)"; } }}
-                        onMouseLeave={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; } }}
+                        onMouseEnter={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "#F1F1F3"; e.currentTarget.style.borderColor = "#D1D5DB"; } }}
+                        onMouseLeave={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "#F7F7F8"; e.currentTarget.style.borderColor = "#E5E5E5"; } }}
                       >
-                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: isSelected ? "#3730A3" : "#1B4F7A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0, transition: "background 0.18s" }}>
+                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: isSelected ? "#202123" : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0, transition: "background 0.18s" }}>
                           {mentee.name?.[0] ?? "M"}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                            <p style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{mentee.name}</p>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: "#A5B4FC", background: "rgba(165,180,252,0.15)", padding: "2px 8px", borderRadius: 99 }}>멘티</span>
-                            {isMe && <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.08)", padding: "2px 8px", borderRadius: 99 }}>나</span>}
-                            {isGroup && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>지원자 {i + 1}</span>}
+                            <p style={{ fontSize: 14, fontWeight: 700, color: "#202123" }}>{mentee.name}</p>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#202123", background: "#FFFFFF", padding: "2px 8px", borderRadius: 99, border: "1px solid #E5E5E5" }}>멘티</span>
+                            {isMe && <span style={{ fontSize: 10, fontWeight: 600, color: "#6B7280", background: "#FFFFFF", padding: "2px 8px", borderRadius: 99, border: "1px solid #E5E5E5" }}>나</span>}
+                            {isGroup && <span style={{ fontSize: 10, color: "#9CA3AF" }}>지원자 {i + 1}</span>}
                           </div>
-                          {mentee.info && <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mentee.info}</p>}
+                          {mentee.info && <p style={{ fontSize: 11, color: "#6B7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mentee.info}</p>}
                         </div>
                         {isMentor && (
                           <div style={{ flexShrink: 0 }}>
                             {isSelected
-                              ? <span style={{ fontSize: 11, fontWeight: 700, color: "#A5B4FC" }}>확인 중 ●</span>
-                              : <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)" }}>클릭</span>
+                              ? <span style={{ fontSize: 11, fontWeight: 700, color: "#202123" }}>확인 중</span>
+                              : <span style={{ fontSize: 11, color: "#9CA3AF" }}>클릭</span>
                             }
                           </div>
                         )}
@@ -793,29 +834,45 @@ export default function InterviewRobby({ role = "mentee" }) {
 
               {/* 면접 진행 가이드 (멘토만) */}
               {isMentor && (
-                <div style={{ background: "#0d2219", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(29,158,117,0.35)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: C_teal, textTransform: "uppercase", marginBottom: 14 }}>면접 진행 가이드</p>
+                <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "18px 20px", border: "1px solid #E5E5E5", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "#6B7280", textTransform: "uppercase", marginBottom: 14 }}>면접 진행 가이드</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {[
-                      { icon: "⏱", text: "질문당 답변 시간은 2~3분을 권장합니다" },
-                      { icon: "⭐", text: "STAR 기법(상황→과제→행동→결과)으로 구체적 답변을 유도하세요" },
-                      { icon: "🎯", text: "AI 추천 질문을 참고하되 자유롭게 응용하세요" },
-                      { icon: "💬", text: "면접 종료 후 멘토링 세션에서 심층 피드백이 진행됩니다" },
+                      { icon: "01", text: "질문당 답변 시간은 2~3분을 권장합니다" },
+                      { icon: "02", text: "STAR 기법으로 구체적 답변을 유도하세요" },
+                      { icon: "03", text: "AI 추천 질문을 참고하되 자유롭게 응용하세요" },
+                      { icon: "04", text: "면접 종료 후 멘토링 세션에서 심층 피드백이 진행됩니다" },
                     ].map((item, i) => (
                       <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                        <span style={{ fontSize: 14, flexShrink: 0, lineHeight: 1.5 }}>{item.icon}</span>
-                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 1.65 }}>{item.text}</p>
+                        <span style={{ width: 24, height: 24, borderRadius: "50%", background: "#F1F1F3", color: "#6B7280", fontSize: 10, fontWeight: 800, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{item.icon}</span>
+                        <p style={{ fontSize: 12, color: "#4B5563", lineHeight: 1.65 }}>{item.text}</p>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
+              {/* 멘티 사전 전달 내용 (멘토만) */}
+              {isMentor && (
+                <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "18px 20px", border: "1px solid #E5E5E5", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "#6B7280", textTransform: "uppercase", marginBottom: 10 }}>
+                    {selectedMentee?.name ? `${selectedMentee.name} 사전 전달 내용` : "멘티 사전 전달 내용"}
+                  </p>
+                  {menteePreInterviewNote ? (
+                    <p style={{ fontSize: 13, color: "#202123", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{menteePreInterviewNote}</p>
+                  ) : (
+                    <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.7 }}>
+                      멘티가 따로 남긴 하고 싶은 말은 없습니다. 제출한 자기소개서는 오른쪽에서 확인할 수 있습니다.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* 목표 / 한마디 (멘티만) */}
               {!isMentor && session.menteeGoal && (
-                <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(99,102,241,0.2)" }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#818CF8", textTransform: "uppercase", marginBottom: 10 }}>오늘의 목표</p>
-                  <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", lineHeight: 1.7 }}>{session.menteeGoal}</p>
+                <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "18px 20px", border: "1px solid #E5E5E5", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "#6B7280", textTransform: "uppercase", marginBottom: 10 }}>오늘 가져갈 것</p>
+                  <p style={{ fontSize: 13, color: "#202123", lineHeight: 1.7 }}>{session.menteeGoal}</p>
                 </div>
               )}
             </div>
@@ -832,24 +889,24 @@ export default function InterviewRobby({ role = "mentee" }) {
                       {resumeContent ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {parseResumeContent(resumeContent).map((item, i) => (
-                            <div key={i} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.15)" }}>
+                            <div key={i} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #E5E5E5" }}>
                               <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setOpenResumeIndex(openResumeIndex === i ? null : i); }} style={{
-                                width: "100%", background: "#1e3a5a", border: "none", cursor: "pointer",
+                                width: "100%", background: "#F7F7F8", border: "none", cursor: "pointer",
                                 display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", gap: 8, fontFamily: "inherit",
                               }}>
-                                <span style={{ fontSize: 13, color: "#fff", fontWeight: 600, textAlign: "left" }}>{item.title}</span>
-                                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", flexShrink: 0 }}>{openResumeIndex === i ? "▼" : "▶"}</span>
+                                <span style={{ fontSize: 13, color: "#202123", fontWeight: 700, textAlign: "left" }}>{item.title}</span>
+                                <span style={{ fontSize: 11, color: "#6B7280", flexShrink: 0 }}>{openResumeIndex === i ? "▼" : "▶"}</span>
                               </button>
                               {openResumeIndex === i && (
-                                <div style={{ padding: "14px 16px", background: "#0d1e30", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-                                  <p style={{ fontSize: 13, color: "rgba(255,255,255,0.88)", lineHeight: 1.85, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>{item.content}</p>
+                                <div style={{ padding: "14px 16px", background: "#FFFFFF", borderTop: "1px solid #E5E5E5" }}>
+                                  <p style={{ fontSize: 13, color: "#202123", lineHeight: 1.85, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>{item.content}</p>
                                 </div>
                               )}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", fontStyle: "italic" }}>자기소개서가 없습니다</p>
+                        <p style={{ fontSize: 12, color: "#9CA3AF", fontStyle: "italic" }}>자기소개서가 없습니다</p>
                       )}
                     </Accordion>
                   </div>
@@ -879,115 +936,14 @@ export default function InterviewRobby({ role = "mentee" }) {
                           recommendedItems: commonRecommended,
                           savedItems: commonSaved,
                         })}
-                        <Accordion
-                          title={isGroup ? `AI 질문 - ${selectedMentee?.name ?? "멘티"}` : "AI 예상 질문 리스트"}
-                          accentColor="#F59E0B"
-                          defaultOpen={true}
-                        >
-                          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative", zIndex: 3 }}>
-                              {isGroup ? (
-                                <>
-                                  {false && <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions("common"); }} disabled={recommendLoading} style={{
-                                    flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
-                                    border: `1px solid ${recommendScope === "common" ? "rgba(52,211,153,0.65)" : "rgba(245,158,11,0.45)"}`,
-                                    background: recommendScope === "common" ? "#083529" : "#251a05",
-                                    color: recommendScope === "common" ? "#34D399" : "#FBBF24", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-                                    display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                                    position: "relative", zIndex: 4, pointerEvents: "auto",
-                                  }}>
-                                    {recommendLoading && recommendScope === "common" ? "AI 질문 생성 중..." : "공통질문 불러오기"}
-                                  </button>}
-                                  <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions("personal"); }} disabled={recommendLoading} style={{
-                                    flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
-                                    border: `1px solid ${recommendScope === "personal" ? "rgba(245,158,11,0.65)" : "rgba(245,158,11,0.45)"}`,
-                                    background: recommendScope === "personal" ? "#251a05" : "#151923",
-                                    color: "#FBBF24", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-                                    display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                                    position: "relative", zIndex: 4, pointerEvents: "auto",
-                                  }}>
-                                    {recommendLoading && recommendScope === "personal" ? "AI 질문 생성 중..." : `${selectedMentee?.name ?? "멘티"} 개인질문 불러오기`}
-                                  </button>
-                                </>
-                              ) : (
-                                <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions("personal"); }} disabled={recommendLoading} style={{
-                                  flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
-                                  border: "1px solid rgba(245,158,11,0.45)", background: recommendLoading ? "rgba(245,158,11,0.10)" : "#251a05",
-                                  color: "#FBBF24", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-                                  display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                                  position: "relative", zIndex: 4, pointerEvents: "auto",
-                                }}>
-                                  {recommendLoading && (
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
-                                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                                    </svg>
-                                  )}
-                                  {recommendLoading ? "AI 질문 생성 중..." : "AI 추천 질문 불러오기"}
-                                </button>
-                              )}
-                              {shownRecommended.length > 0 && (
-                                <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendSaving) handleSaveRecommendedQuestions(shownRecommended); }} disabled={recommendSaving} style={{
-                                  minHeight: 38, padding: "9px 14px", borderRadius: 8,
-                                  border: "1px solid rgba(29,158,117,0.55)", background: recommendSaving ? "rgba(29,158,117,0.10)" : "#083529",
-                                  color: "#34D399", cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-                                  whiteSpace: "nowrap", position: "relative", zIndex: 4, pointerEvents: "auto",
-                                }}>
-                                  {recommendSaving ? "저장 중..." : "선택 저장"}
-                                </button>
-                              )}
-                            </div>
-                            {recommendError && <p style={{ fontSize: 11, color: "#EF4444" }}>{recommendError}</p>}
-                            {shownRecommended.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
-                                {shownRecommended.map((item, i) => {
-                                  const selected = item.selected !== false;
-                                  return (
-                                    <div key={item.key} style={{
-                                      background: selected ? "#201803" : "#101b2a",
-                                      border: `1px solid ${selected ? "rgba(245,158,11,0.48)" : "rgba(255,255,255,0.12)"}`,
-                                      borderRadius: 8, padding: "11px 12px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1,
-                                    }}>
-                                      <input type="checkbox" checked={selected} readOnly onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleRecommendedQuestionToggle(item.key); }} style={{ accentColor: "#F59E0B", width: 15, height: 15, marginTop: 5, flexShrink: 0, cursor: "pointer", position: "relative", zIndex: 5, pointerEvents: "auto" }} />
-                                      <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 7 }}>
-                                          <span style={{ fontSize: 11, color: getQuestionLabel(item) === "공통 질문" ? "#34D399" : "#FBBF24", fontWeight: 800 }}>{getQuestionLabel(item)}</span>
-                                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.38)", fontWeight: 700 }}>추천 {i + 1}</span>
-                                        </div>
-                                        <textarea value={item.content ?? ""} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} onChange={e => handleRecommendedQuestionChange(item.key, e.target.value)}
-                                          rows={Math.max(2, Math.ceil(String(item.content ?? "").length / 34))}
-                                          style={{ width: "100%", resize: "vertical", minHeight: 66, border: "1px solid rgba(255,255,255,0.18)", borderRadius: 8, padding: "9px 10px", background: "#0b1726", color: "rgba(255,255,255,0.94)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.65, outline: "none", boxSizing: "border-box", position: "relative", zIndex: 3, pointerEvents: "auto" }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {shownSaved.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
-                                {shownSaved.map((q, i) => (
-                                  <div key={q.id ?? i} style={{ background: "#101b2a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "12px 13px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1 }}>
-                                    <span style={{ minWidth: 28, textAlign: "center", fontSize: 11, fontWeight: 800, color: "#FBBF24", flexShrink: 0, marginTop: 3 }}>Q{i + 1}</span>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{ fontSize: 11, color: getQuestionLabel(q) === "공통 질문" ? "#34D399" : "#FBBF24", fontWeight: 800, marginBottom: 5 }}>{getQuestionLabel(q)}</div>
-                                      <p style={{ fontSize: 13, color: "rgba(255,255,255,0.95)", lineHeight: 1.65, margin: 0 }}>{q.content ?? q.question ?? q}</p>
-                                    </div>
-                                    {q.id && (
-                                      <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (deletingQuestionId !== q.id) handleDeleteSavedQuestion(q.id); }} disabled={deletingQuestionId === q.id} style={{
-                                        flexShrink: 0, minHeight: 30, padding: "6px 10px", borderRadius: 7,
-                                        border: "1px solid rgba(239,68,68,0.50)", background: deletingQuestionId === q.id ? "rgba(239,68,68,0.08)" : "#2a1012",
-                                        color: "#F87171", cursor: deletingQuestionId === q.id ? "default" : "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 800,
-                                        position: "relative", zIndex: 5, pointerEvents: "auto",
-                                      }}>
-                                        {deletingQuestionId === q.id ? "삭제 중" : "삭제"}
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </Accordion>
+                        {renderQuestionSection({
+                          title: isGroup ? `AI 질문 - ${selectedMentee?.name ?? "멘티"}` : "AI 예상 질문 리스트",
+                          accentColor: "#F59E0B",
+                          loadScope: "personal",
+                          loadLabel: isGroup ? `${selectedMentee?.name ?? "멘티"} 개인질문 불러오기` : "AI 추천 질문 불러오기",
+                          recommendedItems: shownRecommended,
+                          savedItems: shownSaved,
+                        })}
                         </div>
                       );
                     })()}
@@ -1002,16 +958,16 @@ export default function InterviewRobby({ role = "mentee" }) {
                   <div style={{ flex: 1, overflowY: "auto" }}>
                     <Accordion title="담당 멘토 소개" accentColor={C_teal} defaultOpen={true}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: session.mentorInfo ? 12 : 0 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#0F6E56", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#202123", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
                           {session.mentorName?.[0] ?? "?"}
                         </div>
                         <div>
-                          <p style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{session.mentorName} 멘토</p>
-                          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{session.type}</p>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: "#202123" }}>{session.mentorName} 멘토</p>
+                          <p style={{ fontSize: 11, color: "#6B7280" }}>{session.type}</p>
                         </div>
                       </div>
                       {session.mentorInfo && (
-                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 1.7 }}>{session.mentorInfo}</p>
+                        <p style={{ fontSize: 12, color: "#4B5563", lineHeight: 1.7 }}>{session.mentorInfo}</p>
                       )}
                     </Accordion>
                   </div>
@@ -1022,20 +978,20 @@ export default function InterviewRobby({ role = "mentee" }) {
                       {resumeContent ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {parseResumeContent(resumeContent).map((item, i) => (
-                            <div key={i} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px" }}>
-                              <p style={{ fontSize: 11, fontWeight: 800, color: C_teal, marginBottom: 6 }}>{item.title}</p>
-                              <p style={{ fontSize: 12, lineHeight: 1.75, color: "rgba(255,255,255,0.7)", whiteSpace: "pre-wrap" }}>{item.content}</p>
+                            <div key={i} style={{ background: "#F7F7F8", border: "1px solid #E5E5E5", borderRadius: 10, padding: "12px" }}>
+                              <p style={{ fontSize: 11, fontWeight: 800, color: "#202123", marginBottom: 6 }}>{item.title}</p>
+                              <p style={{ fontSize: 12, lineHeight: 1.75, color: "#4B5563", whiteSpace: "pre-wrap" }}>{item.content}</p>
                             </div>
                           ))}
                           {(sessionData?.jobPosting?.url || sessionData?.jobPostingUrl) && (
-                            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "8px 12px" }}>
-                              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>채용공고 URL</p>
+                            <div style={{ background: "#F7F7F8", borderRadius: 8, padding: "8px 12px" }}>
+                              <p style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 2 }}>채용공고 URL</p>
                               <p style={{ fontSize: 11, color: C_teal, wordBreak: "break-all" }}>{sessionData?.jobPosting?.url || sessionData?.jobPostingUrl}</p>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <p style={{ fontSize: 12, color: resumeError ? "#EF4444" : "rgba(255,255,255,0.3)", fontStyle: "italic" }}>
+                        <p style={{ fontSize: 12, color: resumeError ? "#EF4444" : "#9CA3AF", fontStyle: "italic" }}>
                           {resumeError || "자기소개서를 불러오는 중입니다..."}
                         </p>
                       )}
@@ -1057,14 +1013,14 @@ export default function InterviewRobby({ role = "mentee" }) {
 
               {/* ⚠️ 장치 경고 배너 */}
               {!deviceReady && (
-                <div style={{ width: "100%", maxWidth: 460, background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "10px 16px", display: "flex", gap: 10, alignItems: "center" }}>
-                  <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
-                  <p style={{ fontSize: 12, color: "#F59E0B", fontWeight: 600 }}>카메라와 마이크가 정상 작동하는지 확인해주세요</p>
+                <div style={{ width: "100%", maxWidth: 460, background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: 10, padding: "10px 16px", display: "flex", gap: 10, alignItems: "center", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                  <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#F1F1F3", color: "#6B7280", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>!</span>
+                  <p style={{ fontSize: 12, color: "#4B5563", fontWeight: 600 }}>카메라와 마이크가 정상 작동하는지 확인해주세요</p>
                 </div>
               )}
 
               {/* 카메라 프리뷰 박스 */}
-              <div style={{ width: "100%", maxWidth: 460, aspectRatio: "4/3", background: "#0d1f3c", borderRadius: 14, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ width: "100%", maxWidth: 460, aspectRatio: "4/3", background: "#111827", borderRadius: 14, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #E5E5E5", boxShadow: "0 12px 30px rgba(16,24,40,0.10)" }}>
                 <video ref={videoRef} autoPlay playsInline muted style={{
                   position: "absolute", inset: 0, width: "100%", height: "100%",
                   objectFit: "cover", transform: "scaleX(-1)",
@@ -1094,13 +1050,13 @@ export default function InterviewRobby({ role = "mentee" }) {
               </div>
 
               {/* 마이크 작동 방식 안내 */}
-              <div style={{ width: "100%", maxWidth: 460, background: "rgba(29,158,117,0.1)", border: "1px solid rgba(29,158,117,0.3)", borderRadius: 10, padding: "12px 16px", display: "flex", gap: 12, alignItems: "center" }}>
-                <span style={{ fontSize: 20, flexShrink: 0 }}>🎙</span>
+              <div style={{ width: "100%", maxWidth: 460, background: "#FFFFFF", border: "1px solid #E5E5E5", borderRadius: 10, padding: "12px 16px", display: "flex", gap: 12, alignItems: "center", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                <span style={{ width: 32, height: 32, borderRadius: "50%", background: "#F1F1F3", color: "#202123", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><MicOnIcon /></span>
                 <div>
-                  <p style={{ fontSize: 13, color: C_teal, fontWeight: 700, marginBottom: 3 }}>마이크는 기본 음소거로 시작합니다</p>
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>
-                    면접 중 <strong style={{ color: "rgba(255,255,255,0.85)" }}>
-                      {isMentor ? '"질문 녹음" 버튼' : '"답변 시작" 버튼'}
+                  <p style={{ fontSize: 13, color: "#202123", fontWeight: 700, marginBottom: 3 }}>마이크는 기본 음소거로 시작합니다</p>
+                  <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.6 }}>
+                    면접 중 <strong style={{ color: "#202123" }}>
+                      {isMentor ? '"질문 시작" 버튼' : '"답변 시작" 버튼'}
                     </strong>을 눌러야만 마이크가 활성화됩니다.
                   </p>
                 </div>
@@ -1115,16 +1071,17 @@ export default function InterviewRobby({ role = "mentee" }) {
                   <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                     <button onClick={() => btn.setActive(v => !v)} style={{
                       width: 52, height: 52, borderRadius: "50%",
-                      background: btn.active ? "rgba(255,255,255,0.1)" : "rgba(239,68,68,0.2)",
-                      border: `1.5px solid ${btn.active ? "rgba(255,255,255,0.2)" : "rgba(239,68,68,0.5)"}`,
-                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s",
+                      background: btn.active ? "#FFFFFF" : "#FEE2E2",
+                      border: `1.5px solid ${btn.active ? "#D1D5DB" : "#FCA5A5"}`,
+                      color: btn.active ? "#202123" : "#EF4444",
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s", boxShadow: "0 8px 20px rgba(16,24,40,0.08)",
                     }}
-                      onMouseEnter={e => { e.currentTarget.style.background = btn.active ? "rgba(255,255,255,0.16)" : "rgba(239,68,68,0.3)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = btn.active ? "rgba(255,255,255,0.1)" : "rgba(239,68,68,0.2)"; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = btn.active ? "#F1F1F3" : "#FEE2E2"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = btn.active ? "#FFFFFF" : "#FEE2E2"; }}
                     >
                       {btn.active ? btn.onIcon : btn.offIcon}
                     </button>
-                    <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{btn.label}</span>
+                    <span style={{ fontSize: 10, color: "#6B7280" }}>{btn.label}</span>
                   </div>
                 ))}
               </div>
@@ -1132,8 +1089,8 @@ export default function InterviewRobby({ role = "mentee" }) {
               {/* 카메라 선택 */}
               {videoDevices.length > 1 && (
                 <div style={{ width: "100%", maxWidth: 360 }}>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 6 }}>카메라 선택</label>
-                  <select value={selectedDeviceId} onChange={e => setSelectedDeviceId(e.target.value)} style={{ width: "100%", padding: "8px 12px", background: "rgba(255,255,255,0.06)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, fontSize: 12, cursor: "pointer", outline: "none" }}>
+                  <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 6 }}>카메라 선택</label>
+                  <select value={selectedDeviceId} onChange={e => setSelectedDeviceId(e.target.value)} style={{ width: "100%", padding: "8px 12px", background: "#FFFFFF", color: "#202123", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 12, cursor: "pointer", outline: "none" }}>
                     {videoDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `카메라 ${d.deviceId.slice(0, 6)}`}</option>)}
                   </select>
                 </div>
@@ -1144,38 +1101,38 @@ export default function InterviewRobby({ role = "mentee" }) {
             <div style={{ width: 320, flexShrink: 0, display: "flex", flexDirection: "column", gap: 16 }}>
 
               {/* 마이크 레벨 미터 */}
-              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>마이크 레벨</p>
+              <div style={{ background: "#FFFFFF", borderRadius: 14, padding: "18px 20px", border: "1px solid #E5E5E5", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>마이크 레벨</p>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>🎙 입력 감지</span>
+                  <span style={{ fontSize: 12, color: "#6B7280" }}>입력 감지</span>
                   {!micOn
                     ? <span style={{ fontSize: 11, color: "#EF4444", fontWeight: 600 }}>마이크 꺼짐</span>
                     : micOk
                       ? <span style={{ fontSize: 11, color: C_teal, fontWeight: 700 }}>✓ 정상 감지됨</span>
-                      : <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>말씀해보세요...</span>
+                      : <span style={{ fontSize: 11, color: "#9CA3AF" }}>말씀해보세요...</span>
                   }
                 </div>
-                <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden", marginBottom: 6 }}>
-                  <div style={{ width: `${micOn ? micLevel : 0}%`, height: 8, borderRadius: 99, background: micLevel > 20 ? C_teal : "rgba(255,255,255,0.2)", transition: "width 0.08s ease" }} />
+                <div style={{ height: 8, background: "#F1F1F3", borderRadius: 99, overflow: "hidden", marginBottom: 6 }}>
+                  <div style={{ width: `${micOn ? micLevel : 0}%`, height: 8, borderRadius: 99, background: micLevel > 20 ? "#202123" : "#D1D5DB", transition: "width 0.08s ease" }} />
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  {["낮음", "적정 ✓"].map((l, i) => <span key={i} style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{l}</span>)}
+                  {["낮음", "적정"].map((l, i) => <span key={i} style={{ fontSize: 9, color: "#9CA3AF" }}>{l}</span>)}
                 </div>
               </div>
 
               {/* 장치 상태 */}
-              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>장치 상태</p>
+              <div style={{ background: "#FFFFFF", borderRadius: 14, padding: "18px 20px", border: "1px solid #E5E5E5", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>장치 상태</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {[
                     { label: "카메라", ok: camStatus === "ok", okText: "정상 연결됨", failText: "확인 필요" },
                     { label: "마이크", ok: micOk, okText: "정상 감지됨", failText: "테스트 중", pulse: !micOk && micOn },
                   ].map((d, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, background: d.ok ? "rgba(29,158,117,0.1)" : "rgba(255,255,255,0.03)", border: `1px solid ${d.ok ? "rgba(29,158,117,0.3)" : "rgba(255,255,255,0.08)"}` }}>
-                      <span style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{d.label}</span>
+                    <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, background: d.ok ? "#ECFDF5" : "#F7F7F8", border: `1px solid ${d.ok ? "rgba(16,163,127,0.24)" : "#E5E5E5"}` }}>
+                      <span style={{ fontSize: 13, color: "#202123", fontWeight: 600 }}>{d.label}</span>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: d.ok ? C_teal : "rgba(255,255,255,0.25)", animation: d.pulse ? "pulse 1.2s ease-in-out infinite" : "none" }} />
-                        <span style={{ fontSize: 12, color: d.ok ? C_teal : "rgba(255,255,255,0.4)", fontWeight: 600 }}>{d.ok ? d.okText : d.failText}</span>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: d.ok ? C_teal : "#D1D5DB", animation: d.pulse ? "pulse 1.2s ease-in-out infinite" : "none" }} />
+                        <span style={{ fontSize: 12, color: d.ok ? "#067A5F" : "#6B7280", fontWeight: 600 }}>{d.ok ? d.okText : d.failText}</span>
                       </div>
                     </div>
                   ))}
@@ -1183,8 +1140,8 @@ export default function InterviewRobby({ role = "mentee" }) {
               </div>
 
               {/* 체크리스트 */}
-              <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.1)", flex: 1 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>입장 전 체크</p>
+              <div style={{ background: "#FFFFFF", borderRadius: 14, padding: "18px 20px", border: "1px solid #E5E5E5", flex: 1, boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>입장 전 체크</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {(isMentor ? [
                     { label: "멘티 자기소개서 검토 완료", auto: false },
@@ -1197,8 +1154,8 @@ export default function InterviewRobby({ role = "mentee" }) {
                     { label: "조용하고 밝은 환경에 있다", auto: false },
                   ]).map((item, i) => (
                     <label key={i} style={{ display: "flex", alignItems: "center", gap: 10, cursor: item.auto ? "default" : "pointer" }}>
-                      <input type="checkbox" checked={item.auto || checklist[i]} onChange={() => !item.auto && setChecklist(prev => prev.map((v, j) => j === i ? !v : v))} style={{ accentColor: C_teal, width: 15, height: 15, flexShrink: 0 }} readOnly={item.auto} />
-                      <span style={{ fontSize: 12, color: (item.auto || checklist[i]) ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.4)", textDecoration: (item.auto || checklist[i]) ? "line-through" : "none" }}>{item.label}</span>
+                      <input type="checkbox" checked={item.auto || checklist[i]} onChange={() => !item.auto && setChecklist(prev => prev.map((v, j) => j === i ? !v : v))} style={{ accentColor: "#202123", width: 15, height: 15, flexShrink: 0 }} readOnly={item.auto} />
+                      <span style={{ fontSize: 12, color: (item.auto || checklist[i]) ? "#4B5563" : "#9CA3AF", textDecoration: (item.auto || checklist[i]) ? "line-through" : "none" }}>{item.label}</span>
                       {item.auto && <span style={{ fontSize: 10, color: C_teal, fontWeight: 700, marginLeft: "auto", flexShrink: 0 }}>자동</span>}
                     </label>
                   ))}
@@ -1212,27 +1169,27 @@ export default function InterviewRobby({ role = "mentee" }) {
         {/* ── 푸터 (버튼) ── */}
         <div style={{
           height: 72, padding: "0 32px", flexShrink: 0,
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          background: "#0D2240",
+          borderTop: "1px solid #E5E5E5",
+          background: "#FFFFFF",
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <div>
             {step === 2 && (
-              <button onClick={() => setStep(1)} style={{ padding: "10px 22px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "rgba(255,255,255,0.65)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all 0.18s" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; e.currentTarget.style.color = "#fff"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; e.currentTarget.style.color = "rgba(255,255,255,0.65)"; }}
+              <button onClick={() => setStep(1)} style={{ padding: "10px 22px", borderRadius: 10, border: "1px solid #D1D5DB", background: "transparent", color: "#4B5563", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all 0.18s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "#9CA3AF"; e.currentTarget.style.color = "#202123"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "#D1D5DB"; e.currentTarget.style.color = "#4B5563"; }}
               >← 이전</button>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {step === 1 && (
-              <button onClick={() => setStep(2)} style={{ padding: "12px 32px", borderRadius: 10, border: `1.5px solid ${C_teal}`, background: "rgba(29,158,117,0.18)", color: C_teal, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all 0.18s" }}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(29,158,117,0.28)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(29,158,117,0.18)"; }}
+              <button onClick={() => setStep(2)} style={{ padding: "12px 32px", borderRadius: 10, border: "1.5px solid #202123", background: "#202123", color: "#FFFFFF", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all 0.18s" }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#111827"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "#202123"; }}
               >장치 확인하기 →</button>
             )}
             {step === 2 && (
-              <button onClick={handleEnter} disabled={entering} style={{ padding: "12px 36px", borderRadius: 10, border: "none", background: entering ? "rgba(255,255,255,0.2)" : "linear-gradient(135deg,#1D9E75,#0F6E56)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: entering ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "opacity 0.18s", boxShadow: entering ? "none" : "0 4px 16px rgba(29,158,117,0.4)", letterSpacing: "0.02em" }}
+              <button onClick={handleEnter} disabled={entering} style={{ padding: "12px 36px", borderRadius: 10, border: "none", background: entering ? "#D1D5DB" : "#202123", color: "#fff", fontSize: 15, fontWeight: 700, cursor: entering ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "opacity 0.18s", boxShadow: entering ? "none" : "0 8px 20px rgba(16,24,40,0.14)", letterSpacing: "0.02em" }}
                 onMouseEnter={e => { if (!entering) e.currentTarget.style.opacity = "0.88"; }}
                 onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
               >{entering ? "입장 중..." : "면접 입장하기"}</button>
@@ -1247,38 +1204,38 @@ export default function InterviewRobby({ role = "mentee" }) {
 
 /* ── 아이콘 상수 ── */
 const C_white = "#FFFFFF";
-const C_teal  = "#1D9E75";
+const C_teal  = "#10A37F";
 
 const MicOnIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="6" y="1" width="6" height="9" rx="3" stroke="white" strokeWidth="1.5"/>
-    <path d="M3 8c0 3.314 2.686 6 6 6s6-2.686 6-6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-    <line x1="9" y1="14" x2="9" y2="17" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+    <rect x="6" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M3 8c0 3.314 2.686 6 6 6s6-2.686 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <line x1="9" y1="14" x2="9" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
   </svg>
 );
 const MicOffIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="6" y="1" width="6" height="9" rx="3" stroke="#EF4444" strokeWidth="1.5"/>
-    <path d="M3 8c0 3.314 2.686 6 6 6s6-2.686 6-6" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
-    <line x1="1" y1="1" x2="17" y2="17" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
+    <rect x="6" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M3 8c0 3.314 2.686 6 6 6s6-2.686 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <line x1="1" y1="1" x2="17" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
   </svg>
 );
 const CamOnIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="1" y="4" width="12" height="10" rx="2" stroke="white" strokeWidth="1.5"/>
-    <path d="M13 7l4-2v8l-4-2V7z" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
+    <rect x="1" y="4" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M13 7l4-2v8l-4-2V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
   </svg>
 );
 const CamOffIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="1" y="4" width="12" height="10" rx="2" stroke="#EF4444" strokeWidth="1.5"/>
-    <path d="M13 7l4-2v8l-4-2V7z" stroke="#EF4444" strokeWidth="1.5" strokeLinejoin="round"/>
-    <line x1="1" y1="1" x2="17" y2="17" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
+    <rect x="1" y="4" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M13 7l4-2v8l-4-2V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+    <line x1="1" y1="1" x2="17" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
   </svg>
 );
 const SettingIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="9" cy="9" r="2.5" stroke="white" strokeWidth="1.5"/>
-    <path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M14.3 3.7l-1.4 1.4M5.1 12.9l-1.4 1.4" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M14.3 3.7l-1.4 1.4M5.1 12.9l-1.4 1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
   </svg>
 );

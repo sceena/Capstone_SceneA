@@ -138,27 +138,41 @@ function toFivePointMentorScore(score) {
   return Math.max(1, Math.min(5, fivePoint));
 }
 
-function toTenPointMentorScore(score) {
+function toApiMentorScore(score) {
   const numeric = Number(score);
   if (!Number.isFinite(numeric)) return null;
   const fivePoint = numeric > 5 ? numeric / 2 : numeric;
-  return Math.max(1, Math.min(5, fivePoint)) * 2;
+  return Math.max(1, Math.min(5, fivePoint));
 }
 
-function buildMenteesFromQuestionReports(questionReports, sessionId, reportStatus, answerEvaluations = [], mentorFeedback = "", reportMentorScore = null) {
+function buildMenteesFromQuestionReports(
+  questionReports,
+  sessionId,
+  reportStatus,
+  answerEvaluations = [],
+  mentorFeedback = "",
+  reportMentorScore = null,
+  menteeReportFeedbacks = []
+) {
   const groups = new Map();
   const { byAnswerId: evaluationsByAnswerId, byQuestionMentee: evaluationsByQuestionMentee } = buildEvaluationMap(answerEvaluations);
+  const feedbackByMentee = new Map();
+  menteeReportFeedbacks.forEach((feedback) => {
+    const menteeId = feedback?.mentee_id ?? feedback?.menteeId;
+    if (menteeId != null) feedbackByMentee.set(String(menteeId), feedback);
+  });
 
   questionReports.forEach((report, index) => {
     const menteeId = report.mentee_id || `session-${sessionId}`;
     const menteeName = report.mentee_name || "면접 참여자";
+    const menteeFeedback = feedbackByMentee.get(String(menteeId));
     if (!groups.has(menteeId)) {
       groups.set(menteeId, {
         menteeId,
         menteeName,
-        menteeTrack: reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
-        mentorFeedback,
-        mentorScore: reportMentorScore,
+        menteeTrack: menteeFeedback || reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
+        mentorFeedback: menteeFeedback?.mentor_feedback ?? menteeFeedback?.mentorFeedback ?? mentorFeedback,
+        mentorScore: menteeFeedback?.mentor_score ?? menteeFeedback?.mentorScore ?? reportMentorScore,
         qnas: [],
       });
     }
@@ -180,7 +194,7 @@ function buildMenteesFromQuestionReports(questionReports, sessionId, reportStatu
       answerId: report.answer_id,
       audioUrl: report.replay?.audio_url ?? report.replay?.audioUrl ?? null,
       question: `Q${index + 1} · ${report.question}`,
-      aiScore: Math.max(1, Math.min(5, Number(aiScore || 0) / 2)),
+      aiScore: toFivePointMentorScore(aiScore) ?? 3,
       aiComment: aiReasoning || "",
       transcript: report.answer || "",
       strengths: aiStrengths || [],
@@ -236,7 +250,8 @@ export default function MentorFeedbackPage() {
         data?.report_status,
         data?.answer_evaluations || [],
         data?.mentor_feedback || "",
-        data?.mentor_score ?? null
+        data?.mentor_score ?? null,
+        data?.mentee_report_feedbacks || data?.menteeReportFeedbacks || []
       ));
     }
   };
@@ -381,7 +396,7 @@ export default function MentorFeedbackPage() {
           return {
             answer_id: answerId,
             reasoning: fb.reasoning || fb.comment || "멘토가 점수와 피드백을 검토했습니다.",
-            score: toTenPointMentorScore(score),
+            score: toApiMentorScore(score),
             strengths: splitLines(fb.strengths),
             improvements: splitLines(fb.improvements),
           };

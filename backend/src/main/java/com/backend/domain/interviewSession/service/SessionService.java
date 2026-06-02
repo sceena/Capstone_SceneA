@@ -3,6 +3,7 @@ package com.backend.domain.interviewSession.service;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
 import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.analysisReport.repository.MenteeReportFeedbackRepository;
 import com.backend.domain.interviewSession.dto.request.ParticipantStatusRequest;
 import com.backend.domain.interviewSession.dto.request.SessionCreateRequest;
 import com.backend.domain.interviewSession.dto.request.SessionStatusRequest;
@@ -39,6 +40,7 @@ public class SessionService {
     private final ReservationRepository reservationRepository;
     private final MemberRepository memberRepository;
     private final AnalysisReportRepository reportRepository;
+    private final MenteeReportFeedbackRepository menteeReportFeedbackRepository;
 
     @Transactional
     public SessionCreateResponse createSession(Long mentorId, SessionCreateRequest request) {
@@ -123,7 +125,7 @@ public class SessionService {
                     .concat(participantSessions.stream(), reservationSessions.stream())
                     .distinct()
                     .filter(s -> sessionStatus == null || s.getStatus() == sessionStatus)
-                    .map(this::toSummary)
+                    .map(session -> toSummary(session, member))
                     .toList();
 
             return new SessionListResponse(all, 0, all.size(), all.size(), 1);
@@ -143,6 +145,27 @@ public class SessionService {
                 resolveSessionType(session, participants),
                 report != null ? report.getReportStatus().name().toLowerCase() : null,
                 report != null ? report.getTotalScore() : null
+        );
+    }
+
+    private SessionSummaryResponse toSummary(InterviewSession session, Member viewer) {
+        List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
+        AnalysisReport report = reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL)
+                .orElseGet(() -> reportRepository
+                        .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
+                        .orElse(null));
+        var menteeFeedback = menteeReportFeedbackRepository.findByInterviewSessionAndMentee(session, viewer).orElse(null);
+        return SessionSummaryResponse.from(
+                session,
+                participants,
+                resolveSessionType(session, participants),
+                menteeFeedback != null
+                        ? "final"
+                        : report != null ? report.getReportStatus().name().toLowerCase() : null,
+                menteeFeedback != null && menteeFeedback.getMentorScore() != null
+                        ? menteeFeedback.getMentorScore()
+                        : report != null ? report.getTotalScore() : null
         );
     }
 

@@ -7,6 +7,7 @@ import com.backend.domain.analysisReport.dto.response.ReportResponse;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
 import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.analysisReport.repository.MenteeReportFeedbackRepository;
 import com.backend.domain.answerEvaluation.service.AnswerEvaluationService;
 import com.backend.domain.interviewSession.entity.AnswerStatus;
 import com.backend.domain.interviewSession.entity.InterviewSession;
@@ -60,6 +61,7 @@ class ReportServiceTest {
     @Mock private ResumeRepository resumeRepository;
     @Mock private ResumeSkillRepository resumeSkillRepository;
     @Mock private AnswerEvaluationService answerEvaluationService;
+    @Mock private MenteeReportFeedbackRepository menteeReportFeedbackRepository;
 
     private Member mentor;
     private InterviewSession session;
@@ -140,8 +142,6 @@ class ReportServiceTest {
         given(memberRepository.getReferenceById(2L)).willReturn(mentee);
         given(participantRepository.findByInterviewSessionAndMember(any(), any()))
                 .willReturn(Optional.of(participant));
-        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL))
-                .willReturn(Optional.empty());
         given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
                 .willReturn(Optional.of(firstReport));
         given(answerEvaluationService.getEvaluationResponses(session)).willReturn(List.of());

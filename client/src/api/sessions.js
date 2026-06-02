@@ -191,7 +191,16 @@ export async function generateSessionReport(sessionId) {
     method: "POST",
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error("리포트 생성 실패");
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body?.message || body?.detail || body?.error || "";
+    } catch {
+      detail = await res.text().catch(() => "");
+    }
+    throw new Error(detail || "리포트 생성 실패");
+  }
   return res.json();
 }
 

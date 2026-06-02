@@ -252,6 +252,12 @@ export default function ReportGeneratingPage() {
           return;
         }
 
+        if ((summary.failed_count ?? 0) > 0 || (summary.question_failed_count ?? 0) > 0) {
+          setPhase("stt_failed");
+          setError("질문 또는 답변 음성 변환에 실패한 항목이 있어 리포트를 생성할 수 없습니다. 면접방에서 해당 질문/답변을 다시 진행한 뒤 시도해 주세요.");
+          return;
+        }
+
         if (!summary.ready) {
           setPhase("waiting_stt");
           return;
@@ -263,7 +269,7 @@ export default function ReportGeneratingPage() {
         if (!cancelled) goToReport();
       } catch (err) {
         if (!cancelled) {
-          setError("리포트 생성 준비 중 문제가 발생했습니다. 잠시 후 다시 확인합니다.");
+          setError(err?.message || "리포트 생성 준비 중 문제가 발생했습니다. 잠시 후 다시 확인합니다.");
           generatingRef.current = false;
         }
       }
@@ -280,12 +286,13 @@ export default function ReportGeneratingPage() {
   const progressLabel = (() => {
     if (phase === "waiting_answers") return "저장된 답변을 확인하는 중";
     if (phase === "waiting_stt") return "답변 음성 변환 대기 중";
+    if (phase === "stt_failed") return "음성 변환 실패 항목 확인 필요";
     if (phase === "generating_report") return "AI 리포트 생성 중";
     return "분석 중";
   })();
 
   const statusText = statusSummary
-    ? `답변 ${statusSummary.completed_count}/${statusSummary.total_count}개 STT 완료`
+    ? `답변 ${statusSummary.completed_count}/${statusSummary.total_count}개 변환 완료 · 질문 대기 ${statusSummary.question_pending_count} · 진행 ${statusSummary.question_processing_count} · 실패 ${statusSummary.question_failed_count}`
     : "답변 상태 확인 중";
 
   return (

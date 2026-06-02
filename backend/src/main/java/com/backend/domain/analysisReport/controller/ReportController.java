@@ -77,7 +77,7 @@ public class ReportController {
             @ApiResponse(responseCode = "403", description = "멘토 외 입력 시도"),
             @ApiResponse(responseCode = "404", description = "AI 리포트(first) 없음")
     })
-    @PostMapping("/{id}/report/mentor-feedback")
+    @RequestMapping(value = "/{id}/report/mentor-feedback", method = {RequestMethod.PATCH, RequestMethod.POST})
     public ResponseEntity<MentorFeedbackResponse> addMentorFeedback(
             @AuthenticationPrincipal Long memberId,
             @PathVariable Long id,

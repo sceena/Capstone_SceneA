@@ -26,7 +26,11 @@ public record SessionDetailResponse(
         @JsonProperty("created_at") LocalDateTime createdAt,
         @JsonProperty("updated_at") LocalDateTime updatedAt
 ) {
-    public static SessionDetailResponse of(InterviewSession session, List<ParticipantInfo> participants) {
+    public static SessionDetailResponse of(
+            InterviewSession session,
+            List<ParticipantInfo> participants,
+            String sessionType
+    ) {
         String title = session.getJobCategory() != null && !session.getJobCategory().isBlank()
                 ? session.getJobCategory() + " 모의 면접"
                 : "모의 면접";
@@ -42,7 +46,7 @@ public record SessionDetailResponse(
                 session.getId(),
                 title,
                 session.getJobCategory(),
-                "1:1 면접",
+                sessionType,
                 session.getStatus(),
                 session.getScheduledAt(),
                 session.getStartedAt(),
@@ -51,7 +55,7 @@ public record SessionDetailResponse(
                 session.getMentor().getName(),
                 menteeName,
                 mentorInfo,
-                "멘토에게 전달한 자소서와 지원 정보를 바탕으로 면접을 준비합니다.",
+                "멘토에게 전달한 자기소개서와 지원 정보를 바탕으로 면접을 준비합니다.",
                 "자기소개서와 지원 정보를 기반으로 맞춤 질문을 확인할 수 있습니다.",
                 participants,
                 session.getCreateDate(),

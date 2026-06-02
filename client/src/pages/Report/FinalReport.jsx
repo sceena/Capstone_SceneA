@@ -1,12 +1,10 @@
-import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { getFitGapAnalysis } from "../../api/sessions";
+import { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { getAnswerAudio, getAnswerAudioByAnswerId, getFitGapAnalysis, getQuestionAnswers } from "../../api/sessions";
 
 const NAVY = "#0D2240";
-const GREEN = "#0CA678";
-const BG = "#F0F4F8";
-const PRIMARY_GRAD = "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)";
-const SUCCESS_GRAD = "linear-gradient(135deg, #0CA678 0%, #38D9A9 100%)";
+const GREEN = "#1D9E75";
+const BG = "#FAF8F4";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const VIEWED_KEY = "scena_viewed_finals";
 
@@ -20,6 +18,156 @@ function getAuthHeaders() {
   } catch {
     return {};
   }
+}
+
+function AudioPlayer({ sessionId, questionId, answerId, audioUrl, menteeId }) {
+  const [state, setState] = useState("idle");
+  const audioRef = useRef(null);
+  const blobUrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
+
+  const handleClick = async () => {
+    if (state === "loading") return;
+    if (state === "playing") {
+      audioRef.current?.pause();
+      setState("paused");
+      return;
+    }
+    if (state === "paused" && audioRef.current) {
+      await audioRef.current.play();
+      setState("playing");
+      return;
+    }
+
+    if (!sessionId || (!questionId && !answerId && !audioUrl)) {
+      setState("error");
+      return;
+    }
+
+    setState("loading");
+    try {
+      let resolvedAnswerId = answerId;
+      if (!resolvedAnswerId && questionId) {
+        const answers = await getQuestionAnswers(sessionId, questionId);
+        const matched = menteeId == null
+          ? null
+          : answers?.find((answer) => String(answer?.mentee_id ?? answer?.menteeId ?? "") === String(menteeId));
+        resolvedAnswerId = matched?.id;
+      }
+
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+
+      if (resolvedAnswerId) {
+        try {
+          blobUrlRef.current = await getAnswerAudioByAnswerId(sessionId, resolvedAnswerId);
+        } catch (error) {
+          if (!questionId) throw error;
+          blobUrlRef.current = await getAnswerAudio(sessionId, questionId, resolvedAnswerId);
+        }
+      } else if (audioUrl && /^https?:\/\//i.test(audioUrl)) {
+        blobUrlRef.current = audioUrl;
+      } else {
+        throw new Error("answer audio not found");
+      }
+      const audio = new Audio(blobUrlRef.current);
+      audioRef.current = audio;
+      audio.onended = () => setState("idle");
+      audio.onerror = () => setState("error");
+      await audio.play();
+      setState("playing");
+    } catch {
+      setState("error");
+    }
+  };
+
+  const config = {
+    idle: { label: "답변 듣기", color: GREEN },
+    loading: { label: "불러오는 중...", color: GREEN },
+    playing: { label: "일시정지", color: GREEN },
+    paused: { label: "이어 듣기", color: GREEN },
+    error: { label: "오디오 없음", color: "#999" },
+  }[state];
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={state === "loading"}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 12,
+        color: config.color,
+        border: `1px solid ${config.color}`,
+        background: state === "playing" ? "#E8F5EE" : "transparent",
+        borderRadius: 99,
+        padding: "5px 12px",
+        cursor: state === "loading" ? "default" : "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      {state === "playing" ? "Ⅱ" : "▶"} {config.label}
+    </button>
+  );
+}
+
+function toFivePointScore(score) {
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(1, Math.min(5, numeric > 5 ? numeric / 2 : numeric));
+}
+
+function toFivePointMentorScore(score) {
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return null;
+  const fivePoint = numeric > 5 ? numeric / 2 : numeric;
+  return Math.max(1, Math.min(5, fivePoint));
+}
+
+function hasItems(items) {
+  return Array.isArray(items) && items.length > 0;
+}
+
+function buildEvaluationMaps(evaluations = []) {
+  const byAnswerId = new Map();
+  const byQuestionId = new Map();
+  const byQuestionMentee = new Map();
+  evaluations.forEach((evaluation) => {
+    const answerId = evaluation?.answer_id ?? evaluation?.answerId;
+    const questionId = evaluation?.question_id ?? evaluation?.questionId;
+    const menteeId = evaluation?.mentee_id ?? evaluation?.menteeId;
+    if (answerId != null) byAnswerId.set(String(answerId), evaluation);
+    if (questionId != null) byQuestionId.set(String(questionId), evaluation);
+    if (questionId != null && menteeId != null) {
+      byQuestionMentee.set(`${questionId}:${menteeId}`, evaluation);
+    }
+  });
+  return { byAnswerId, byQuestionId, byQuestionMentee };
+}
+
+function findEvaluationForReport(report, maps) {
+  const answerId = report?.answer_id ?? report?.answerId;
+  const questionId = report?.question_id ?? report?.questionId;
+  const menteeId = report?.mentee_id ?? report?.menteeId;
+  if (answerId != null) {
+    const evaluation = maps.byAnswerId.get(String(answerId));
+    if (evaluation) return evaluation;
+  }
+  if (questionId != null && menteeId != null) {
+    const evaluation = maps.byQuestionMentee.get(`${questionId}:${menteeId}`);
+    if (evaluation) return evaluation;
+  }
+  if (questionId != null) {
+    return maps.byQuestionId.get(String(questionId));
+  }
+  return null;
 }
 
 function Stars({ score, size = 14, color = "#F59E0B" }) {
@@ -55,12 +203,23 @@ function FitGapBar({ label, pct }) {
   );
 }
 
+function parseFitGapItem(item) {
+  const [requirementPart, detailPart] = String(item || "").split(" / ");
+  const requirement = requirementPart?.replace(/^요구사항:\s*/, "") || item;
+  const detail = detailPart
+    ?.replace(/^근거\(([^)]+)\):\s*/, "$1 · ")
+    ?.replace(/^부족 근거:\s*/, "")
+    || "";
+
+  return { requirement, detail };
+}
+
 function FitGapList({ title, items = [], tone }) {
   const isMatched = tone === "matched";
   const accent = isMatched ? GREEN : "#E24B4A";
   const bg = isMatched ? "#F0FDF4" : "#FFF5F5";
   const borderColor = isMatched ? "#BBF7D0" : "#FED7D7";
-  if (items.length === 0) return null;
+  const detailLabel = isMatched ? "충족 근거" : "부족 근거";
   return (
     <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 12, padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -68,11 +227,24 @@ function FitGapList({ title, items = [], tone }) {
         <span style={{ fontSize: 11, fontWeight: 800, color: accent, background: "white", borderRadius: 99, padding: "4px 8px" }}>{items.length}개</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {items.map((item, i) => (
-          <div key={i} style={{ background: "white", borderRadius: 8, padding: "10px 12px", borderLeft: `3px solid ${accent}`, fontSize: 13, color: "#333", lineHeight: 1.6 }}>
-            {item}
+        {items.length === 0 ? (
+          <div style={{ background: "white", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#777", lineHeight: 1.6 }}>
+            해당 항목이 없습니다.
           </div>
-        ))}
+        ) : items.map((item, i) => {
+          const parsed = parseFitGapItem(item);
+          return (
+            <div key={i} style={{ background: "white", borderRadius: 8, padding: "10px 12px", borderLeft: `3px solid ${accent}`, fontSize: 13, color: "#333", lineHeight: 1.6 }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: "#222", margin: parsed.detail ? "0 0 6px" : 0 }}>{parsed.requirement}</p>
+              {parsed.detail && (
+                <>
+                  <p style={{ fontSize: 10, fontWeight: 800, color: accent, margin: "0 0 3px" }}>{detailLabel}</p>
+                  <p style={{ fontSize: 12, color: "#555", margin: 0, lineHeight: 1.6 }}>{parsed.detail}</p>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -94,7 +266,8 @@ function exportToPDF(session, reportData) {
 export default function FinalReportPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const reportData = location.state;
+  const { sessionId: routeSessionId } = useParams();
+  const reportData = location.state || {};
 
   const [notified, setNotified] = useState(false);
   const [showMentorComment, setShowMentorComment] = useState(false);
@@ -104,36 +277,13 @@ export default function FinalReportPage() {
   const [sessionMeta, setSessionMeta] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const sessionId = reportData?.sessionId;
+  const sessionId = reportData?.sessionId || routeSessionId;
   const role = reportData?.role || "mentee";
 
-  // 리다이렉트: state 없으면 더미 데이터로 대체 (demo 확인용)
+  // 리다이렉트: state와 route param이 모두 없으면 대시보드로
   useEffect(() => {
-    if (!reportData) navigate("/report/final", {
-      replace: true,
-      state: {
-        sessionId: "demo",
-        role: "mentee",
-        session: {
-          title: "네이버 백엔드 모의 면접",
-          date: "2026-06-01",
-          type: "1:1",
-          duration: "45분",
-          menteeName: "이멘티",
-          qnas: [
-            { id: 1, question: "Spring Boot N+1 문제 경험", transcript: "LAZY 로딩과 fetch join으로 해결했습니다.", aiScore: 3.5 },
-            { id: 2, question: "대용량 트래픽 처리 설계", transcript: "캐싱과 로드밸런서를 활용하겠습니다.", aiScore: 2.5 },
-          ],
-        },
-        feedbacks: {
-          1: { score: 4, comment: "구체적인 해결 경험이 잘 드러났습니다." },
-          2: { score: 3, comment: "실제 경험 기반 답변을 준비해오세요." },
-        },
-        totalFeedback: "기술 이해도는 탄탄합니다. 다음 세션에는 실무 경험을 수치와 함께 제시해보세요. STAR 구조로 답변을 구성하면 설득력이 높아집니다.",
-        mentorScore: 4,
-      },
-    });
-  }, [reportData, navigate]);
+    if (!sessionId) navigate("/dashboard/mentee");
+  }, [sessionId, navigate]);
 
   // 읽음 표시 (멘티가 열었을 때)
   useEffect(() => {
@@ -179,26 +329,37 @@ export default function FinalReportPage() {
     return () => clearTimeout(t);
   }, []);
 
-  if (!reportData) return null;
+  if (!sessionId) return null;
 
   // ── 데이터 통합 ──────────────────────────────────────────────
   const aiReport = aiData?.ai_report;
   const questionReports = aiReport?.question_reports || [];
+  const answerEvaluations = aiData?.answer_evaluations || [];
+  const evaluationMaps = buildEvaluationMaps(answerEvaluations);
+  const { byAnswerId, byQuestionId, byQuestionMentee } = evaluationMaps;
+  const mentorEvaluationScores = answerEvaluations
+    .map((evaluation) => evaluation?.mentor_score ?? evaluation?.mentorScore)
+    .filter((score) => Number.isFinite(Number(score)));
 
   // session: nav state에서 오거나, sessionMeta + questionReports로 구성
   const session = reportData?.session || (sessionMeta ? {
     title: sessionMeta.title || `세션 #${sessionId}`,
-    date: sessionMeta.scheduledAt?.slice(0, 10) || "",
-    type: sessionMeta.sessionType || "1:1",
+    date: (sessionMeta.scheduledAt ?? sessionMeta.scheduled_at)?.slice(0, 10) || "",
+    type: sessionMeta.sessionType ?? sessionMeta.session_type ?? "1:1",
     duration: sessionMeta.duration || "",
-    menteeName: sessionMeta.menteeName || "",
+    menteeName: sessionMeta.menteeName ?? sessionMeta.mentee_name ?? "",
     qnas: [],
   } : null);
 
   // feedbacks: nav state에서 오거나 빈 객체
   const feedbacks = reportData?.feedbacks || {};
-  const totalFeedback = reportData?.totalFeedback || aiReport?.mentor_feedback || "";
-  const mentorScore = reportData?.mentorScore || aiReport?.mentor_score || 0;
+  const totalFeedback = reportData?.totalFeedback || aiData?.mentor_feedback || "";
+  const mentorScore = reportData?.mentorScore
+    ?? aiData?.mentor_score
+    ?? aiData?.mentorScore
+    ?? (mentorEvaluationScores.length > 0
+      ? mentorEvaluationScores.reduce((sum, score) => sum + toFivePointMentorScore(score), 0) / mentorEvaluationScores.length
+      : 0);
 
   // 로딩 중이고 session도 없으면 스피너
   if (loading && !session) {
@@ -222,6 +383,8 @@ export default function FinalReportPage() {
   const feedbackValues = Object.values(feedbacks);
   const avgMentorScore = feedbackValues.length > 0
     ? (feedbackValues.reduce((a, b) => a + b.score, 0) / feedbackValues.length).toFixed(1)
+    : mentorEvaluationScores.length > 0
+      ? (mentorEvaluationScores.reduce((sum, score) => sum + toFivePointMentorScore(score), 0) / mentorEvaluationScores.length).toFixed(1)
     : "0.0";
 
   // AI 파생
@@ -230,8 +393,26 @@ export default function FinalReportPage() {
   const worst = topSummary?.worst_question;
   const bestReport = questionReports.find((r) => r.question_id === best?.question_id);
   const worstReport = questionReports.find((r) => r.question_id === worst?.question_id);
-  const fitGapAi = aiReport?.fit_gap;
-  const FIT_GAP_BARS = fitGap?.skills?.map((s) => [s.label, s.pct]) ?? [];
+  const legacyMatched = fitGap?.matched || [];
+  const legacyMissing = fitGap?.unmatched || [];
+  const fitGapAi = aiReport?.fit_gap || (
+    legacyMatched.length > 0 || legacyMissing.length > 0
+      ? { matched_requirements: legacyMatched, missing_requirements: legacyMissing, recommendations: [] }
+      : null
+  );
+  const matchedRequirements = fitGapAi?.matched_requirements || fitGapAi?.matchedRequirements || [];
+  const missingRequirements = fitGapAi?.missing_requirements || fitGapAi?.missingRequirements || [];
+  const mentorRecommendations = answerEvaluations
+    .flatMap((evaluation) => evaluation?.mentor_improvements ?? evaluation?.mentorImprovements ?? [])
+    .filter(Boolean);
+  const fitGapRecommendations = [
+    ...(fitGapAi?.recommendations || []),
+    ...mentorRecommendations.map((item) => `멘토 보완 코멘트: ${item}`),
+  ].filter((item, index, arr) => arr.indexOf(item) === index).slice(0, 5);
+  const requirementCount = matchedRequirements.length + missingRequirements.length;
+  const coveragePct = requirementCount > 0
+    ? Math.round((matchedRequirements.length / requirementCount) * 100)
+    : null;
 
   const toQNum = (qId) => {
     const idx = questionReports.findIndex((r) => r.question_id === qId);
@@ -241,17 +422,80 @@ export default function FinalReportPage() {
   // Q&A 기반: nav state qnas 또는 AI questionReports로 fallback
   const baseQnas = (resolvedSession.qnas?.length > 0)
     ? resolvedSession.qnas
-    : questionReports.map((qr) => ({
-        id: qr.question_id,
-        question: qr.question,
-        transcript: qr.answer || "",
-        aiScore: Math.max(1, Math.min(5, Math.round((Number(qr.score) || 0) / 2))),
+    : questionReports.length > 0
+    ? questionReports.map((qr) => {
+        const evaluation = findEvaluationForReport(qr, evaluationMaps);
+        const aiScore = evaluation?.ai_score ?? evaluation?.aiScore ?? qr.score;
+        const aiReasoning = evaluation?.ai_reasoning ?? evaluation?.aiReasoning ?? qr.reasoning;
+        const aiStrengths = evaluation?.ai_strengths ?? evaluation?.aiStrengths ?? qr.strengths;
+        const aiImprovements = evaluation?.ai_improvements ?? evaluation?.aiImprovements ?? qr.improvements;
+        return {
+          id: qr.question_id,
+          answerId: qr.answer_id,
+          menteeId: qr.mentee_id ?? qr.menteeId,
+          question: qr.question,
+          transcript: qr.answer || "",
+          aiScore: toFivePointScore(aiScore),
+          aiReasoning,
+          aiStrengths,
+          aiImprovements,
+          audioUrl: qr.replay?.audio_url ?? qr.replay?.audioUrl ?? null,
+        };
+      })
+    : answerEvaluations.map((evaluation, index) => ({
+        id: evaluation.question_id ?? evaluation.questionId ?? evaluation.answer_id ?? evaluation.answerId ?? `evaluation-${index}`,
+        questionId: evaluation.question_id ?? evaluation.questionId,
+        answerId: evaluation.answer_id ?? evaluation.answerId,
+        menteeId: evaluation.mentee_id ?? evaluation.menteeId,
+        question: evaluation.question_text ?? evaluation.questionText ?? "",
+        transcript: evaluation.answer_text ?? evaluation.answerText ?? "",
+        aiScore: toFivePointScore(evaluation.ai_score ?? evaluation.aiScore),
+        audioUrl: evaluation.audio_url ?? evaluation.audioUrl ?? null,
       }));
 
   const enrichedQnas = baseQnas.map((qna) => {
-    const aiQ = questionReports.find((r) => r.question_id === qna.id);
-    return { ...qna, strengths: aiQ?.strengths || [], improvements: aiQ?.improvements || [], reasoning: aiQ?.reasoning || "" };
+    const aiQ = questionReports.find((r) =>
+      (qna.answerId != null && String(r.answer_id) === String(qna.answerId))
+      || String(r.question_id) === String(qna.id)
+    );
+    const answerId = qna.answerId ?? aiQ?.answer_id;
+    const questionId = qna.questionId ?? qna.question_id ?? aiQ?.question_id ?? qna.id;
+    const menteeId = qna.menteeId ?? qna.mentee_id ?? aiQ?.mentee_id ?? aiQ?.menteeId;
+    const evaluation = answerId != null
+      ? byAnswerId.get(String(answerId)) || byQuestionMentee.get(`${questionId}:${menteeId}`) || byQuestionId.get(String(questionId))
+      : byQuestionMentee.get(`${questionId}:${menteeId}`) || byQuestionId.get(String(questionId));
+    const mentorReasoning = evaluation?.mentor_reasoning ?? evaluation?.mentorReasoning;
+    const mentorScoreValue = evaluation?.mentor_score ?? evaluation?.mentorScore;
+    const mentorStrengths = evaluation?.mentor_strengths ?? evaluation?.mentorStrengths;
+    const mentorImprovements = evaluation?.mentor_improvements ?? evaluation?.mentorImprovements;
+
+    return {
+      ...qna,
+      answerId,
+      questionId,
+      menteeId,
+      question: evaluation?.question_text || evaluation?.questionText || qna.question || aiQ?.question || "",
+      transcript: evaluation?.answer_text || evaluation?.answerText || qna.transcript || aiQ?.answer || "",
+      audioUrl: evaluation?.audio_url ?? evaluation?.audioUrl ?? qna.audioUrl ?? aiQ?.replay?.audio_url ?? aiQ?.replay?.audioUrl ?? null,
+      strengths: hasItems(mentorStrengths) ? mentorStrengths : (qna.aiStrengths || aiQ?.strengths || []),
+      improvements: hasItems(mentorImprovements) ? mentorImprovements : (qna.aiImprovements || aiQ?.improvements || []),
+      reasoning: mentorReasoning || aiQ?.reasoning || "",
+      aiReasoning: qna.aiReasoning ?? evaluation?.ai_reasoning ?? evaluation?.aiReasoning ?? aiQ?.reasoning ?? "",
+      hasMentorRevision: Boolean(mentorReasoning || hasItems(mentorStrengths) || hasItems(mentorImprovements) || mentorScoreValue != null),
+      mentorScore: toFivePointMentorScore(mentorScoreValue),
+    };
   });
+
+  const findFinalQna = (questionId, fallbackIndex) => {
+    const matched = questionId != null
+      ? enrichedQnas.find((qna) => String(qna.questionId ?? qna.id) === String(questionId))
+      : null;
+    return matched || enrichedQnas[fallbackIndex] || null;
+  };
+  const bestFinalQna = findFinalQna(best?.question_id, 0);
+  const worstFinalQna = findFinalQna(worst?.question_id, enrichedQnas.length - 1);
+  const bestTranscript = bestFinalQna?.transcript || bestReport?.answer || baseQnas[0]?.transcript || "";
+  const worstTranscript = worstFinalQna?.transcript || worstReport?.answer || baseQnas[baseQnas.length - 1]?.transcript || "";
 
   const STAR_COLORS = {
     S: { bg: "#DBEAFE", text: "#1E40AF" },
@@ -265,26 +509,23 @@ export default function FinalReportPage() {
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
       {/* ── 헤더 ── */}
-      <header style={{ background: "#FFFFFF", padding: "0 5%", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: PRIMARY_GRAD, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>Scene<span style={{ color: NAVY }}>A</span></span>
-          <span style={{ fontSize: 12, color: "#868E96" }}>/ 최종 리포트</span>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: "#E6FCF5", color: GREEN }}>멘토 코멘트 포함</span>
+      <header style={{ background: NAVY, padding: "0 32px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={() => navigate(-1)} style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "white", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+            ← 뒤로
+          </button>
+          <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>최종 리포트</span>
+          <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: GREEN, color: "white", fontWeight: 700 }}>멘토 코멘트 포함</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {role === "mentor" && (
             <button onClick={() => setNotified(true)} disabled={notified}
-              style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: notified ? "#E9ECEF" : SUCCESS_GRAD, color: notified ? "#868E96" : "white", fontSize: 13, fontWeight: 700, cursor: notified ? "default" : "pointer", fontFamily: "inherit", transition: "all 0.2s", boxShadow: notified ? "none" : "0 2px 8px rgba(12,166,120,0.3)" }}>
-              {notified ? "✓ 전송 완료" : "멘티에게 전송하기"}
+              style={{ padding: "8px 18px", borderRadius: 9, border: "none", background: notified ? "#555" : GREEN, color: "white", fontSize: 13, fontWeight: 700, cursor: notified ? "default" : "pointer", fontFamily: "inherit", transition: "background 0.2s" }}>
+              {notified ? "✓ 멘티에게 전송 완료" : "멘티에게 전송하기"}
             </button>
           )}
           <button onClick={() => exportToPDF(resolvedSession, reportData)}
-            style={{ padding: "8px 16px", borderRadius: 9, border: "1.5px solid #E9ECEF", background: "white", color: "#495057", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            style={{ padding: "8px 16px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
             Word 저장
           </button>
         </div>
@@ -293,15 +534,15 @@ export default function FinalReportPage() {
       <div id="final-report-content" style={{ maxWidth: 820, margin: "0 auto", padding: "32px 24px" }}>
         {/* ── 메타 ── */}
         <div style={{ marginBottom: 10 }}>
-          <Tag bg="#E8E5DF" color="#555">1차 AI 리포트</Tag>
-          <Tag bg={GREEN} color="white">멘토 코멘트 완료</Tag>
           <Tag bg={NAVY} color="white">최종 리포트</Tag>
+          <Tag bg={GREEN} color="white">멘토 수정 반영</Tag>
+          <Tag bg="#E8E5DF" color="#555">AI 초안 보존</Tag>
         </div>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111", marginBottom: 6 }}>{resolvedSession.title}</h1>
         <p style={{ color: "#888", fontSize: 13, marginBottom: 32 }}>
           {resolvedSession.date} · {resolvedSession.type} · {resolvedSession.duration}
           {aiReport?.overall_score != null && (
-            <span style={{ marginLeft: 10, color: GREEN, fontWeight: 700 }}>AI 종합 {aiReport.overall_score}점</span>
+            <span style={{ marginLeft: 10, color: GREEN, fontWeight: 700 }}>AI 종합 {toFivePointScore(aiReport.overall_score)} / 5</span>
           )}
         </p>
 
@@ -314,15 +555,15 @@ export default function FinalReportPage() {
               <span style={{ fontSize: 10, color: "#7DD3FC" }}>{best ? toQNum(best.question_id) : "Q1"}</span>
             </div>
             <p style={{ color: "#93C5FD", fontSize: 12, fontWeight: 600, marginBottom: 6, lineHeight: 1.5 }}>
-              {best?.question || baseQnas[0]?.question || "질문 정보 없음"}
+              {bestFinalQna?.question || best?.question || baseQnas[0]?.question || "질문 정보 없음"}
             </p>
-            {(bestReport?.answer || baseQnas[0]?.transcript) && (
+            {bestTranscript && (
               <p style={{ color: "white", fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>
-                "{(bestReport?.answer || baseQnas[0].transcript).slice(0, 100)}{(bestReport?.answer || baseQnas[0].transcript).length > 100 ? "..." : ""}"
+                "{bestTranscript.slice(0, 100)}{bestTranscript.length > 100 ? "..." : ""}"
               </p>
             )}
             <p style={{ color: "#93C5FD", fontSize: 12, lineHeight: 1.5, margin: 0 }}>
-              {best?.reason || "수치 기반 결과와 행동-결과 인과관계가 명확해 설득력이 높습니다."}
+              {(bestFinalQna?.hasMentorRevision && bestFinalQna?.reasoning) || best?.reason || "수치 기반 결과와 행동-결과 인과관계가 명확해 설득력이 높습니다."}
             </p>
           </div>
 
@@ -332,15 +573,15 @@ export default function FinalReportPage() {
               <span style={{ fontSize: 10, color: "#FCA5A5" }}>{worst ? toQNum(worst.question_id) : ""}</span>
             </div>
             <p style={{ color: "#FCA5A5", fontSize: 12, fontWeight: 600, marginBottom: 6, lineHeight: 1.5 }}>
-              {worst?.question || baseQnas[baseQnas.length - 1]?.question || "질문 정보 없음"}
+              {worstFinalQna?.question || worst?.question || baseQnas[baseQnas.length - 1]?.question || "질문 정보 없음"}
             </p>
-            {(worstReport?.answer || baseQnas[baseQnas.length - 1]?.transcript) && (
+            {worstTranscript && (
               <p style={{ color: "white", fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>
-                "{(worstReport?.answer || baseQnas[baseQnas.length - 1].transcript).slice(0, 100)}{(worstReport?.answer || baseQnas[baseQnas.length - 1].transcript).length > 100 ? "..." : ""}"
+                "{worstTranscript.slice(0, 100)}{worstTranscript.length > 100 ? "..." : ""}"
               </p>
             )}
             <p style={{ color: "#FCA5A5", fontSize: 12, lineHeight: 1.5, margin: 0 }}>
-              {worst?.reason || "구체적 경험 또는 수치 근거가 부족하며 보완이 필요합니다."}
+              {(worstFinalQna?.hasMentorRevision && worstFinalQna?.reasoning) || worst?.reason || "구체적 경험 또는 수치 근거가 부족하며 보완이 필요합니다."}
             </p>
           </div>
         </div>
@@ -377,15 +618,29 @@ export default function FinalReportPage() {
 
         {fitGapAi && (
           <div style={{ marginBottom: 16 }}>
+            {coveragePct != null && (
+              <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: 18, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: NAVY, margin: 0 }}>채용공고 요구사항 커버리지</p>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: coveragePct >= 70 ? GREEN : coveragePct >= 45 ? "#F59E0B" : "#E24B4A" }}>{coveragePct}%</span>
+                </div>
+                <div style={{ background: "#E8E5DF", borderRadius: 99, height: 8, overflow: "hidden", marginBottom: 8 }}>
+                  <div style={{ width: `${coveragePct}%`, height: "100%", background: coveragePct >= 70 ? GREEN : coveragePct >= 45 ? "#F59E0B" : "#E24B4A" }} />
+                </div>
+                <p style={{ fontSize: 12, color: "#666", margin: 0 }}>
+                  충족 {matchedRequirements.length}개 · 보완 필요 {missingRequirements.length}개
+                </p>
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <FitGapList title="충족한 요구사항" items={fitGapAi.matched_requirements || []} tone="matched" />
-              <FitGapList title="부족한 요구사항" items={fitGapAi.missing_requirements || []} tone="missing" />
+              <FitGapList title="충족한 요구사항" items={matchedRequirements} tone="matched" />
+              <FitGapList title="부족한 요구사항" items={missingRequirements} tone="missing" />
             </div>
-            {(fitGapAi.recommendations || []).length > 0 && (
+            {fitGapRecommendations.length > 0 && (
               <div style={{ background: "#F8F7F4", border: "1px solid #E8E5DF", borderRadius: 12, padding: 16, marginBottom: 12 }}>
                 <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 12px" }}>추천 보완 방향</p>
                 <div style={{ display: "grid", gap: 8 }}>
-                  {fitGapAi.recommendations.map((item, i) => (
+                  {fitGapRecommendations.map((item, i) => (
                     <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: 10, alignItems: "start" }}>
                       <span style={{ width: 24, height: 24, borderRadius: "50%", background: NAVY, color: "white", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
                       <p style={{ fontSize: 14, color: "#444", lineHeight: 1.7, margin: 0 }}>{item}</p>
@@ -397,22 +652,7 @@ export default function FinalReportPage() {
           </div>
         )}
 
-        {FIT_GAP_BARS.length > 0 && (
-          <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: 22, marginBottom: 28 }}>
-            <p style={{ fontSize: 12, color: "#999", marginBottom: 16 }}>채용 공고 요구 역량 대비 자소서 & 답변 커버리지</p>
-            {FIT_GAP_BARS.map(([l, p]) => <FitGapBar key={l} label={l} pct={p} />)}
-            <div style={{ display: "flex", gap: 16, marginTop: 14 }}>
-              {[["충분히 커버", GREEN], ["보완 필요", "#F59E0B"], ["갭 발생", "#E24B4A"]].map(([l, c]) => (
-                <div key={l} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#666" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 99, background: c }} />
-                  {l}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!fitGapAi && FIT_GAP_BARS.length === 0 && !loading && (
+        {!fitGapAi && !loading && (
           <div style={{ background: "white", border: "1px solid #E0DDD8", borderRadius: 14, padding: 22, marginBottom: 28 }}>
             <p style={{ fontSize: 12, color: "#999" }}>Fit-Gap 분석 데이터를 불러오는 중입니다...</p>
           </div>
@@ -431,30 +671,59 @@ export default function FinalReportPage() {
         {enrichedQnas.map((qna, idx) => {
           const fb = feedbacks[qna.id] || {};
           const isBad = qna.aiScore <= 2.5;
-          const mentorScore_q = fb.score || qna.aiScore;
+          const mentorScoreValue = fb.score ?? qna.mentorScore;
+          const hasMentorScoreRevision = qna.hasMentorRevision && Number.isFinite(Number(mentorScoreValue));
+          const displayScore = hasMentorScoreRevision ? Number(mentorScoreValue) : qna.aiScore;
+          const hasDifferentAiReasoning = qna.hasMentorRevision
+            && qna.aiReasoning
+            && qna.aiReasoning !== qna.reasoning;
           return (
             <div key={qna.id ?? idx} style={{ background: "white", border: `1px solid ${isBad ? "#FED7D7" : "#E0DDD8"}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 10 }}>Q{idx + 1} · {qna.question}</p>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, margin: 0, lineHeight: 1.6 }}>Q{idx + 1} · {qna.question}</p>
+                {qna.hasMentorRevision && (
+                  <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, color: GREEN, background: "#E1F5EE", border: "1px solid #BBF7D0", borderRadius: 99, padding: "3px 8px" }}>
+                    멘토 수정됨
+                  </span>
+                )}
+              </div>
               <p style={{ fontSize: 13, lineHeight: 1.8, color: "#333", marginBottom: 14 }}>{qna.transcript}</p>
 
               {qna.reasoning && (
                 <div style={{ borderLeft: "3px solid #CAD3DF", paddingLeft: 12, marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: "#667085", marginBottom: 4 }}>AI 평가 근거</p>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#667085", marginBottom: 4 }}>
+                    {qna.hasMentorRevision ? "멘토 수정 평가 근거" : "AI 평가 근거"}
+                  </p>
                   <p style={{ fontSize: 13, color: "#444", lineHeight: 1.7, margin: 0 }}>{qna.reasoning}</p>
                 </div>
+              )}
+
+              {hasDifferentAiReasoning && (
+                <details style={{ marginBottom: 12 }}>
+                  <summary style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", cursor: "pointer" }}>
+                    AI 초안 평가 근거 보기
+                  </summary>
+                  <p style={{ marginTop: 8, fontSize: 12, color: "#6B7280", lineHeight: 1.7, background: "#F8F7F4", borderRadius: 8, padding: "10px 12px" }}>
+                    {qna.aiReasoning}
+                  </p>
+                </details>
               )}
 
               {(qna.strengths.length > 0 || qna.improvements.length > 0) && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                   {qna.strengths.length > 0 && (
                     <div style={{ background: "#F0FDF4", borderRadius: 8, padding: 12 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: GREEN, marginBottom: 6 }}>강점</p>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: GREEN, marginBottom: 6 }}>
+                        강점 {qna.hasMentorRevision && <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 600 }}>· 멘토 검토 반영</span>}
+                      </p>
                       {qna.strengths.map((s, i) => <p key={i} style={{ fontSize: 12, color: "#3F5F4B", margin: "0 0 4px", lineHeight: 1.6 }}>• {s}</p>)}
                     </div>
                   )}
                   {qna.improvements.length > 0 && (
                     <div style={{ background: "#FFF5F5", borderRadius: 8, padding: 12 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: "#E24B4A", marginBottom: 6 }}>개선점</p>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: "#E24B4A", marginBottom: 6 }}>
+                        개선점 {qna.hasMentorRevision && <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 600 }}>· 멘토 검토 반영</span>}
+                      </p>
                       {qna.improvements.map((s, i) => <p key={i} style={{ fontSize: 12, color: "#6F4545", margin: "0 0 4px", lineHeight: 1.6 }}>• {s}</p>)}
                     </div>
                   )}
@@ -463,25 +732,41 @@ export default function FinalReportPage() {
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, borderTop: "1px solid #FAF8F4" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div>
-                    <p style={{ fontSize: 10, color: "#aaa", marginBottom: 3 }}>AI 점수</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <Stars score={qna.aiScore} color="#D1D5DB" />
-                      <span style={{ fontSize: 12, color: "#aaa", textDecoration: "line-through" }}>{Number(qna.aiScore).toFixed(1)}</span>
+                  {hasMentorScoreRevision ? (
+                    <>
+                      <div>
+                        <p style={{ fontSize: 10, color: "#aaa", marginBottom: 3 }}>AI 초안 점수</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Stars score={qna.aiScore} color="#D1D5DB" />
+                          <span style={{ fontSize: 12, color: "#aaa", textDecoration: "line-through" }}>{Number(qna.aiScore).toFixed(1)}</span>
+                        </div>
+                      </div>
+                      <span style={{ color: "#999", fontSize: 16 }}>→</span>
+                      <div>
+                        <p style={{ fontSize: 10, color: "#888", marginBottom: 3, fontWeight: 700 }}>멘토 수정 점수</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <Stars score={displayScore} color="#F59E0B" />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>{Number(displayScore).toFixed(1)}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize: 10, color: "#888", marginBottom: 3, fontWeight: 700 }}>AI 평가 점수</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <Stars score={displayScore} color="#F59E0B" />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>{Number(displayScore).toFixed(1)}</span>
+                      </div>
                     </div>
-                  </div>
-                  <span style={{ color: "#999", fontSize: 16 }}>→</span>
-                  <div>
-                    <p style={{ fontSize: 10, color: "#888", marginBottom: 3, fontWeight: 700 }}>멘토 점수</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <Stars score={mentorScore_q} color="#F59E0B" />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>{Number(mentorScore_q).toFixed(1)}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
-                <button style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: GREEN, border: `1px solid ${GREEN}`, background: "transparent", borderRadius: 99, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}>
-                  ▶ 답변 듣기
-                </button>
+                <AudioPlayer
+                  sessionId={sessionId}
+                  questionId={qna.questionId ?? qna.id}
+                  answerId={qna.answerId}
+                  audioUrl={qna.audioUrl}
+                  menteeId={qna.menteeId}
+                />
               </div>
 
               {fb.comment && (
@@ -536,14 +821,11 @@ export default function FinalReportPage() {
         {/* ── 하단 버튼 ── */}
         <div style={{ marginTop: 24, display: "flex", gap: 10, justifyContent: "center" }}>
           <button onClick={() => navigate("/dashboard/mentee")}
-            style={{ padding: "12px 28px", borderRadius: 10, border: "1.5px solid #E9ECEF", background: "white", color: "#495057", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "border-color 0.18s" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = NAVY}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "#E9ECEF"}
-          >
+            style={{ padding: "11px 24px", borderRadius: 10, border: "1px solid #D1D5DB", background: "white", color: "#555", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
             대시보드로 이동
           </button>
           <button onClick={() => exportToPDF(resolvedSession, reportData)}
-            style={{ padding: "12px 28px", borderRadius: 10, border: "none", background: PRIMARY_GRAD, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(13,34,64,0.2)" }}>
+            style={{ padding: "11px 24px", borderRadius: 10, border: "none", background: NAVY, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
             Word로 저장하기
           </button>
         </div>

@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -68,19 +69,19 @@ public class ReportController {
         return ResponseEntity.ok(reportService.getFitGap(memberId, id));
     }
 
-    @Operation(summary = "멘토 종합 피드백 작성", description = "멘토가 멘토링 세션 후 종합 피드백을 작성한다. 저장 시 report_status가 final로 변경되며 최종 리포트가 완성된다.")
+    @Operation(summary = "멘토 종합 피드백 작성", description = "멘토가 AI 리포트를 기반으로 피드백을 작성한다. 기존 AI 리포트(first)는 보존되고 새로운 final 리포트가 생성된다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "멘토 피드백 저장 성공, 리포트 final로 확정"),
+            @ApiResponse(responseCode = "201", description = "멘토 피드백 저장 성공, final 리포트 생성"),
             @ApiResponse(responseCode = "400", description = "mentor_feedback 누락 또는 빈 문자열"),
             @ApiResponse(responseCode = "401", description = "인증 토큰 없음 또는 만료"),
             @ApiResponse(responseCode = "403", description = "멘토 외 입력 시도"),
-            @ApiResponse(responseCode = "404", description = "리포트 없음")
+            @ApiResponse(responseCode = "404", description = "AI 리포트(first) 없음")
     })
-    @PatchMapping("/{id}/report/mentor-feedback")
+    @RequestMapping(value = "/{id}/report/mentor-feedback", method = {RequestMethod.PATCH, RequestMethod.POST})
     public ResponseEntity<MentorFeedbackResponse> addMentorFeedback(
             @AuthenticationPrincipal Long memberId,
             @PathVariable Long id,
             @Valid @RequestBody MentorFeedbackRequest request) {
-        return ResponseEntity.ok(reportService.addMentorFeedback(memberId, id, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(reportService.addMentorFeedback(memberId, id, request));
     }
 }

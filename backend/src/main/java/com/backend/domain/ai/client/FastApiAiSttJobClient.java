@@ -13,6 +13,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Duration;
+
 @Component
 @Slf4j
 public class FastApiAiSttJobClient implements AiSttJobClient {
@@ -22,9 +24,12 @@ public class FastApiAiSttJobClient implements AiSttJobClient {
     public FastApiAiSttJobClient(
             RestClient.Builder restClientBuilder,
             @Value("${ai.server.base-url:http://localhost:8000}") String baseUrl) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(2));
+        requestFactory.setReadTimeout(Duration.ofSeconds(3));
         this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
-                .requestFactory(new SimpleClientHttpRequestFactory())
+                .requestFactory(requestFactory)
                 .build();
     }
 

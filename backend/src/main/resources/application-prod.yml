@@ -63,3 +63,6 @@ cloud:
       secret-key: ${AWS_SECRET_KEY}
     region:
       static: ${AWS_REGION}
+
+app:
+  callback-base-url: ${CALLBACK_BASE_URL:http://54.116.176.242:8080}

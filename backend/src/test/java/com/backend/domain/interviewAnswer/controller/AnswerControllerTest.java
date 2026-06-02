@@ -1,6 +1,7 @@
 package com.backend.domain.interviewAnswer.controller;
 
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
+import com.backend.domain.interviewAnswer.dto.response.AnswerAudioResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
 import com.backend.domain.interviewAnswer.dto.response.MentorScoreResponse;
@@ -194,11 +195,13 @@ class AnswerControllerTest {
         String token = jwtProvider.generateAccessToken(10L, "MENTEE");
         Resource audioResource = new ByteArrayResource("audio content".getBytes());
 
-        given(answerService.getAudio(any(), eq(42L), eq(101L), eq(201L))).willReturn(audioResource);
+        given(answerService.getAudio(any(), eq(42L), eq(101L), eq(201L)))
+                .willReturn(new AnswerAudioResponse(audioResource, MediaType.parseMediaType("audio/webm"), "answer.webm"));
 
         mockMvc.perform(get("/api/sessions/42/questions/101/answers/201/audio")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
+                .andExpect(content().contentType("audio/webm"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("inline")));
     }
 

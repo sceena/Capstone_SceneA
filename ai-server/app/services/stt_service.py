@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -11,6 +12,57 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import BinaryIO
+
+os.environ.setdefault("USE_SFT", "false")
+os.environ.setdefault("WHISPER_MODEL_SIZE", "medium")
+os.environ.setdefault("WHISPER_DEVICE", "cuda")
+os.environ.setdefault("WHISPER_COMPUTE_TYPE", "float16")
+os.environ.setdefault("QUESTION_GENERATION_TIMEOUT_SEC", "60")
+os.environ.setdefault("QUESTION_GENERATION_MAX_RETRIES", "1")
+
+
+def _print_whisper_runtime_config() -> None:
+    try:
+        import torch
+        cuda_available = torch.cuda.is_available()
+    except Exception:
+        cuda_available = False
+
+    print("cuda:", cuda_available)
+    print("model:", os.environ["WHISPER_MODEL_SIZE"])
+    print("device:", os.environ["WHISPER_DEVICE"])
+    print("compute:", os.environ["WHISPER_COMPUTE_TYPE"])
+
+
+_print_whisper_runtime_config()
+
+logger = logging.getLogger(__name__)
+
+
+TECH_INTERVIEW_INITIAL_PROMPT = """
+한국어 IT 개발자 면접 녹취입니다. 들리는 말만 그대로 받아쓰세요.
+예시 문장이나 질문을 새로 만들지 마세요. 들리지 않는 내용은 추측하지 마세요.
+자주 나오는 기술 용어 표기:
+Java, Spring Boot, JPA, QueryDSL, MyBatis, REST API, JWT, OAuth2, MySQL, MSSQL, MongoDB, Redis, AWS, EC2, S3, RDS, Docker, Kubernetes, CI/CD, GitHub Actions, Nginx, Linux, ERD, SQL, 트랜잭션, 인덱스, 데드락, 커넥션 풀, 쿼리 튜닝, 실행 계획, N+1 문제, 캐시, 로그, 장애 대응, 배포, 테스트 코드, 백엔드, 프론트엔드, API, 서버, 데이터베이스.
+채용 공고 관련 용어:
+스크린 골프, 타석 예약, 결제, 쿠폰, 무인화 서비스, 빌링, 회원 DB, DB 개발, DB 운영, 성능 개선, IDC.
+""".strip()
+
+
+def _build_initial_prompt() -> str:
+    if os.environ.get("WHISPER_DISABLE_INITIAL_PROMPT", "false").lower() == "true":
+        return ""
+    extra_terms = os.environ.get("WHISPER_INITIAL_PROMPT_EXTRA", "").strip()
+    if not extra_terms:
+        return TECH_INTERVIEW_INITIAL_PROMPT
+    return f"{TECH_INTERVIEW_INITIAL_PROMPT}\n\n추가 용어 표기: {extra_terms}"
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "y", "on"}
 
 
 class SttServiceUnavailable(RuntimeError):
@@ -56,8 +108,10 @@ def _load_model(model_size: str, device: str, compute_type: str):
 class SttService:
     def __init__(self, model_size: str | None = None):
         self.model_size = model_size or os.environ.get("WHISPER_MODEL_SIZE", "medium")
-        self.device = os.environ.get("WHISPER_DEVICE", "cpu")
-        self.compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
+        self.device = os.environ.get("WHISPER_DEVICE", "cuda")
+        self.compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "float16")
+        self.vad_filter = _env_bool("WHISPER_VAD_FILTER", True)
+        self.condition_on_previous_text = _env_bool("WHISPER_CONDITION_ON_PREVIOUS_TEXT", False)
 
     def transcribe(self, filename: str | None, audio_file: BinaryIO) -> SttResult:
         suffix = Path(filename or "answer.wav").suffix or ".wav"
@@ -91,7 +145,18 @@ class SttService:
                 str(wav_path),
                 language="ko",
                 task="transcribe",
-                vad_filter=True,
+                initial_prompt=_build_initial_prompt(),
+                beam_size=5,
+                temperature=0,
+                vad_filter=self.vad_filter,
+                vad_parameters={
+                    "min_silence_duration_ms": 700,
+                    "speech_pad_ms": 400,
+                },
+                condition_on_previous_text=self.condition_on_previous_text,
+                no_speech_threshold=0.6,
+                compression_ratio_threshold=2.4,
+                log_prob_threshold=-1.0,
             )
 
             segment_results: list[SttSegmentResult] = []
@@ -112,8 +177,19 @@ class SttService:
             duration = getattr(info, "duration", None) or measured_duration
             duration_sec = int(round(duration)) if duration is not None else None
 
+            result_text = " ".join(text_parts).strip()
+            logger.info(
+                "STT completed path=%s duration=%s text_length=%s segments=%s quality=%s message=%s",
+                audio_path.name,
+                duration_sec,
+                len(result_text),
+                len(segment_results),
+                quality_status,
+                quality_message,
+            )
+
             return SttResult(
-                text=" ".join(text_parts).strip(),
+                text=result_text,
                 model=f"faster-whisper-{self.model_size}",
                 language=getattr(info, "language", None),
                 duration_sec=duration_sec,
@@ -131,10 +207,13 @@ class SttService:
         bucket: str | None = None,
     ) -> None:
         id_payload = {"answer_id": answer_id} if answer_id is not None else {"question_id": question_id}
+        target_label = f"answer_id={answer_id}" if answer_id is not None else f"question_id={question_id}"
+        logger.info("STT job started for %s audio_key=%s callback_url=%s", target_label, audio_key, callback_url)
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 local_path = self._download_s3_audio(audio_key, Path(temp_dir), bucket)
                 result = self.transcribe_path(local_path)
+            logger.info("STT job completed for %s text_length=%s", target_label, len(result.text or ""))
             self._send_callback(
                 callback_url,
                 {
@@ -149,15 +228,21 @@ class SttService:
                     "segments": [segment.__dict__ for segment in result.segments],
                 },
             )
+            logger.info("STT callback sent for %s", target_label)
         except Exception as exc:
-            self._send_callback(
-                callback_url,
-                {
-                    **id_payload,
-                    "status": "FAILED",
-                    "error_message": str(exc),
-                },
-            )
+            logger.exception("STT job failed for %s: %s", target_label, exc)
+            try:
+                self._send_callback(
+                    callback_url,
+                    {
+                        **id_payload,
+                        "status": "FAILED",
+                        "error_message": str(exc),
+                    },
+                )
+                logger.info("STT failure callback sent for %s", target_label)
+            except Exception as callback_exc:
+                logger.exception("STT failure callback failed for %s: %s", target_label, callback_exc)
 
     def _convert_to_wav(self, audio_path: Path, wav_path: Path) -> None:
         self._run_command(
@@ -171,6 +256,8 @@ class SttService:
                 "1",
                 "-ar",
                 "16000",
+                "-af",
+                "highpass=f=80,lowpass=f=7800,dynaudnorm=f=150:g=15",
                 str(wav_path),
             ],
             "ffmpeg audio normalization failed",

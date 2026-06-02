@@ -4,6 +4,7 @@ import com.backend.domain.ai.client.AiSttClient;
 import com.backend.domain.ai.client.SttTranscriptNormalizer;
 import com.backend.domain.ai.dto.response.AiSttResponse;
 import com.backend.domain.interviewAnswer.dto.request.MentorScoreRequest;
+import com.backend.domain.interviewAnswer.dto.response.AnswerAudioResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerDetailResponse;
 import com.backend.domain.interviewAnswer.dto.response.AnswerUploadResponse;
 import com.backend.domain.interviewAnswer.dto.response.MentorScoreResponse;
@@ -25,10 +26,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
-import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
@@ -130,8 +132,10 @@ public class AnswerService {
         boolean ready = !answers.isEmpty()
                 && pending == 0
                 && processing == 0
+                && failed == 0
                 && questionPending == 0
-                && questionProcessing == 0;
+                && questionProcessing == 0
+                && questionFailed == 0;
 
         return new SessionSttStatusResponse(
                 sessionId,
@@ -153,18 +157,37 @@ public class AnswerService {
         );
     }
 
-    public Resource getAudio(Long memberId, Long sessionId, Long questionId, Long answerId) {
+    public AnswerAudioResponse getAudio(Long memberId, Long sessionId, Long questionId, Long answerId) {
         InterviewSession session = findSession(sessionId);
         validateSessionAccess(memberId, session);
         InterviewQuestion question = findQuestion(questionId, session);
         InterviewAnswer answer = findAnswer(answerId, question);
 
+        return streamAnswerAudio(answer);
+    }
+
+    public AnswerAudioResponse getAudioByAnswerId(Long memberId, Long sessionId, Long answerId) {
+        InterviewSession session = findSession(sessionId);
+        validateSessionAccess(memberId, session);
+        InterviewAnswer answer = answerRepository.findById(answerId)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
+        validateAnswerInSession(answer, session);
+
+        return streamAnswerAudio(answer);
+    }
+
+    private AnswerAudioResponse streamAnswerAudio(InterviewAnswer answer) {
         try {
-            return new InputStreamResource(s3Client.getObject(
+            ResponseInputStream<GetObjectResponse> object = s3Client.getObject(
                     GetObjectRequest.builder()
                             .bucket(bucket)
                             .key(answer.getAudioUrl())
-                            .build()));
+                            .build());
+            return new AnswerAudioResponse(
+                    new InputStreamResource(object),
+                    resolveAudioMediaType(answer.getAudioUrl(), object.response().contentType()),
+                    resolveFilename(answer.getAudioUrl())
+            );
         } catch (NoSuchKeyException e) {
             throw new CustomException(ErrorCode.ANSWER_NOT_FOUND);
         }
@@ -207,6 +230,34 @@ public class AnswerService {
         } catch (IOException | S3Exception e) {
             throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private MediaType resolveAudioMediaType(String key, String s3ContentType) {
+        if (s3ContentType != null && !s3ContentType.isBlank()) {
+            return MediaType.parseMediaType(s3ContentType);
+        }
+        String lowerKey = key == null ? "" : key.toLowerCase();
+        if (lowerKey.endsWith(".webm")) {
+            return MediaType.parseMediaType("audio/webm");
+        }
+        if (lowerKey.endsWith(".wav")) {
+            return MediaType.parseMediaType("audio/wav");
+        }
+        if (lowerKey.endsWith(".mp3")) {
+            return MediaType.parseMediaType("audio/mpeg");
+        }
+        if (lowerKey.endsWith(".mp4") || lowerKey.endsWith(".m4a")) {
+            return MediaType.parseMediaType("audio/mp4");
+        }
+        return MediaType.APPLICATION_OCTET_STREAM;
+    }
+
+    private String resolveFilename(String key) {
+        if (key == null || key.isBlank()) {
+            return "answer-audio.webm";
+        }
+        int slashIndex = key.lastIndexOf('/');
+        return slashIndex >= 0 ? key.substring(slashIndex + 1) : key;
     }
 
     private void deleteFromS3(String key) {
@@ -270,6 +321,12 @@ public class AnswerService {
             throw new CustomException(ErrorCode.ANSWER_NOT_FOUND);
         }
         return answer;
+    }
+
+    private void validateAnswerInSession(InterviewAnswer answer, InterviewSession session) {
+        if (!answer.getInterviewQuestion().getInterviewSession().getId().equals(session.getId())) {
+            throw new CustomException(ErrorCode.ANSWER_NOT_FOUND);
+        }
     }
 
     private Member findMember(Long memberId) {

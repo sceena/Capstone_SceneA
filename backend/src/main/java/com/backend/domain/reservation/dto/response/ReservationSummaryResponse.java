@@ -13,9 +13,27 @@ public record ReservationSummaryResponse(
         @JsonProperty("mentee_name") String menteeName,
         @JsonProperty("availability_id") Long availabilityId,
         @JsonProperty("scheduled_at") LocalDateTime scheduledAt,
+        @JsonProperty("max_participants") int maxParticipants,
         ReservationStatus status,
+        @JsonProperty("resume_content") String resumeContent,
+        @JsonProperty("request_note") String requestNote,
         @JsonProperty("created_at") LocalDateTime createdAt
 ) {
+    public ReservationSummaryResponse(
+            Long id,
+            Long sessionId,
+            Long menteeId,
+            String menteeName,
+            Long availabilityId,
+            LocalDateTime scheduledAt,
+            ReservationStatus status,
+            String resumeContent,
+            String requestNote,
+            LocalDateTime createdAt
+    ) {
+        this(id, sessionId, menteeId, menteeName, availabilityId, scheduledAt, 1, status, resumeContent, requestNote, createdAt);
+    }
+
     public static ReservationSummaryResponse from(Reservation reservation) {
         return new ReservationSummaryResponse(
                 reservation.getId(),
@@ -24,7 +42,10 @@ public record ReservationSummaryResponse(
                 reservation.getMentee().getName(),
                 reservation.getMentorAvailability().getId(),
                 reservation.getMentorAvailability().getStartTime(),
+                reservation.getMentorAvailability().getMaxParticipants(),
                 reservation.getStatus(),
+                reservation.getResumeContent(),
+                reservation.getRequestNote(),
                 reservation.getCreateDate()
         );
     }

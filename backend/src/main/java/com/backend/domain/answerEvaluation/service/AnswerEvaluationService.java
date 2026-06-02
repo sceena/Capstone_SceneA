@@ -1,6 +1,7 @@
 package com.backend.domain.answerEvaluation.service;
 
 import com.backend.domain.ai.dto.response.AiQuestionReportResponse;
+import com.backend.domain.analysisReport.dto.request.MentorFeedbackRequest;
 import com.backend.domain.answerEvaluation.dto.request.MentorEvaluationRequest;
 import com.backend.domain.answerEvaluation.dto.response.AnswerEvaluationResponse;
 import com.backend.domain.answerEvaluation.dto.response.EvaluationJsonMapper;
@@ -58,7 +59,7 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
                     questionReport.question(),
                     questionReport.answer(),
                     questionReport.reasoning(),
-                    questionReport.score(),
+                    toFivePointScale(questionReport.score()),
                     toJson(questionReport.strengths()),
                     toJson(questionReport.improvements()),
                     questionReport.aiModelName(),
@@ -86,19 +87,34 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
                 .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
         validateAnswerInSession(answer, session);
 
-        AnswerEvaluation evaluation = evaluationRepository.findByInterviewAnswer(answer)
-                .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_EVALUATION_NOT_FOUND));
-
-        evaluation.updateMentorEvaluation(
+        AnswerEvaluation evaluation = saveMentorEvaluation(
+                answer,
                 request.reasoning(),
                 request.score(),
-                toJson(request.strengths()),
-                toJson(request.improvements())
+                request.strengths(),
+                request.improvements()
         );
 
-        answer.updateMentorScore(toFivePointScale(request.score()));
-
         return AnswerEvaluationResponse.from(evaluation, this);
+    }
+
+    @Transactional
+    public void updateMentorEvaluations(
+            Long mentorId,
+            InterviewSession session,
+            List<MentorFeedbackRequest.MentorAnswerEvaluationPayload> payloads
+    ) {
+        if (payloads == null || payloads.isEmpty()) {
+            return;
+        }
+        validateMentorAccess(mentorId, session);
+
+        for (MentorFeedbackRequest.MentorAnswerEvaluationPayload payload : payloads) {
+            InterviewAnswer answer = answerRepository.findById(payload.answerId())
+                    .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
+            validateAnswerInSession(answer, session);
+            saveMentorEvaluation(answer, payload.reasoning(), payload.score(), payload.strengths(), payload.improvements());
+        }
     }
 
     public String exportDpoJsonl() {
@@ -110,6 +126,12 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
             jsonl.append(toJsonLine(toDpoSample(evaluation))).append('\n');
         }
         return jsonl.toString();
+    }
+
+    public List<AnswerEvaluationResponse> getEvaluationResponses(InterviewSession session) {
+        return evaluationRepository.findAllByInterviewSession(session).stream()
+                .map(evaluation -> AnswerEvaluationResponse.from(evaluation, this))
+                .toList();
     }
 
     @Override
@@ -136,6 +158,32 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
         }
         validateAnswerInSession(answer, session);
         return answer;
+    }
+
+    private AnswerEvaluation saveMentorEvaluation(
+            InterviewAnswer answer,
+            String reasoning,
+            Float score,
+            List<String> strengths,
+            List<String> improvements
+    ) {
+        AnswerEvaluation evaluation = evaluationRepository.findByInterviewAnswer(answer)
+                .orElseGet(() -> AnswerEvaluation.builder()
+                        .interviewAnswer(answer)
+                        .questionText(answer.getInterviewQuestion().getContent())
+                        .answerText(answer.getSttText() == null ? "" : answer.getSttText())
+                        .build());
+
+        Float normalizedScore = toFivePointScale(score);
+
+        evaluation.updateMentorEvaluation(
+                reasoning,
+                normalizedScore,
+                toJson(strengths),
+                toJson(improvements)
+        );
+        answer.updateMentorScore(normalizedScore);
+        return evaluationRepository.save(evaluation);
     }
 
     private void validateMentorAccess(Long mentorId, InterviewSession session) {
@@ -228,10 +276,11 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
         return left == null ? right == null : left.equals(right);
     }
 
-    private Float toFivePointScale(Float tenPointScore) {
-        if (tenPointScore == null) {
+    private Float toFivePointScale(Float score) {
+        if (score == null) {
             return null;
         }
-        return Math.max(1.0f, Math.min(5.0f, tenPointScore / 2.0f));
+        Float fivePointScore = score > 5.0f ? score / 2.0f : score;
+        return Math.max(1.0f, Math.min(5.0f, fivePointScore));
     }
 }

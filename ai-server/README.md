@@ -32,20 +32,38 @@ available through `POST /api/stt`, and backend-integrated async processing uses
 
 ```bash
 pip install -r requirements-model.txt
+export USE_SFT=false
 export WHISPER_MODEL_SIZE=medium
-export WHISPER_DEVICE=cpu
-export WHISPER_COMPUTE_TYPE=int8
+export WHISPER_DEVICE=cuda
+export WHISPER_COMPUTE_TYPE=float16
+export WHISPER_INITIAL_PROMPT_EXTRA="MSSQL, MySQL, MongoDB, ERD, 빌링, 쿠폰, 예약, AWS, IDC"
+export QUESTION_GENERATION_TIMEOUT_SEC=60
+export QUESTION_GENERATION_MAX_RETRIES=1
 export STT_WORKER_COUNT=1
 ```
 
 `ffmpeg` and `ffprobe` must be installed on the AI server because uploaded
 audio is normalized to 16 kHz mono WAV before transcription.
+The STT service always sends a Korean developer interview initial prompt to
+Whisper. Use `WHISPER_INITIAL_PROMPT_EXTRA` to add job-posting-specific terms
+that are likely to appear in the current interview.
 
-For GPU serving, configure:
+Runtime check:
 
-```bash
-export WHISPER_DEVICE=cuda
-export WHISPER_COMPUTE_TYPE=float16
+```python
+import os, torch
+
+os.environ["USE_SFT"] = "false"
+os.environ["WHISPER_MODEL_SIZE"] = "medium"
+os.environ["WHISPER_DEVICE"] = "cuda"
+os.environ["WHISPER_COMPUTE_TYPE"] = "float16"
+os.environ["QUESTION_GENERATION_TIMEOUT_SEC"] = "60"
+os.environ["QUESTION_GENERATION_MAX_RETRIES"] = "1"
+
+print("cuda:", torch.cuda.is_available())
+print("model:", os.environ["WHISPER_MODEL_SIZE"])
+print("device:", os.environ["WHISPER_DEVICE"])
+print("compute:", os.environ["WHISPER_COMPUTE_TYPE"])
 ```
 
 Async STT job request:

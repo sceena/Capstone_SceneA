@@ -1,5 +1,6 @@
 package com.backend.domain.reservation.repository;
 
+import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.mentorAvailability.entity.MentorAvailability;
 import com.backend.domain.reservation.entity.Reservation;
@@ -19,6 +20,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     boolean existsByMentorAvailability(MentorAvailability mentorAvailability);
 
     List<Reservation> findAllByMentee(Member mentee);
+
+    List<Reservation> findAllByInterviewSession(InterviewSession interviewSession);
 
     List<Reservation> findAllByMentorAvailability_Mentor(Member mentor);
 
@@ -47,6 +50,32 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             """)
     List<Reservation> findMentorReservationsByStatus(
             @Param("mentor") Member mentor,
+            @Param("status") ReservationStatus status
+    );
+
+    @Query("""
+            select r
+            from Reservation r
+            join fetch r.mentorAvailability a
+            join fetch a.mentor
+            left join fetch r.interviewSession
+            where r.mentee = :mentee
+            order by a.startTime asc
+            """)
+    List<Reservation> findMenteeReservations(@Param("mentee") Member mentee);
+
+    @Query("""
+            select r
+            from Reservation r
+            join fetch r.mentorAvailability a
+            join fetch a.mentor
+            left join fetch r.interviewSession
+            where r.mentee = :mentee
+              and r.status = :status
+            order by a.startTime asc
+            """)
+    List<Reservation> findMenteeReservationsByStatus(
+            @Param("mentee") Member mentee,
             @Param("status") ReservationStatus status
     );
 }

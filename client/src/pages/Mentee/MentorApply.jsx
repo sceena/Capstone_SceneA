@@ -70,6 +70,8 @@ const Header = ({ userName, accessToken }) => {
 /* ── 유틸 ── */
 const RESUME_DRAFT_KEY = "scena_resume_draft";
 const getResumeDraftKey = (user) => `${RESUME_DRAFT_KEY}:${user?.email || user?.id || "anonymous"}`;
+const getJobPostingDraftKey = (user) => `${getResumeDraftKey(user)}:job`;
+const getLegacyJobPostingDraftKey = (user) => `${getResumeDraftKey(user)}:job_posting`;
 
 const getStoredResumeContent = (user) => {
   try {
@@ -77,6 +79,25 @@ const getStoredResumeContent = (user) => {
     if (!Array.isArray(draft)) return "";
     return draft.filter(it => it?.content?.trim()).map(it => `[${it.title || "자기소개서"}]\n${it.content.trim()}`).join("\n\n");
   } catch { return ""; }
+};
+
+const getStoredJobPostingRawText = (user) => {
+  try {
+    const groupedDraft = JSON.parse(localStorage.getItem(getJobPostingDraftKey(user)));
+    if (groupedDraft) {
+      return [
+        groupedDraft.requirements && `[합류하시면 함께 할 업무입니다]\n${groupedDraft.requirements}`,
+        groupedDraft.looking_for && `[이런 경험을 가진 분을 찾습니다]\n${groupedDraft.looking_for}`,
+        groupedDraft.preferred && `[이런 경험을 우대합니다]\n${groupedDraft.preferred}`,
+      ].filter(Boolean).join("\n\n");
+    }
+  } catch {}
+
+  try {
+    return localStorage.getItem(getLegacyJobPostingDraftKey(user)) || "";
+  } catch {
+    return "";
+  }
 };
 
 const formatDateLabel = (v) => {
@@ -195,18 +216,27 @@ export default function MentorApply() {
     setLoading(true);
     try {
       const resumeContent = navState?.resumeContent || getStoredResumeContent(user);
+      const jobPostingRawText = navState?.jobPosting?.rawText || getStoredJobPostingRawText(user);
       if (!resumeContent.trim()) {
         setLoading(false);
         alert("면접 신청 전에 면접 정보를 먼저 등록해 주세요.");
         navigate("/mentee/resume");
         return;
       }
+      if (!jobPostingRawText.trim()) {
+        setLoading(false);
+        alert("Fit-Gap 분석에 사용할 채용공고 내용을 먼저 등록해 주세요.");
+        navigate("/mentee/resume");
+        return;
+      }
       await requestReservation({
         mentor_id: mentor.id,
         availability_id: selectedSlot.id,
-        resume_content: requestNote.trim()
-          ? `${resumeContent}\n\n[멘토에게 전달할 내용]\n${requestNote.trim()}`
-          : resumeContent,
+        job_posting_raw_text: jobPostingRawText.trim(),
+        job_posting_company: "지원 기업",
+        job_posting_job_category: jobStr || "지원 직무",
+        resume_content: resumeContent,
+        ...(requestNote.trim() && { request_note: requestNote.trim() }),
       });
     } catch (err) {
       alert(err?.message || "면접 신청에 실패했습니다.");

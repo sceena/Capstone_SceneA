@@ -259,12 +259,8 @@ const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
 const MenteeDetailModal = ({ request, onClose, onAccept, onDecline }) => {
   const raw = request.rawData || {};
 
-  // resume_content: 백엔드가 예약 응답에 포함시켜주면 자동 표시
-  const fullContent = raw.resume_content ?? raw.resumeContent ?? raw.content ?? "";
-  const MENTOR_MSG_DIVIDER = "[멘토에게 전달할 내용]";
-  const dividerIdx    = fullContent.indexOf(MENTOR_MSG_DIVIDER);
-  const resumeContent = dividerIdx >= 0 ? fullContent.slice(0, dividerIdx).trim() : fullContent.trim();
-  const mentorMessage = dividerIdx >= 0 ? fullContent.slice(dividerIdx + MENTOR_MSG_DIVIDER.length).trim() : "";
+  const resumeContent = (raw.resume_content ?? raw.resumeContent ?? raw.content ?? "").trim();
+  const mentorMessage = (raw.request_note ?? raw.requestNote ?? "").trim();
 
   const dateInfo = request.scheduledAt
     ? new Date(request.scheduledAt).toLocaleDateString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -347,7 +343,7 @@ const MenteeDetailModal = ({ request, onClose, onAccept, onDecline }) => {
                 <p style={{ fontSize: 13, color: C.text, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{mentorMessage}</p>
               </div>
             ) : (
-              <PendingBox label="백엔드 작업 완료 후 자동 표시됩니다" />
+              <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic" }}>작성된 내용이 없습니다.</p>
             )}
           </div>
         </div>
@@ -586,6 +582,10 @@ const getScheduledAt    = s => s.scheduledAt ?? s.scheduled_at ?? "";
 const getSessionTitle   = s => s.title ?? (s.job_category ? `${s.job_category} 모의 면접` : "모의 면접");
 const getMenteeName     = s => s.menteeName ?? s.mentee_name ?? "";
 const getSessionType    = s => s.sessionType ?? s.session_type ?? "1:1 면접";
+const getReservationSessionType = r => {
+  const maxParticipants = Number(r.max_participants ?? r.maxParticipants ?? 1);
+  return maxParticipants > 1 ? "그룹 면접" : "1:1 면접";
+};
 const toDateText        = v => v ? String(v).slice(5, 10).replace("-", ".") : "";
 const toTimeText        = v => v ? String(v).slice(11, 16) : "";
 
@@ -634,7 +634,7 @@ export default function MentorDashboard() {
           message: "면접 신청이 도착했습니다. 신청 일정을 확인한 뒤 수락 또는 거절해주세요.",
           avatarColor: C.primary,
           scheduledAt: r.scheduled_at ?? r.scheduledAt ?? null,
-          sessionType: "1:1 면접",
+          sessionType: getReservationSessionType(r),
           requestedAt: r.created_at ?? r.createdAt ?? null,
           rawData: r,
         })));

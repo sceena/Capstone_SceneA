@@ -26,6 +26,10 @@ public class InterviewQuestion extends BaseEntity {
     @Column(nullable = false)
     private int orderIndex;
 
+    private String questionType;
+
+    private Long candidateId;
+
     private String audioUrl;
 
     @Enumerated(EnumType.STRING)
@@ -45,10 +49,12 @@ public class InterviewQuestion extends BaseEntity {
     private String sttErrorMessage;
 
     @Builder
-    public InterviewQuestion(InterviewSession interviewSession, String content, int orderIndex) {
+    public InterviewQuestion(InterviewSession interviewSession, String content, int orderIndex, String questionType, Long candidateId) {
         this.interviewSession = interviewSession;
         this.content = content;
         this.orderIndex = orderIndex;
+        this.questionType = questionType;
+        this.candidateId = candidateId;
     }
 
     public void update(String content) {

@@ -53,6 +53,11 @@ public class RecommendedQuestionService {
 
     @Transactional(noRollbackFor = CustomException.class)
     public AiSessionQuestionGenerationResponse generateRecommendedQuestions(Long mentorId, Long sessionId) {
+        return generateRecommendedQuestions(mentorId, sessionId, null, null);
+    }
+
+    @Transactional(noRollbackFor = CustomException.class)
+    public AiSessionQuestionGenerationResponse generateRecommendedQuestions(Long mentorId, Long sessionId, String scope, Long candidateId) {
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
         validateMentorAccess(mentorId, session);
@@ -62,14 +67,6 @@ public class RecommendedQuestionService {
                         .interviewSession(session)
                         .sessionType(ONE_TO_ONE)
                         .build()));
-
-        if (batch.getStatus() == RecommendedQuestionStatus.COMPLETED) {
-            List<RecommendedQuestion> savedQuestions = recommendedQuestionRepository
-                    .findAllByBatchOrderByTypeAscCandidateIdAscOrderIndexAsc(batch);
-            if (!savedQuestions.isEmpty()) {
-                return toResponse(batch, savedQuestions);
-            }
-        }
 
         List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session).stream()
                 .filter(participant -> !participant.getMember().getId().equals(session.getMentor().getId()))
@@ -83,6 +80,17 @@ public class RecommendedQuestionService {
         List<AiQuestionCandidateRequest> candidates = participants.stream()
                 .map(participant -> toCandidateRequest(session, participant))
                 .toList();
+
+        if (batch.getStatus() == RecommendedQuestionStatus.COMPLETED) {
+            List<RecommendedQuestion> savedQuestions = recommendedQuestionRepository
+                    .findAllByBatchOrderByTypeAscCandidateIdAscOrderIndexAsc(batch);
+            if (!savedQuestions.isEmpty()) {
+                AiSessionQuestionGenerationResponse savedResponse = toResponse(batch, savedQuestions);
+                if (hasRequestedQuestions(savedResponse, scope, candidateId)) {
+                    return filterResponse(savedResponse, scope, candidateId);
+                }
+            }
+        }
 
         String sessionType = resolveSessionType(candidates);
         batch.markPending(sessionType);
@@ -98,18 +106,82 @@ public class RecommendedQuestionService {
             response = normalizeResponse(sessionType, candidates, response);
             saveQuestions(batch, response);
             batch.markCompleted(response.sessionType());
-            return response;
+            return filterResponse(response, scope, candidateId);
         } catch (CustomException e) {
             if (e.getErrorCode() == ErrorCode.AI_SERVER_ERROR) {
-                log.warn("AI question generation failed. Falling back to local resume-based questions. sessionId={}", sessionId);
-                AiSessionQuestionGenerationResponse fallbackResponse = buildFallbackResponse(sessionType, candidates);
-                saveQuestions(batch, fallbackResponse);
-                batch.markCompleted(fallbackResponse.sessionType());
-                return fallbackResponse;
+                log.warn("AI question generation failed. sessionId={}", sessionId);
             }
             batch.markFailed(e.getMessage());
             throw e;
         }
+    }
+
+    private AiSessionQuestionGenerationResponse filterResponse(
+            AiSessionQuestionGenerationResponse response,
+            String scope,
+            Long candidateId) {
+        if (scope == null || scope.isBlank()) {
+            return response;
+        }
+
+        String normalizedScope = scope.trim().toUpperCase();
+        if ("COMMON".equals(normalizedScope)) {
+            return new AiSessionQuestionGenerationResponse(
+                    response.sessionType(),
+                    response.commonQuestions() != null ? response.commonQuestions() : List.of(),
+                    List.of()
+            );
+        }
+
+        if ("PERSONAL".equals(normalizedScope)) {
+            List<AiPersonalQuestionResponse> personalQuestions = response.personalQuestions() != null
+                    ? response.personalQuestions()
+                    : List.of();
+            if (candidateId != null) {
+                personalQuestions = personalQuestions.stream()
+                        .filter(question -> candidateId.equals(question.candidateId()))
+                        .toList();
+            }
+            return new AiSessionQuestionGenerationResponse(
+                    response.sessionType(),
+                    List.of(),
+                    personalQuestions
+            );
+        }
+
+        return response;
+    }
+
+    private boolean hasRequestedQuestions(
+            AiSessionQuestionGenerationResponse response,
+            String scope,
+            Long candidateId) {
+        if (scope == null || scope.isBlank()) {
+            return hasAnyQuestions(response);
+        }
+
+        String normalizedScope = scope.trim().toUpperCase();
+        if ("COMMON".equals(normalizedScope)) {
+            return response.commonQuestions() != null && !response.commonQuestions().isEmpty();
+        }
+
+        if ("PERSONAL".equals(normalizedScope)) {
+            List<AiPersonalQuestionResponse> personalQuestions = response.personalQuestions() != null
+                    ? response.personalQuestions()
+                    : List.of();
+            return personalQuestions.stream()
+                    .filter(personalQuestion -> candidateId == null || candidateId.equals(personalQuestion.candidateId()))
+                    .anyMatch(personalQuestion -> personalQuestion.questions() != null && !personalQuestion.questions().isEmpty());
+        }
+
+        return hasAnyQuestions(response);
+    }
+
+    private boolean hasAnyQuestions(AiSessionQuestionGenerationResponse response) {
+        boolean hasCommon = response.commonQuestions() != null && !response.commonQuestions().isEmpty();
+        boolean hasPersonal = response.personalQuestions() != null && response.personalQuestions().stream()
+                .anyMatch(personalQuestion -> personalQuestion.questions() != null && !personalQuestion.questions().isEmpty());
+        return hasCommon || hasPersonal;
     }
 
     private AiQuestionCandidateRequest toCandidateRequest(InterviewSession session, SessionParticipant participant) {
@@ -186,7 +258,7 @@ public class RecommendedQuestionService {
             List<AiQuestionCandidateRequest> candidates,
             AiSessionQuestionGenerationResponse response) {
         if (response == null) {
-            return buildFallbackResponse(sessionType, candidates);
+            throw new CustomException(ErrorCode.AI_SERVER_ERROR);
         }
 
         String resolvedSessionType = response.sessionType() != null ? response.sessionType() : sessionType;
@@ -200,8 +272,12 @@ public class RecommendedQuestionService {
                 .toList()
                 : List.of();
 
+        if (GROUP.equals(sessionType) && commonQuestions.isEmpty()) {
+            throw new CustomException(ErrorCode.AI_SERVER_ERROR);
+        }
+
         if (personalQuestions.isEmpty()) {
-            return buildFallbackResponse(sessionType, candidates);
+            throw new CustomException(ErrorCode.AI_SERVER_ERROR);
         }
 
         return new AiSessionQuestionGenerationResponse(

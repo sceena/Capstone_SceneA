@@ -364,12 +364,32 @@ export async function getAnswerAudioByAnswerId(sessionId, answerId) {
  * @param {string[]} contents 질문 텍스트 배열
  */
 export async function createQuestions(sessionId, contents) {
+  const questions = contents.map(item =>
+    typeof item === "string"
+      ? { content: item }
+      : {
+          content: item.content,
+          question_type: item.questionType ?? item.question_type,
+          candidate_id: item.candidateId ?? item.candidate_id ?? null,
+        }
+  );
+
   const res = await fetch(`/api/sessions/${sessionId}/questions`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ questions: contents.map(content => ({ content })) }),
+    body: JSON.stringify({ questions }),
   });
-  if (!res.ok) throw new Error("질문 생성 실패");
+  if (!res.ok) {
+    let message = "질문 생성 실패";
+    try {
+      const data = await res.json();
+      message = data?.message || data?.detail || message;
+    } catch {
+      const text = await res.text().catch(() => "");
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
   return res.json();
 }
 
@@ -377,12 +397,17 @@ export async function createQuestions(sessionId, contents) {
  * GET /api/sessions/{id}/questions
  * 특정 세션의 전체 질문 목록을 조회한다.
  */
-export async function getRecommendedQuestions(sessionId) {
+export async function getRecommendedQuestions(sessionId, options = {}) {
   if (!/^\d+$/.test(String(sessionId ?? ""))) {
     throw new Error("실제 세션에서만 AI 추천 질문을 불러올 수 있습니다. 데모 세션이 아니라 새로 생성된 세션으로 테스트해 주세요.");
   }
 
-  const res = await fetch(`/api/sessions/${sessionId}/questions/recommendations`, {
+  const params = new URLSearchParams();
+  if (options.scope) params.set("scope", options.scope);
+  if (options.candidateId != null) params.set("candidate_id", options.candidateId);
+  const query = params.toString();
+
+  const res = await fetch(`/api/sessions/${sessionId}/questions/recommendations${query ? `?${query}` : ""}`, {
     method: "POST",
     headers: requireAuthHeaders(),
   });
@@ -508,6 +533,14 @@ export async function saveResume(sessionId, content) {
  */
 export async function getResume(sessionId) {
   const res = await fetch(`/api/sessions/${sessionId}/resume`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("자소서 조회 실패");
+  return res.json();
+}
+
+export async function getMenteeResume(sessionId, menteeId) {
+  const res = await fetch(`/api/sessions/${sessionId}/mentees/${menteeId}/resume`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error("자소서 조회 실패");

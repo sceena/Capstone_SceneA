@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   createQuestions,
   deleteQuestion,
+  getMenteeResume,
   getQuestions,
   getRecommendedQuestions,
   getResume,
@@ -47,6 +48,7 @@ export default function InterviewRobby({ role = "mentee" }) {
   const [questionsOpen, setQuestionsOpen] = useState(true);
   const [recommendedQuestions, setRecommendedQuestions] = useState([]);
   const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendScope, setRecommendScope] = useState("personal");
   const [recommendSaving, setRecommendSaving] = useState(false);
   const [deletingQuestionId, setDeletingQuestionId] = useState(null);
   const [recommendError, setRecommendError] = useState("");
@@ -105,13 +107,6 @@ export default function InterviewRobby({ role = "mentee" }) {
         setQuestions(normalizeSavedQuestionList(data));
       }).catch(() => {});
     }
-    getResume(id).then(data => {
-      setResumeContent(data?.content ?? "");
-      setResumeError("");
-    }).catch(() => {
-      setResumeContent("");
-      setResumeError("제출한 자소서를 불러오지 못했습니다.");
-    });
   }, [id, role]);
 
   /* 사용 가능한 카메라 목록 로드 */
@@ -284,22 +279,38 @@ export default function InterviewRobby({ role = "mentee" }) {
     normalizeQuestionList(data).map(item => ({
       ...item,
       content: item.content ?? item.question ?? "",
+      questionType: item.question_type ?? item.questionType ?? null,
+      candidateId: item.candidate_id ?? item.candidateId ?? null,
       selected: item.selected ?? true,
     }));
 
+  const getQuestionCandidateId = (question) =>
+    question?.candidate_id ?? question?.candidateId ?? null;
+
+  const getQuestionType = (question) =>
+    question?.question_type ?? question?.questionType ?? (getQuestionCandidateId(question) ? "PERSONAL" : null);
+
+  const isCommonQuestion = (question) => getQuestionType(question) === "COMMON";
+
   const flattenRecommendedQuestions = (data) => {
-    const isGroup = data?.session_type === "GROUP";
-    const commonItems = isGroup ? (data?.common_questions ?? []).map((content, index) => ({
+    const isGroup = (data?.session_type ?? data?.sessionType) === "GROUP";
+    const commonQuestions = data?.common_questions ?? data?.commonQuestions ?? [];
+    const personalQuestions = data?.personal_questions ?? data?.personalQuestions ?? [];
+    const commonItems = isGroup ? commonQuestions.map((content, index) => ({
       key: `common-${index}`,
       section: "공통",
+      questionType: "COMMON",
+      candidateId: null,
       content,
       selected: true,
     })) : [];
 
-    const personalItems = (data?.personal_questions ?? []).flatMap(item =>
+    const personalItems = personalQuestions.flatMap(item =>
       (item.questions ?? []).map((content, index) => ({
-        key: `personal-${item.candidate_id}-${index}`,
-        section: isGroup ? `지원자 ${item.candidate_id}` : "개인 질문",
+        key: `personal-${item.candidate_id ?? item.candidateId}-${index}`,
+        section: "개인 질문",
+        questionType: "PERSONAL",
+        candidateId: item.candidate_id ?? item.candidateId,
         content,
         selected: true,
       }))
@@ -308,17 +319,43 @@ export default function InterviewRobby({ role = "mentee" }) {
     return [...commonItems, ...personalItems];
   };
 
-  const handleLoadRecommendedQuestions = async () => {
+  const handleLoadRecommendedQuestions = async (scope = "personal") => {
     if (!id || recommendLoading) return;
+    setRecommendScope(scope);
+
+    const alreadyLoaded = scope === "common"
+      ? recommendedQuestions.some(isCommonQuestion)
+      : recommendedQuestions.some(item =>
+        selectedMenteeId != null && Number(getQuestionCandidateId(item)) === Number(selectedMenteeId)
+      );
+    if (alreadyLoaded) {
+      setRecommendError("");
+      return;
+    }
+
     setRecommendLoading(true);
     setRecommendError("");
     try {
-      const data = await getRecommendedQuestions(id);
+      const data = await getRecommendedQuestions(id, {
+        scope: scope === "common" ? "COMMON" : "PERSONAL",
+        candidateId: scope === "common" ? null : selectedMenteeId,
+      });
       const nextQuestions = flattenRecommendedQuestions(data);
-      setRecommendedQuestions(nextQuestions);
-      cacheRecommendedQuestions(nextQuestions);
+      setRecommendedQuestions(prev => {
+        const filteredPrev = prev.filter(item =>
+          scope === "common"
+            ? !isCommonQuestion(item)
+            : !(selectedMenteeId != null && Number(getQuestionCandidateId(item)) === Number(selectedMenteeId))
+        );
+        return [...filteredPrev, ...nextQuestions];
+      });
+      cacheRecommendedQuestions([...recommendedQuestions, ...nextQuestions]);
       if (nextQuestions.length === 0) {
-        setRecommendError("추천 질문이 없습니다. 지원자 서류가 등록되어 있는지 확인해 주세요.");
+        setRecommendError(
+          scope === "common"
+            ? "공통 질문이 생성되지 않았습니다. 수락된 멘티가 2명 이상인지 확인해 주세요."
+            : "개인 질문이 생성되지 않았습니다. AI 서버 응답을 확인해 주세요."
+        );
       }
     } catch (error) {
       setRecommendError(error?.message || "AI 추천 질문을 불러오지 못했습니다.");
@@ -358,30 +395,41 @@ export default function InterviewRobby({ role = "mentee" }) {
   };
 
   const handleSaveRecommendedQuestions = async (targetRecommendedQuestions = recommendedQuestions) => {
-    const contents = targetRecommendedQuestions
+    const skipAlreadySavedCommon = isGroup && questions.some(isCommonQuestion);
+    const questionItems = targetRecommendedQuestions
       .filter(item => item.selected)
-      .map(item => item.content.trim())
-      .filter(Boolean);
+      .filter(item => !(skipAlreadySavedCommon && isCommonQuestion(item)))
+      .map(item => {
+        const questionType = getQuestionType(item) ?? "PERSONAL";
+        const candidateId = isGroup && questionType === "PERSONAL"
+          ? selectedMenteeId
+          : getQuestionCandidateId(item);
+        return {
+          content: item.content?.trim() ?? "",
+          questionType,
+          candidateId: questionType === "COMMON" ? null : candidateId,
+        };
+      })
+      .filter(item => item.content);
 
-    if (contents.length === 0) {
-      setRecommendError("저장할 질문을 하나 이상 선택해 주세요.");
+    if (isGroup && questionItems.some(item => item.questionType === "PERSONAL" && item.candidateId == null)) {
+      setRecommendError("선택된 멘티 정보를 찾지 못해 개인 질문을 저장할 수 없습니다.");
+      return;
+    }
+
+    if (questionItems.length === 0) {
+      setRecommendError(skipAlreadySavedCommon ? "공통 질문은 이미 저장되어 있습니다. 저장할 개인 질문을 선택해 주세요." : "저장할 질문을 하나 이상 선택해 주세요.");
       return;
     }
 
     setRecommendSaving(true);
     setRecommendError("");
     try {
-      const data = await createQuestions(id, contents);
-      const savedQuestions = normalizeQuestionList(data);
-      if (savedQuestions.length > 0) {
-        setQuestions(normalizeSavedQuestionList(savedQuestions));
-        cacheRecommendedQuestions(savedQuestions);
-      } else {
-        const latest = await getQuestions(id);
-        const latestQuestions = normalizeSavedQuestionList(latest);
-        setQuestions(latestQuestions);
-        cacheRecommendedQuestions(latestQuestions);
-      }
+      await createQuestions(id, questionItems);
+      const latest = await getQuestions(id);
+      const latestQuestions = normalizeSavedQuestionList(latest);
+      setQuestions(latestQuestions);
+      cacheRecommendedQuestions(recommendedQuestions);
     } catch (error) {
       setRecommendError(error?.message || "선택한 질문을 저장하지 못했습니다.");
     } finally {
@@ -394,16 +442,23 @@ export default function InterviewRobby({ role = "mentee" }) {
     const isRealSession = id && /^\d+$/.test(id);
     if (isRealSession) {
       if (role === "mentor" && questions.length === 0 && recommendedQuestions.length > 0) {
-        const contents = recommendedQuestions
+        const questionItems = recommendedQuestions
           .filter(item => item.selected !== false)
-          .map(item => item.content.trim())
-          .filter(Boolean);
-        if (contents.length > 0) {
+          .map(item => {
+            const questionType = getQuestionType(item) ?? "PERSONAL";
+            return {
+              content: item.content?.trim() ?? "",
+              questionType,
+              candidateId: questionType === "COMMON" ? null : getQuestionCandidateId(item),
+            };
+          })
+          .filter(item => item.content);
+        if (questionItems.length > 0) {
           try {
-            const data = await createQuestions(id, contents);
-            const savedQuestions = normalizeQuestionList(data);
-            setQuestions(normalizeSavedQuestionList(savedQuestions));
-            cacheRecommendedQuestions(savedQuestions.length > 0 ? savedQuestions : recommendedQuestions);
+            await createQuestions(id, questionItems);
+            const latest = await getQuestions(id);
+            setQuestions(normalizeSavedQuestionList(latest));
+            cacheRecommendedQuestions(recommendedQuestions);
           } catch {
             cacheRecommendedQuestions(recommendedQuestions);
           }
@@ -453,6 +508,36 @@ export default function InterviewRobby({ role = "mentee" }) {
     ? menteeParticipants
     : [{ name: fallbackMenteeName, role: "mentee" }];
   const selectedMentee = mentees[selectedMenteeIdx] ?? mentees[0];
+  const selectedMenteeId = selectedMentee?.user_id ?? selectedMentee?.userId ?? selectedMentee?.id ?? null;
+  const getMenteeId = (mentee) => mentee?.user_id ?? mentee?.userId ?? mentee?.id ?? null;
+  const getMenteeNameById = (candidateId) => {
+    const target = mentees.find(mentee => Number(getMenteeId(mentee)) === Number(candidateId));
+    return target?.name ?? "멘티";
+  };
+  const getQuestionLabel = (question) => {
+    const candidateId = getQuestionCandidateId(question);
+    if (isCommonQuestion(question)) return "공통 질문";
+    if (candidateId == null) return "개인 질문";
+    return `${getMenteeNameById(candidateId)} 개인 질문`;
+  };
+
+  useEffect(() => {
+    if (!id || !/^\d+$/.test(id)) return;
+
+    const loadResume = selectedMenteeId
+      ? getMenteeResume(id, selectedMenteeId)
+      : getResume(id);
+
+    loadResume.then(data => {
+      setResumeContent(data?.content ?? "");
+      setResumeError("");
+      setOpenResumeIndex(null);
+    }).catch(() => {
+      setResumeContent("");
+      setResumeError("제출한 자소서를 불러오지 못했습니다.");
+      setOpenResumeIndex(null);
+    });
+  }, [id, selectedMenteeId]);
 
   /* API 데이터 우선, 없으면 fallback */
   const session = {
@@ -501,6 +586,98 @@ export default function InterviewRobby({ role = "mentee" }) {
   };
 
   const deviceReady = camStatus === "ok" && micOk;
+
+  const renderRecommendedQuestionList = (items) => (
+    items.length > 0 && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
+        {items.map((item, i) => {
+          const selected = item.selected !== false;
+          return (
+            <div key={item.key} style={{
+              background: selected ? "#201803" : "#101b2a",
+              border: `1px solid ${selected ? "rgba(245,158,11,0.48)" : "rgba(255,255,255,0.12)"}`,
+              borderRadius: 8, padding: "11px 12px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1,
+            }}>
+              <input type="checkbox" checked={selected} readOnly onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleRecommendedQuestionToggle(item.key); }} style={{ accentColor: "#F59E0B", width: 15, height: 15, marginTop: 5, flexShrink: 0, cursor: "pointer", position: "relative", zIndex: 5, pointerEvents: "auto" }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                  <span style={{ fontSize: 11, color: getQuestionLabel(item) === "공통 질문" ? "#34D399" : "#FBBF24", fontWeight: 800 }}>{getQuestionLabel(item)}</span>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.38)", fontWeight: 700 }}>추천 {i + 1}</span>
+                </div>
+                <textarea value={item.content ?? ""} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} onChange={e => handleRecommendedQuestionChange(item.key, e.target.value)}
+                  rows={Math.max(2, Math.ceil(String(item.content ?? "").length / 34))}
+                  style={{ width: "100%", resize: "vertical", minHeight: 66, border: "1px solid rgba(255,255,255,0.18)", borderRadius: 8, padding: "9px 10px", background: "#0b1726", color: "rgba(255,255,255,0.94)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.65, outline: "none", boxSizing: "border-box", position: "relative", zIndex: 3, pointerEvents: "auto" }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )
+  );
+
+  const renderSavedQuestionList = (items) => (
+    items.length > 0 && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
+        {items.map((q, i) => (
+          <div key={q.id ?? i} style={{ background: "#101b2a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "12px 13px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1 }}>
+            <span style={{ minWidth: 28, textAlign: "center", fontSize: 11, fontWeight: 800, color: "#FBBF24", flexShrink: 0, marginTop: 3 }}>Q{i + 1}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: getQuestionLabel(q) === "공통 질문" ? "#34D399" : "#FBBF24", fontWeight: 800, marginBottom: 5 }}>{getQuestionLabel(q)}</div>
+              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.95)", lineHeight: 1.65, margin: 0 }}>{q.content ?? q.question ?? q}</p>
+            </div>
+            {q.id && (
+              <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (deletingQuestionId !== q.id) handleDeleteSavedQuestion(q.id); }} disabled={deletingQuestionId === q.id} style={{
+                flexShrink: 0, minHeight: 30, padding: "6px 10px", borderRadius: 7,
+                border: "1px solid rgba(239,68,68,0.50)", background: deletingQuestionId === q.id ? "rgba(239,68,68,0.08)" : "#2a1012",
+                color: "#F87171", cursor: deletingQuestionId === q.id ? "default" : "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 800,
+                position: "relative", zIndex: 5, pointerEvents: "auto",
+              }}>
+                {deletingQuestionId === q.id ? "삭제 중.." : "삭제"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  );
+
+  const renderQuestionSection = ({ title, accentColor, loadScope, loadLabel, recommendedItems, savedItems }) => (
+    <Accordion title={title} accentColor={accentColor} defaultOpen={true}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {canModifyQuestions ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative", zIndex: 3 }}>
+            <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions(loadScope); }} disabled={recommendLoading} style={{
+              flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
+              border: "1px solid #D1D5DB", background: recommendLoading && recommendScope === loadScope ? "#F1F1F3" : "#FFFFFF",
+              color: "#202123", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+              position: "relative", zIndex: 4, pointerEvents: "auto",
+            }}>
+              {recommendLoading && recommendScope === loadScope ? "AI 질문 생성 중..." : loadLabel}
+            </button>
+            {recommendedItems.length > 0 && (
+              <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendSaving) handleSaveRecommendedQuestions(recommendedItems); }} disabled={recommendSaving} style={{
+                minHeight: 38, padding: "9px 14px", borderRadius: 8,
+                border: "1px solid #202123", background: recommendSaving ? "#F1F1F3" : "#202123",
+                color: recommendSaving ? "#6B7280" : "#FFFFFF", cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
+                whiteSpace: "nowrap", position: "relative", zIndex: 4, pointerEvents: "auto",
+              }}>
+                {recommendSaving ? "저장 중..." : "선택 저장"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.6 }}>
+            면접이 시작된 이후에는 저장된 질문만 확인할 수 있습니다.
+          </p>
+        )}
+        {recommendError && recommendScope === loadScope && <p style={{ fontSize: 11, color: "#EF4444" }}>{recommendError}</p>}
+        {canModifyQuestions && renderRecommendedQuestionList(recommendedItems)}
+        {renderSavedQuestionList(savedItems)}
+      </div>
+    </Accordion>
+  );
 
   return (
     <>
@@ -737,101 +914,37 @@ export default function InterviewRobby({ role = "mentee" }) {
                   {/* 오른쪽 열: AI 질문 */}
                   <div style={{ flex: 1, overflowY: "auto" }}>
                     {(() => {
-                      const sectionKey = isGroup ? `지원자 ${selectedMenteeIdx + 1}` : null;
-                      const shownRecommended = sectionKey
-                        ? recommendedQuestions.filter(q => q.section === "공통" || q.section === sectionKey)
+                      const shownRecommended = isGroup
+                        ? recommendedQuestions.filter(q =>
+                          selectedMenteeId != null && Number(getQuestionCandidateId(q)) === Number(selectedMenteeId)
+                        )
                         : recommendedQuestions;
-                      const shownSaved = sectionKey
-                        ? questions.filter(q => !q.section || q.section === "공통" || q.section === sectionKey)
+                      const shownSaved = isGroup
+                        ? questions.filter(q =>
+                          (selectedMenteeId != null && Number(getQuestionCandidateId(q)) === Number(selectedMenteeId))
+                        )
                         : questions;
+                      const commonRecommended = isGroup ? recommendedQuestions.filter(isCommonQuestion) : [];
+                      const commonSaved = isGroup ? questions.filter(isCommonQuestion) : [];
                       return (
-                        <Accordion
-                          title={isGroup ? `AI 질문 - ${selectedMentee?.name ?? "멘티"}` : "AI 예상 질문 리스트"}
-                          accentColor="#F59E0B"
-                          defaultOpen={true}
-                        >
-                          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                            {canModifyQuestions ? (
-                              <div style={{ display: "flex", gap: 8, alignItems: "center", position: "relative", zIndex: 3 }}>
-                                <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendLoading) handleLoadRecommendedQuestions(); }} disabled={recommendLoading} style={{
-                                  flex: 1, minHeight: 38, padding: "9px 12px", borderRadius: 8,
-                                  border: "1px solid #D1D5DB", background: recommendLoading ? "#F1F1F3" : "#FFFFFF",
-                                  color: "#202123", cursor: recommendLoading ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-                                  display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                                  position: "relative", zIndex: 4, pointerEvents: "auto",
-                                }}>
-                                  {recommendLoading && (
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
-                                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                                    </svg>
-                                  )}
-                                  {recommendLoading ? "AI 질문 생성 중..." : "AI 추천 질문 불러오기"}
-                                </button>
-                                {shownRecommended.length > 0 && (
-                                  <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (!recommendSaving) handleSaveRecommendedQuestions(shownRecommended); }} disabled={recommendSaving} style={{
-                                    minHeight: 38, padding: "9px 14px", borderRadius: 8,
-                                    border: "1px solid #202123", background: recommendSaving ? "#F1F1F3" : "#202123",
-                                    color: recommendSaving ? "#6B7280" : "#FFFFFF", cursor: recommendSaving ? "default" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 800,
-                                    whiteSpace: "nowrap", position: "relative", zIndex: 4, pointerEvents: "auto",
-                                  }}>
-                                    {recommendSaving ? "저장 중..." : "선택 저장"}
-                                  </button>
-                                )}
-                              </div>
-                            ) : (
-                              <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.6 }}>
-                                면접이 시작된 이후에는 저장된 질문만 확인할 수 있습니다.
-                              </p>
-                            )}
-                            {recommendError && <p style={{ fontSize: 11, color: "#EF4444" }}>{recommendError}</p>}
-                            {canModifyQuestions && shownRecommended.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
-                                {shownRecommended.map((item, i) => {
-                                  const selected = item.selected !== false;
-                                  return (
-                                    <div key={item.key} style={{
-                                      background: selected ? "#F7F7F8" : "#FFFFFF",
-                                      border: `1px solid ${selected ? "#D1D5DB" : "#E5E5E5"}`,
-                                      borderRadius: 8, padding: "11px 12px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1,
-                                    }}>
-                                      <input type="checkbox" checked={selected} readOnly onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleRecommendedQuestionToggle(item.key); }} style={{ accentColor: "#202123", width: 15, height: 15, marginTop: 5, flexShrink: 0, cursor: "pointer", position: "relative", zIndex: 5, pointerEvents: "auto" }} />
-                                      <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 7 }}>
-                                          <span style={{ fontSize: 11, color: "#202123", fontWeight: 800 }}>{item.section}</span>
-                                          <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700 }}>추천 {i + 1}</span>
-                                        </div>
-                                        <textarea value={item.content ?? ""} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} onChange={e => handleRecommendedQuestionChange(item.key, e.target.value)}
-                                          rows={Math.max(2, Math.ceil(String(item.content ?? "").length / 34))}
-                                          style={{ width: "100%", resize: "vertical", minHeight: 66, border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", background: "#FFFFFF", color: "#202123", fontFamily: "inherit", fontSize: 12, lineHeight: 1.65, outline: "none", boxSizing: "border-box", position: "relative", zIndex: 3, pointerEvents: "auto" }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {shownSaved.length > 0 && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative", zIndex: 2 }}>
-                                {shownSaved.map((q, i) => (
-                                  <div key={q.id ?? i} style={{ background: "#F7F7F8", border: "1px solid #E5E5E5", borderRadius: 8, padding: "12px 13px", display: "flex", gap: 10, alignItems: "flex-start", position: "relative", zIndex: 1 }}>
-                                    <span style={{ minWidth: 28, textAlign: "center", fontSize: 11, fontWeight: 800, color: "#6B7280", flexShrink: 0, marginTop: 3 }}>Q{i + 1}</span>
-                                    <p style={{ flex: 1, minWidth: 0, fontSize: 13, color: "#202123", lineHeight: 1.65, margin: 0 }}>{q.content ?? q.question ?? q}</p>
-                                    {canModifyQuestions && q.id && (
-                                      <button type="button" onPointerDown={e => { e.preventDefault(); e.stopPropagation(); if (deletingQuestionId !== q.id) handleDeleteSavedQuestion(q.id); }} disabled={deletingQuestionId === q.id} style={{
-                                        flexShrink: 0, minHeight: 30, padding: "6px 10px", borderRadius: 7,
-                                        border: "1px solid #FCA5A5", background: deletingQuestionId === q.id ? "#FEE2E2" : "#FFFFFF",
-                                        color: "#EF4444", cursor: deletingQuestionId === q.id ? "default" : "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 800,
-                                        position: "relative", zIndex: 5, pointerEvents: "auto",
-                                      }}>
-                                        {deletingQuestionId === q.id ? "삭제 중" : "삭제"}
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </Accordion>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                        {isGroup && renderQuestionSection({
+                          title: "AI 공통 질문",
+                          accentColor: "#34D399",
+                          loadScope: "common",
+                          loadLabel: "공통질문 불러오기",
+                          recommendedItems: commonRecommended,
+                          savedItems: commonSaved,
+                        })}
+                        {renderQuestionSection({
+                          title: isGroup ? `AI 질문 - ${selectedMentee?.name ?? "멘티"}` : "AI 예상 질문 리스트",
+                          accentColor: "#F59E0B",
+                          loadScope: "personal",
+                          loadLabel: isGroup ? `${selectedMentee?.name ?? "멘티"} 개인질문 불러오기` : "AI 추천 질문 불러오기",
+                          recommendedItems: shownRecommended,
+                          savedItems: shownSaved,
+                        })}
+                        </div>
                       );
                     })()}
                   </div>

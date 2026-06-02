@@ -1,6 +1,7 @@
 package com.backend.domain.interviewSession.service;
 
 import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
 import com.backend.domain.interviewSession.dto.request.ParticipantStatusRequest;
 import com.backend.domain.interviewSession.dto.request.SessionCreateRequest;
@@ -131,7 +132,11 @@ public class SessionService {
 
     private SessionSummaryResponse toSummary(InterviewSession session) {
         List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
-        AnalysisReport report = reportRepository.findByInterviewSession(session).orElse(null);
+        AnalysisReport report = reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL)
+                .orElseGet(() -> reportRepository
+                        .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
+                        .orElse(null));
         return SessionSummaryResponse.from(
                 session,
                 participants,

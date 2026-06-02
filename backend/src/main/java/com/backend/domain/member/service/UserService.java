@@ -1,6 +1,7 @@
 package com.backend.domain.member.service;
 
 import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
 import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.interviewSession.entity.SessionParticipant;
@@ -113,7 +114,11 @@ public class UserService {
         List<InterviewSession> sessions = sessionPage.getContent();
         Map<Long, AnalysisReport> reportMap = sessions.isEmpty() ? Map.of() :
                 reportRepository.findAllByInterviewSessionIn(sessions).stream()
-                        .collect(Collectors.toMap(r -> r.getInterviewSession().getId(), r -> r));
+                        .collect(Collectors.toMap(
+                                r -> r.getInterviewSession().getId(),
+                                r -> r,
+                                (a, b) -> b.getReportStatus() == ReportStatus.FINAL ? b : a
+                        ));
 
         return MySessionHistoryResponse.of(sessionPage, reportMap);
     }

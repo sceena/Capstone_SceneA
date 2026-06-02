@@ -15,6 +15,7 @@ import com.backend.domain.analysisReport.dto.response.MentorFeedbackResponse;
 import com.backend.domain.analysisReport.dto.response.ReportResponse;
 import com.backend.domain.analysisReport.dto.response.ResumeSkillInfo;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
 import com.backend.domain.interviewAnswer.entity.SttStatus;
@@ -75,8 +76,11 @@ public class ReportService {
 
         validateAccess(memberId, session);
 
-        AnalysisReport report = reportRepository.findByInterviewSession(session)
-                .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND));
+        AnalysisReport report = reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL)
+                .orElseGet(() -> reportRepository
+                        .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
+                        .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND)));
 
         return ReportResponse.from(
                 report,
@@ -96,7 +100,8 @@ public class ReportService {
         AiReportResponse aiResponse = aiReportClient.generateReport(request);
         String rawAiResponseJson = toJson(aiResponse);
 
-        AnalysisReport report = reportRepository.findByInterviewSession(session)
+        AnalysisReport report = reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
                 .orElseGet(() -> AnalysisReport.builder()
                         .interviewSession(session)
                         .build());
@@ -124,7 +129,8 @@ public class ReportService {
 
         validateAccess(memberId, session);
 
-        AnalysisReport report = reportRepository.findByInterviewSession(session)
+        AnalysisReport report = reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
                 .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
         JobPosting jobPosting = jobPostingRepository.findByInterviewSession(session)
@@ -179,13 +185,26 @@ public class ReportService {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
 
-        AnalysisReport report = reportRepository.findByInterviewSession(session)
+        AnalysisReport firstReport = reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
                 .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
         answerEvaluationService.updateMentorEvaluations(memberId, session, request.answerEvaluations());
-        report.completeFinal(request.mentorFeedback(), normalizeMentorScore(request.mentorScore()));
 
-        return MentorFeedbackResponse.from(report);
+        AnalysisReport finalReport = AnalysisReport.builder()
+                .interviewSession(session)
+                .aiSummary(firstReport.getAiSummary())
+                .totalScore(firstReport.getTotalScore())
+                .alignmentScore(firstReport.getAlignmentScore())
+                .bestMoment(firstReport.getBestMoment())
+                .worstMoment(firstReport.getWorstMoment())
+                .rawAiResponseJson(firstReport.getRawAiResponseJson())
+                .mentorFeedback(request.mentorFeedback())
+                .mentorScore(normalizeMentorScore(request.mentorScore()))
+                .reportStatus(ReportStatus.FINAL)
+                .build();
+
+        return MentorFeedbackResponse.from(reportRepository.save(finalReport));
     }
 
     private void validateAccess(Long memberId, InterviewSession session) {

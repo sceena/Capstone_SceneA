@@ -208,10 +208,12 @@ public class ReportService {
 
     private AiReportRequest buildAiReportRequest(InterviewSession session) {
         List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
-        SessionParticipant candidate = participants.stream()
+        List<SessionParticipant> candidates = participants.stream()
                 .filter(participant -> !participant.getMember().getId().equals(session.getMentor().getId()))
-                .findFirst()
-                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new CustomException(ErrorCode.MEMBER_NOT_FOUND);
+        }
 
         List<Resume> resumes = resumeRepository.findAllByInterviewSession(session);
         Optional<JobPosting> jobPosting = jobPostingRepository.findByInterviewSession(session);
@@ -227,12 +229,16 @@ public class ReportService {
         validateReportInputsReady(questions, answers);
 
         AiCandidateContext candidateContext = new AiCandidateContext(
-                candidate.getMember().getId(),
-                candidate.getMember().getName(),
+                candidates.size() == 1 ? candidates.get(0).getMember().getId() : null,
+                candidates.size() == 1
+                        ? candidates.get(0).getMember().getName()
+                        : candidates.stream()
+                                .map(participant -> participant.getMember().getName())
+                                .collect(Collectors.joining(", ")),
                 "junior",
                 session.getJobCategory(),
                 resumes.stream()
-                        .map(resume -> summarize(resume.getContent()))
+                        .map(resume -> resume.getMember().getName() + ": " + summarize(resume.getContent()))
                         .toList()
         );
 

@@ -140,7 +140,7 @@ class ReportComposer:
 
         elements = structure_analysis.get("elements") or {}
         present_count = sum(1 for element in expected if elements.get(element))
-        return round((present_count / len(expected)) * 10, 1)
+        return round((present_count / len(expected)) * 5, 1)
 
     def _to_question_highlight(
         self,
@@ -240,35 +240,35 @@ class ReportComposer:
 
     def _metrics_rank_score(self, evaluation: AnswerEvaluation) -> float:
         summary = evaluation.metrics_summary
-        score = 10.0
+        score = 5.0
 
         if summary.speaking_speed in {"빠름", "느림"}:
-            score -= 1.5
+            score -= 0.8
         elif summary.speaking_speed == "미측정":
-            score -= 0.5
+            score -= 0.3
 
         if summary.silence in {"많음", "긴 침묵", "불안정"}:
-            score -= 1.5
+            score -= 0.8
         elif summary.silence == "미측정":
-            score -= 0.5
+            score -= 0.3
 
         if summary.sentence_clarity in {"장황함", "짧음"}:
-            score -= 1.2
+            score -= 0.6
         elif summary.sentence_clarity == "미측정":
-            score -= 0.5
+            score -= 0.3
 
-        return max(1.0, min(10.0, score))
+        return max(1.0, min(5.0, score))
 
     def _star_rank_score(self, star_structure: str) -> float:
         if star_structure == "S/T/A/R 모두 충족":
-            return 10.0
-        if star_structure == "Action/Result 충족":
-            return 8.0
-        if star_structure == "Result 부족":
             return 5.0
+        if star_structure == "Action/Result 충족":
+            return 4.0
+        if star_structure == "Result 부족":
+            return 2.5
         if star_structure == "Action/Result 부족":
-            return 3.0
-        return 5.0
+            return 1.5
+        return 2.5
 
     def _build_fit_gap(self, request: ReportRequest, evaluations: list[AnswerEvaluation]) -> FitGap:
         job_description = request.company_context.job_posting_summary or ""

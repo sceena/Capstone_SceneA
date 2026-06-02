@@ -40,15 +40,12 @@ logger = logging.getLogger(__name__)
 
 
 TECH_INTERVIEW_INITIAL_PROMPT = """
-다음은 한국어 IT 개발자 면접 녹취록입니다.
-면접관: 프로젝트에서 사용한 기술 스택을 설명해주세요.
-지원자: Java와 Spring Boot를 사용했고, JPA와 QueryDSL로 데이터 조회를 구현했습니다.
-면접관: 데이터베이스 성능 개선 경험이 있나요?
-지원자: MySQL 인덱스와 실행 계획을 확인해서 N+1 문제와 느린 쿼리를 개선했습니다.
-면접관: 장애 대응이나 배포 경험도 설명해주세요.
-지원자: AWS EC2와 Docker로 배포했고, 로그를 확인해서 API 오류 원인을 분석했습니다.
-용어 표기: Java, Spring Boot, JPA, QueryDSL, MyBatis, REST API, JWT, OAuth2, MySQL, MSSQL, MongoDB, Redis, AWS, EC2, S3, RDS, Docker, Kubernetes, CI/CD, GitHub Actions, Nginx, Linux, ERD, SQL, 트랜잭션, 인덱스, 데드락, 커넥션 풀, 쿼리 튜닝, 실행 계획, N+1 문제, 캐시, 로그, 장애 대응, 배포, 테스트 코드, 백엔드, 프론트엔드, API, 서버, 데이터베이스.
-직무 표현: 스크린 골프, 타석 예약, 결제, 쿠폰, 무인화 서비스, 빌링, 회원 DB, DB 개발, DB 운영, 성능 개선, IDC.
+한국어 IT 개발자 면접 녹취입니다. 들리는 말만 그대로 받아쓰세요.
+예시 문장이나 질문을 새로 만들지 마세요. 들리지 않는 내용은 추측하지 마세요.
+자주 나오는 기술 용어 표기:
+Java, Spring Boot, JPA, QueryDSL, MyBatis, REST API, JWT, OAuth2, MySQL, MSSQL, MongoDB, Redis, AWS, EC2, S3, RDS, Docker, Kubernetes, CI/CD, GitHub Actions, Nginx, Linux, ERD, SQL, 트랜잭션, 인덱스, 데드락, 커넥션 풀, 쿼리 튜닝, 실행 계획, N+1 문제, 캐시, 로그, 장애 대응, 배포, 테스트 코드, 백엔드, 프론트엔드, API, 서버, 데이터베이스.
+채용 공고 관련 용어:
+스크린 골프, 타석 예약, 결제, 쿠폰, 무인화 서비스, 빌링, 회원 DB, DB 개발, DB 운영, 성능 개선, IDC.
 """.strip()
 
 
@@ -114,7 +111,7 @@ class SttService:
         self.device = os.environ.get("WHISPER_DEVICE", "cuda")
         self.compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "float16")
         self.vad_filter = _env_bool("WHISPER_VAD_FILTER", True)
-        self.condition_on_previous_text = _env_bool("WHISPER_CONDITION_ON_PREVIOUS_TEXT", True)
+        self.condition_on_previous_text = _env_bool("WHISPER_CONDITION_ON_PREVIOUS_TEXT", False)
 
     def transcribe(self, filename: str | None, audio_file: BinaryIO) -> SttResult:
         suffix = Path(filename or "answer.wav").suffix or ".wav"
@@ -157,7 +154,7 @@ class SttService:
                     "speech_pad_ms": 400,
                 },
                 condition_on_previous_text=self.condition_on_previous_text,
-                no_speech_threshold=0.45,
+                no_speech_threshold=0.6,
                 compression_ratio_threshold=2.4,
                 log_prob_threshold=-1.0,
             )

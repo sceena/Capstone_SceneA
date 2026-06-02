@@ -94,7 +94,16 @@ function toQuestionNo(questionId, reports = []) {
 }
 
 function scoreToStars(score) {
-  return Math.max(1, Math.min(5, Math.round((Number(score) || 0) / 2)));
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return 1;
+  const fivePoint = numeric > 5 ? numeric / 2 : numeric;
+  return Math.max(1, Math.min(5, Math.round(fivePoint)));
+}
+
+function toFivePointScore(score) {
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(1, Math.min(5, numeric > 5 ? numeric / 2 : numeric));
 }
 
 function formatReplayTime(replay = {}) {
@@ -484,7 +493,7 @@ function MenteeReport({ sessionId, report }) {
           ))}
         </div>
         <h1 style={{ fontSize: 28, fontWeight: 800, color: NAVY, margin: "0 0 8px", letterSpacing: "-0.02em" }}>AI 면접 분석 리포트</h1>
-        <p style={{ color: "#868E96", fontSize: 14, margin: "0 0 36px" }}>세션 #{report?.session_id || sessionId} · 종합 점수 <strong style={{ color: NAVY }}>{aiReport?.overall_score ?? report?.total_score ?? "-"}점</strong></p>
+        <p style={{ color: "#868E96", fontSize: 14, margin: "0 0 36px" }}>세션 #{report?.session_id || sessionId} · 종합 점수 <strong style={{ color: NAVY }}>{aiReport?.overall_score ?? report?.total_score ?? "-"} / 5</strong></p>
 
         {/* BEST / WORST */}
         <SectionTitle
@@ -589,8 +598,8 @@ function MentorReport({ sessionId, report }) {
   const navigate = useNavigate();
   const aiReport = report?.ai_report;
   const questionReports = aiReport?.question_reports || [];
-  const overallScore = aiReport?.overall_score ?? report?.total_score ?? 0;
-  const scoreColor = overallScore >= 8 ? GREEN : overallScore >= 6 ? "#F59E0B" : "#E24B4A";
+  const overallScore = toFivePointScore(aiReport?.overall_score ?? report?.total_score ?? 0);
+  const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#E24B4A";
   const topSummary = aiReport?.top_summary;
   const best = topSummary?.best_question;
   const worst = topSummary?.worst_question;
@@ -613,10 +622,10 @@ function MentorReport({ sessionId, report }) {
         <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 24, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: 0 }}>AI 종합 점수</p>
-            <span style={{ fontSize: 30, fontWeight: 800, color: NAVY }}>{overallScore}<span style={{ fontSize: 13, color: "#868E96", fontWeight: 400 }}> / 10</span></span>
+            <span style={{ fontSize: 30, fontWeight: 800, color: NAVY }}>{overallScore}<span style={{ fontSize: 13, color: "#868E96", fontWeight: 400 }}> / 5</span></span>
           </div>
           <div style={{ background: BG, borderRadius: 99, height: 8 }}>
-            <div style={{ width: `${Math.min(overallScore * 10, 100)}%`, height: 8, borderRadius: 99, background: PRIMARY_GRAD, transition: "width 1s ease" }} />
+            <div style={{ width: `${Math.min(overallScore * 20, 100)}%`, height: 8, borderRadius: 99, background: PRIMARY_GRAD, transition: "width 1s ease" }} />
           </div>
         </div>
 
@@ -641,7 +650,7 @@ function MentorReport({ sessionId, report }) {
             <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 18px" }}>전체 Q&A 답변</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {questionReports.map((qr, i) => {
-                const sc = qr.score ?? 0;
+                const sc = toFivePointScore(qr.score);
                 const isBad = qr.question_id === worst?.question_id;
                 return (
                   <div key={qr.question_id ?? i} style={{ background: BG, borderRadius: 14, padding: 16, borderLeft: `3px solid ${isBad ? "#C0392B" : GREEN}` }}>

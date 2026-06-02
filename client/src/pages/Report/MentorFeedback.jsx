@@ -138,11 +138,11 @@ function toFivePointMentorScore(score) {
   return Math.max(1, Math.min(5, fivePoint));
 }
 
-function toTenPointMentorScore(score) {
+function toApiMentorScore(score) {
   const numeric = Number(score);
   if (!Number.isFinite(numeric)) return null;
   const fivePoint = numeric > 5 ? numeric / 2 : numeric;
-  return Math.max(1, Math.min(5, fivePoint)) * 2;
+  return Math.max(1, Math.min(5, fivePoint));
 }
 
 function buildMenteesFromQuestionReports(questionReports, sessionId, reportStatus, answerEvaluations = [], mentorFeedback = "", reportMentorScore = null) {
@@ -180,7 +180,7 @@ function buildMenteesFromQuestionReports(questionReports, sessionId, reportStatu
       answerId: report.answer_id,
       audioUrl: report.replay?.audio_url ?? report.replay?.audioUrl ?? null,
       question: `Q${index + 1} · ${report.question}`,
-      aiScore: Math.max(1, Math.min(5, Number(aiScore || 0) / 2)),
+      aiScore: toFivePointMentorScore(aiScore) ?? 3,
       aiComment: aiReasoning || "",
       transcript: report.answer || "",
       strengths: aiStrengths || [],
@@ -381,7 +381,7 @@ export default function MentorFeedbackPage() {
           return {
             answer_id: answerId,
             reasoning: fb.reasoning || fb.comment || "멘토가 점수와 피드백을 검토했습니다.",
-            score: toTenPointMentorScore(score),
+            score: toApiMentorScore(score),
             strengths: splitLines(fb.strengths),
             improvements: splitLines(fb.improvements),
           };

@@ -24,6 +24,12 @@ function parseFitGapItem(item) {
   return { requirement, detail };
 }
 
+function toFivePointScore(score) {
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(1, Math.min(5, numeric > 5 ? numeric / 2 : numeric));
+}
+
 // ─── 아바타 ─────────────────────────────────────────────────────
 function Avatar({ name, size = 36, bg = NAVY, fontSize = 12 }) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -104,8 +110,8 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
   const bestReport  = questionReports.find(item => item.question_id === best?.question_id);
   const worstReport = questionReports.find(item => item.question_id === worst?.question_id);
   const fitGap = aiReport?.fit_gap;
-  const overallScore = aiReport?.overall_score ?? report?.total_score ?? 0;
-  const scoreColor = overallScore >= 8 ? GREEN : overallScore >= 6 ? "#F59E0B" : "#C0392B";
+  const overallScore = toFivePointScore(aiReport?.overall_score ?? report?.total_score ?? 0);
+  const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#C0392B";
 
   const commentedCount = questionReports.filter(qr => (mentorComments[qr.question_id] || "").trim().length > 0).length;
   const allCommented  = questionReports.length > 0 && commentedCount === questionReports.length;
@@ -122,13 +128,13 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
             ))}
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: D.text, margin: "0 0 4px", letterSpacing: "-0.02em" }}>AI 면접 분석 리포트</h2>
-          <p style={{ color: D.muted, fontSize: 12, margin: "0 0 14px" }}>세션 #{report?.session_id} · 종합 점수 <strong style={{ color: D.text }}>{overallScore}점</strong></p>
+          <p style={{ color: D.muted, fontSize: 12, margin: "0 0 14px" }}>세션 #{report?.session_id} · 종합 점수 <strong style={{ color: D.text }}>{overallScore} / 5</strong></p>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: D.text }}>AI 종합 점수</span>
-            <span style={{ fontSize: 22, fontWeight: 800, color: scoreColor }}>{overallScore}<span style={{ fontSize: 12, color: D.dim, fontWeight: 400 }}> / 10</span></span>
+            <span style={{ fontSize: 22, fontWeight: 800, color: scoreColor }}>{overallScore}<span style={{ fontSize: 12, color: D.dim, fontWeight: 400 }}> / 5</span></span>
           </div>
           <div style={{ background: "#E9ECEF", borderRadius: 99, height: 7 }}>
-            <div style={{ width: `${Math.min(overallScore * 10, 100)}%`, height: 7, borderRadius: 99, background: scoreColor, transition: "width 1s ease" }} />
+            <div style={{ width: `${Math.min(overallScore * 20, 100)}%`, height: 7, borderRadius: 99, background: scoreColor, transition: "width 1s ease" }} />
           </div>
         </div>
 
@@ -226,7 +232,8 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {questionReports.map((qr, i) => {
               const isBad = qr.question_id === worst?.question_id;
-              const scColor = qr.score >= 8 ? GREEN : qr.score >= 6 ? "#F59E0B" : "#E53E3E";
+              const score = toFivePointScore(qr.score);
+              const scColor = score >= 4 ? GREEN : score >= 3 ? "#F59E0B" : "#E53E3E";
               const hasComment = (mentorComments[qr.question_id] || "").trim().length > 0;
               return (
                 <div key={qr.question_id ?? i} style={{ background: D.card2, border: `1px solid ${D.border}`, borderLeft: `3px solid ${isBad ? "#E53E3E" : GREEN}`, borderRadius: 12, padding: 16 }}>
@@ -237,9 +244,9 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
                     </div>
                     <div style={{ flexShrink: 0, textAlign: "right" }}>
                       <span style={{ display: "inline-flex", gap: 1 }}>
-                        {[1,2,3,4,5].map(n => <span key={n} style={{ fontSize: 13, color: n <= Math.round(qr.score / 2) ? "#F59E0B" : "#E5E7EB" }}>★</span>)}
+                        {[1,2,3,4,5].map(n => <span key={n} style={{ fontSize: 13, color: n <= Math.round(score) ? "#F59E0B" : "#E5E7EB" }}>★</span>)}
                       </span>
-                      <p style={{ fontSize: 11, color: scColor, fontWeight: 700, margin: "2px 0 0" }}>AI {qr.score}</p>
+                      <p style={{ fontSize: 11, color: scColor, fontWeight: 700, margin: "2px 0 0" }}>AI {score}</p>
                     </div>
                   </div>
                   <div style={{ background: "#fff", borderRadius: 8, padding: "10px 12px", marginBottom: 10, border: `1px solid ${D.border}` }}>
@@ -793,12 +800,12 @@ export default function MentoringSessionPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
               <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>AI 종합 점수</span>
               <span style={{ fontSize: 16, fontWeight: 800, color: GREEN }}>
-                {reportData?.ai_report?.overall_score ?? "--"}
-                <span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/10</span>
+                {toFivePointScore(reportData?.ai_report?.overall_score) || "--"}
+                <span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/5</span>
               </span>
             </div>
             <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height: 4 }}>
-              <div style={{ width: `${Math.min((reportData?.ai_report?.overall_score ?? 0) * 10, 100)}%`, height: 4, borderRadius: 99, background: GREEN, transition: "width 0.5s ease" }} />
+              <div style={{ width: `${Math.min(toFivePointScore(reportData?.ai_report?.overall_score) * 20, 100)}%`, height: 4, borderRadius: 99, background: GREEN, transition: "width 0.5s ease" }} />
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
               {(reportData?.ai_report?.fit_gap?.missing_requirements || []).slice(0, 3).map((req, i) => {

@@ -250,17 +250,8 @@ function FitGapList({ title, items = [], tone }) {
   );
 }
 
-function exportToPDF(session, reportData) {
-  const el = document.getElementById("final-report-content");
-  const bodyHtml = el ? el.innerHTML : "<p>리포트 내용을 불러올 수 없습니다.</p>";
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:'Malgun Gothic','Noto Sans KR',sans-serif;max-width:860px;margin:40px auto;color:#111;line-height:1.8;background:#FAF8F4;}button{display:none!important;}svg{display:none!important;}</style></head><body>${bodyHtml}</body></html>`;
-  const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `최종리포트_${session?.menteeName || "멘티"}_${new Date().toISOString().slice(0, 10)}.doc`;
-  a.click();
-  URL.revokeObjectURL(url);
+function exportToPDF() {
+  window.print();
 }
 
 export default function FinalReportPage() {
@@ -506,7 +497,20 @@ export default function FinalReportPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", paddingBottom: 80 }}>
-      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @media print {
+          header, nav, button, [data-no-print] { display: none !important; }
+          body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; margin: 0 !important; padding: 10mm 12mm !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          #final-report-content > div,
+          #final-report-content [style*="borderRadius"],
+          #final-report-content [style*="border-radius"] {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+        }
+      `}</style>
 
       {/* ── 헤더 ── */}
       <header style={{ background: NAVY, padding: "0 32px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
@@ -526,7 +530,7 @@ export default function FinalReportPage() {
           )}
           <button onClick={() => exportToPDF(resolvedSession, reportData)}
             style={{ padding: "8px 16px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-            Word 저장
+            PDF 저장
           </button>
         </div>
       </header>
@@ -826,7 +830,7 @@ export default function FinalReportPage() {
           </button>
           <button onClick={() => exportToPDF(resolvedSession, reportData)}
             style={{ padding: "11px 24px", borderRadius: 10, border: "none", background: NAVY, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-            Word로 저장하기
+            PDF로 저장하기
           </button>
         </div>
       </div>

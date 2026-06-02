@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Device } from "mediasoup-client";
-import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, uploadQuestionAudio, getQuestions, getSession, getQuestionAnswers } from "../../api/sessions";
+import { updateSessionStatus, updateParticipantStatus, uploadAnswerAudio, uploadQuestionAudio, createQuestions, getQuestions, getSession, getQuestionAnswers } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
 import {
   describeMediaError,
@@ -219,6 +219,8 @@ export default function InterviewSession({ role = "mentee" }) {
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [recommendationsOpen, setRecommendationsOpen] = useState(true);
+  const [editingQuestionIdx, setEditingQuestionIdx] = useState(null);
+  const [editingQuestionText, setEditingQuestionText] = useState("");
   const [spokenQuestions, setSpokenQuestions] = useState([]);
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState([]);
   const questionRecorderRef = useRef(null);
@@ -777,7 +779,8 @@ export default function InterviewSession({ role = "mentee" }) {
             });
             setActiveQuestion(prev => String(prev?.id) === String(questionId) ? null : prev);
           }
-        } catch {
+        } catch (err) {
+          alert(err?.message || "답변 저장에 실패했습니다. 다시 시도해주세요.");
         } finally {
           releaseRecordingLock();
           mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
@@ -799,13 +802,25 @@ export default function InterviewSession({ role = "mentee" }) {
         questionRecorderRef.current = null;
         try {
           const blob = createAudioBlob(questionAudioChunksRef.current);
+          console.log("[mentor] blob size:", blob.size, "type:", blob.type);
           if (!blob.size) throw new Error("녹음된 질문 오디오가 없습니다. 질문 시작 후 1초 이상 말한 뒤 완료해주세요.");
-          const question = await uploadQuestionAudio(id, blob);
+          let question;
+          try {
+            console.log("[mentor] uploadQuestionAudio 시작");
+            question = await uploadQuestionAudio(id, blob);
+            console.log("[mentor] uploadQuestionAudio 성공:", question);
+          } catch (uploadErr) {
+            console.warn("[mentor] uploadQuestionAudio 실패, fallback 시도:", uploadErr);
+            const fallback = await createQuestions(id, ["(음성 변환 실패)"]);
+            question = Array.isArray(fallback) ? fallback[0] : fallback?.questions?.[0];
+            console.log("[mentor] fallback question:", question);
+          }
+          if (!question?.id) throw new Error("질문을 생성하지 못했습니다.");
           setSpokenQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);
           setActiveQuestion(question);
           socketRef.current?.emit("activeQuestion", { question });
         } catch (error) {
-          alert(error?.message || "질문 오디오 저장에 실패했습니다.");
+          alert(error?.message || "질문 저장에 실패했습니다.");
         } finally {
           releaseRecordingLock();
           setQuestionRecordStatus("idle");
@@ -1123,13 +1138,38 @@ export default function InterviewSession({ role = "mentee" }) {
                         <div key={q.id ?? i} style={{
                           background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 12px",
                           border: "1px solid rgba(255,255,255,0.08)", borderLeft: "2px solid #F59E0B",
-                          cursor: "default", transition: "background 0.15s",
-                        }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(245,158,11,0.08)"}
-                          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                        >
-                          <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", display: "block", marginBottom: 4, letterSpacing: "0.05em" }}>추천 {i + 1}</span>
-                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.65 }}>{q.content}</p>
+                          transition: "background 0.15s",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", letterSpacing: "0.05em" }}>추천 {i + 1}</span>
+                            {editingQuestionIdx === i ? (
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button type="button" onClick={() => {
+                                  setQuestions(prev => prev.map((item, idx) => idx === i ? { ...item, content: editingQuestionText } : item));
+                                  setEditingQuestionIdx(null);
+                                }} style={{ fontSize: 9, fontWeight: 700, color: "#1D9E75", background: "rgba(29,158,117,0.18)", border: "1px solid rgba(29,158,117,0.4)", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontFamily: "inherit" }}>
+                                  완료
+                                </button>
+                                <button type="button" onClick={() => setEditingQuestionIdx(null)} style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.4)", background: "transparent", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontFamily: "inherit" }}>
+                                  취소
+                                </button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setEditingQuestionIdx(i); setEditingQuestionText(q.content ?? ""); }} style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.4)", background: "transparent", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontFamily: "inherit" }}>
+                                수정
+                              </button>
+                            )}
+                          </div>
+                          {editingQuestionIdx === i ? (
+                            <textarea
+                              value={editingQuestionText}
+                              onChange={e => setEditingQuestionText(e.target.value)}
+                              autoFocus
+                              style={{ width: "100%", resize: "vertical", minHeight: 60, border: "1px solid rgba(245,158,11,0.5)", borderRadius: 6, padding: "6px 8px", background: "rgba(13,34,64,0.9)", color: "rgba(255,255,255,0.92)", fontFamily: "inherit", fontSize: 12, lineHeight: 1.65, outline: "none", boxSizing: "border-box" }}
+                            />
+                          ) : (
+                            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", lineHeight: 1.65, margin: 0 }}>{q.content}</p>
+                          )}
                         </div>
                       )) : (
                         <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>

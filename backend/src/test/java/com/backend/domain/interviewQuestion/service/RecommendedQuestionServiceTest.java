@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
@@ -81,7 +82,7 @@ class RecommendedQuestionServiceTest {
     }
 
     @Test
-    void 추천질문_후보에서_멘토를_제외하고_멘티가_1명이면_일대일_fallback_질문을_10개_생성한다() {
+    void 추천질문_후보에서_멘토를_제외하고_멘티가_1명이면_ai_실패를_전파한다() {
         SessionParticipant mentorParticipant = SessionParticipant.builder()
                 .interviewSession(session)
                 .member(mentor)
@@ -110,14 +111,10 @@ class RecommendedQuestionServiceTest {
         given(aiQuestionGenerationClient.generateSessionQuestions(any()))
                 .willThrow(new CustomException(ErrorCode.AI_SERVER_ERROR));
 
-        AiSessionQuestionGenerationResponse response =
-                recommendedQuestionService.generateRecommendedQuestions(1L, 10L);
-
-        assertThat(response.sessionType()).isEqualTo("ONE_TO_ONE");
-        assertThat(response.commonQuestions()).isEmpty();
-        assertThat(response.personalQuestions()).hasSize(1);
-        assertThat(response.personalQuestions().get(0).candidateId()).isEqualTo(2L);
-        assertThat(response.personalQuestions().get(0).questions()).hasSize(10);
+        assertThatThrownBy(() -> recommendedQuestionService.generateRecommendedQuestions(1L, 10L))
+                .isInstanceOf(CustomException.class)
+                .extracting(error -> ((CustomException) error).getErrorCode())
+                .isEqualTo(ErrorCode.AI_SERVER_ERROR);
 
         ArgumentCaptor<AiSessionQuestionGenerationRequest> requestCaptor =
                 ArgumentCaptor.forClass(AiSessionQuestionGenerationRequest.class);

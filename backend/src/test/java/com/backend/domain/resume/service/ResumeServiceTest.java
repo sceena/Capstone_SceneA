@@ -129,6 +129,38 @@ class ResumeServiceTest {
                         .isEqualTo(ErrorCode.ACCESS_DENIED));
     }
 
+    @Test
+    void 멘티별_자소서_조회_성공() {
+        Resume resume = Resume.builder().interviewSession(session).member(mentee).content("멘티별 자소서").build();
+        ReflectionTestUtils.setField(resume, "id", 8L);
+
+        given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(mentee));
+        given(participantRepository.findByInterviewSessionAndMember(session, mentee)).willReturn(Optional.of(participant));
+        given(resumeRepository.findByInterviewSessionAndMember(session, mentee)).willReturn(Optional.of(resume));
+
+        ResumeSaveResponse response = resumeService.getResumeByMentee(1L, 42L, 2L);
+
+        assertThat(response.id()).isEqualTo(8L);
+        assertThat(response.content()).isEqualTo("멘티별 자소서");
+    }
+
+    @Test
+    void 멘티별_자소서_조회_비참여자_예외() {
+        Member outsider = Member.builder()
+                .email("out@test.com").password("enc").name("외부인").nickname("외부").role(Role.MENTEE).build();
+        ReflectionTestUtils.setField(outsider, "id", 99L);
+
+        given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
+        given(memberRepository.findById(99L)).willReturn(Optional.of(outsider));
+        given(participantRepository.findByInterviewSessionAndMember(session, outsider)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> resumeService.getResumeByMentee(1L, 42L, 99L))
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.ACCESS_DENIED));
+    }
+
     // ===== getResumeSkills =====
 
     @Test

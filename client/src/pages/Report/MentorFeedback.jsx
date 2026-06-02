@@ -145,20 +145,34 @@ function toApiMentorScore(score) {
   return Math.max(1, Math.min(5, fivePoint));
 }
 
-function buildMenteesFromQuestionReports(questionReports, sessionId, reportStatus, answerEvaluations = [], mentorFeedback = "", reportMentorScore = null) {
+function buildMenteesFromQuestionReports(
+  questionReports,
+  sessionId,
+  reportStatus,
+  answerEvaluations = [],
+  mentorFeedback = "",
+  reportMentorScore = null,
+  menteeReportFeedbacks = []
+) {
   const groups = new Map();
   const { byAnswerId: evaluationsByAnswerId, byQuestionMentee: evaluationsByQuestionMentee } = buildEvaluationMap(answerEvaluations);
+  const feedbackByMentee = new Map();
+  menteeReportFeedbacks.forEach((feedback) => {
+    const menteeId = feedback?.mentee_id ?? feedback?.menteeId;
+    if (menteeId != null) feedbackByMentee.set(String(menteeId), feedback);
+  });
 
   questionReports.forEach((report, index) => {
     const menteeId = report.mentee_id || `session-${sessionId}`;
     const menteeName = report.mentee_name || "면접 참여자";
+    const menteeFeedback = feedbackByMentee.get(String(menteeId));
     if (!groups.has(menteeId)) {
       groups.set(menteeId, {
         menteeId,
         menteeName,
-        menteeTrack: reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
-        mentorFeedback,
-        mentorScore: reportMentorScore,
+        menteeTrack: menteeFeedback || reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
+        mentorFeedback: menteeFeedback?.mentor_feedback ?? menteeFeedback?.mentorFeedback ?? mentorFeedback,
+        mentorScore: menteeFeedback?.mentor_score ?? menteeFeedback?.mentorScore ?? reportMentorScore,
         qnas: [],
       });
     }
@@ -236,7 +250,8 @@ export default function MentorFeedbackPage() {
         data?.report_status,
         data?.answer_evaluations || [],
         data?.mentor_feedback || "",
-        data?.mentor_score ?? null
+        data?.mentor_score ?? null,
+        data?.mentee_report_feedbacks || data?.menteeReportFeedbacks || []
       ));
     }
   };

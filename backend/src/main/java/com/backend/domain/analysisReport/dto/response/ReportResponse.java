@@ -6,6 +6,7 @@ import com.backend.domain.ai.dto.response.AiReplayResponse;
 import com.backend.domain.ai.dto.response.AiReportResponse;
 import com.backend.domain.ai.dto.response.AiTopSummaryResponse;
 import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.entity.MenteeReportFeedback;
 import com.backend.domain.answerEvaluation.dto.response.AnswerEvaluationResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -28,6 +29,7 @@ public record ReportResponse(
         @JsonProperty("raw_ai_response_json") String rawAiResponseJson,
         @JsonProperty("mentor_feedback") String mentorFeedback,
         @JsonProperty("mentor_score") Float mentorScore,
+        @JsonProperty("mentee_report_feedbacks") List<MenteeReportFeedbackResponse> menteeReportFeedbacks,
         @JsonProperty("created_at") LocalDateTime createdAt,
         @JsonProperty("updated_at") LocalDateTime updatedAt
 ) {
@@ -35,7 +37,7 @@ public record ReportResponse(
                           Float alignmentScore, String bestMoment, String worstMoment,
                           String mentorFeedback, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this(id, sessionId, reportStatus, totalScore, alignmentScore, bestMoment, worstMoment,
-                null, null, List.of(), null, mentorFeedback, null, createdAt, updatedAt);
+                null, null, List.of(), null, mentorFeedback, null, List.of(), createdAt, updatedAt);
     }
 
     public static ReportResponse from(AnalysisReport report) {
@@ -51,12 +53,25 @@ public record ReportResponse(
             AiReportResponse aiReport,
             List<AnswerEvaluationResponse> answerEvaluations
     ) {
+        return from(report, aiReport, answerEvaluations, null, List.of());
+    }
+
+    public static ReportResponse from(
+            AnalysisReport report,
+            AiReportResponse aiReport,
+            List<AnswerEvaluationResponse> answerEvaluations,
+            MenteeReportFeedback selectedFeedback,
+            List<MenteeReportFeedback> menteeFeedbacks
+    ) {
         List<AnswerEvaluationResponse> evaluations = answerEvaluations == null ? List.of() : answerEvaluations;
+        List<MenteeReportFeedbackResponse> feedbackResponses = menteeFeedbacks == null
+                ? List.of()
+                : menteeFeedbacks.stream().map(MenteeReportFeedbackResponse::from).toList();
         AiReportResponse mergedAiReport = mergeMentorEvaluations(aiReport, evaluations);
         return new ReportResponse(
                 report.getId(),
                 report.getInterviewSession().getId(),
-                report.getReportStatus().name().toLowerCase(),
+                resolveReportStatus(report, selectedFeedback),
                 mergedAiReport == null ? report.getTotalScore() : mergedAiReport.overallScore(),
                 report.getAlignmentScore(),
                 report.getBestMoment(),
@@ -65,11 +80,19 @@ public record ReportResponse(
                 mergedAiReport,
                 evaluations,
                 report.getRawAiResponseJson(),
-                report.getMentorFeedback(),
-                report.getMentorScore(),
+                selectedFeedback == null ? report.getMentorFeedback() : selectedFeedback.getMentorFeedback(),
+                selectedFeedback == null ? report.getMentorScore() : selectedFeedback.getMentorScore(),
+                feedbackResponses,
                 report.getCreateDate(),
                 report.getModifyDate()
         );
+    }
+
+    private static String resolveReportStatus(AnalysisReport report, MenteeReportFeedback selectedFeedback) {
+        if (selectedFeedback != null) {
+            return "final";
+        }
+        return report.getReportStatus().name().toLowerCase();
     }
 
     private static AiReportResponse mergeMentorEvaluations(

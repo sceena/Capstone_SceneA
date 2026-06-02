@@ -21,6 +21,12 @@ venv/
 .env.local
 .env.*.local
 
+# Dependencies
+node_modules/
+
+# Local database files
+backend/data/
+
 # AI server local test artifacts
 ai-server/.cache/
 ai-server/test_audio/

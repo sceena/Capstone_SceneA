@@ -45,6 +45,18 @@ class ReportComposer:
         "쿠폰",
         "빌링",
     ]
+    REQUIREMENT_GROUPS = [
+        ("Java/Spring 백엔드 개발 경험", ["Java", "Spring", "Spring Boot", "백엔드"]),
+        ("관계형 데이터베이스 개발 및 운영", ["DB", "MSSQL", "MySQL", "RDBMS", "데이터베이스"]),
+        ("MongoDB 등 NoSQL 활용 경험", ["Mongo", "MongoDB", "NoSQL"]),
+        ("ERD 설계 및 데이터 모델링", ["ERD", "설계", "모델링"]),
+        ("쿼리 성능 개선 및 튜닝", ["쿼리", "튜닝", "성능", "인덱스", "실행 계획"]),
+        ("예약/결제/쿠폰/빌링 도메인 이해", ["예약", "결제", "쿠폰", "빌링", "무인화"]),
+        ("AWS 또는 IDC 운영 경험", ["AWS", "EC2", "RDS", "S3", "IDC", "클라우드"]),
+        ("배포 자동화 및 운영 경험", ["Docker", "CI/CD", "GitHub Actions", "Jenkins", "배포", "운영"]),
+        ("장애 분석 및 로그 기반 문제 해결", ["장애", "로그", "모니터링", "알림"]),
+        ("테스트 코드와 협업 경험", ["테스트", "코드 리뷰", "협업", "Git"]),
+    ]
 
     def __init__(
         self,
@@ -293,22 +305,32 @@ class ReportComposer:
         applicant_document_text = " ".join(request.candidate_context.resume_summaries)
         answer_text = " ".join(item.report.answer for item in evaluations)
 
-        required = self._extract_requirements(job_text)
+        required = self._extract_requirement_items(job_text)
         if not required:
-            required = self._extract_requirements(applicant_document_text + " " + answer_text)
+            required = self._extract_requirement_items(applicant_document_text + " " + answer_text)
 
-        evidence = (applicant_document_text + " " + answer_text).lower()
-        matched = [keyword for keyword in required if keyword.lower() in evidence]
-        missing = [keyword for keyword in required if keyword.lower() not in evidence]
+        evidence_sources = [
+            ("지원자 제출 문서", applicant_document_text),
+            ("면접 답변", answer_text),
+        ]
+        matched = []
+        missing = []
+        for item in required:
+            evidence = self._find_requirement_evidence(item["terms"], evidence_sources)
+            if evidence:
+                matched.append(f"요구사항: {item['label']} / 근거({evidence[0]}): {evidence[1]} 언급 확인")
+            else:
+                missing.append(f"요구사항: {item['label']} / 부족 근거: 제출 문서와 면접 답변에서 직접적인 근거가 부족합니다.")
 
         if not matched:
-            matched = ["질문과 관련된 기본 답변 흐름"]
+            matched = ["요구사항: 질문과 관련된 기본 답변 흐름 / 근거(면접 답변): 질문에 대한 기본 응답은 확인됩니다."]
         if not missing:
-            missing = ["성과 수치 또는 검증 근거"]
+            missing = ["요구사항: 성과 수치 또는 검증 근거 / 부족 근거: 적용 전후 지표나 운영 검증 근거를 더 보완하면 좋습니다."]
 
         recommendations = [
-            f"{keyword} 경험을 답변에서 구체적인 상황, 행동, 결과로 연결하세요."
+            f"{self._plain_requirement_label(item)} 경험을 답변에서 구체적인 상황, 행동, 결과로 연결하세요."
             for keyword in missing[:3]
+            for item in [keyword]
         ]
 
         return FitGap(
@@ -316,6 +338,30 @@ class ReportComposer:
             missing_requirements=missing[:5],
             recommendations=recommendations,
         )
+
+    def _extract_requirement_items(self, text: str) -> list[dict[str, list[str] | str]]:
+        found = []
+        normalized_text = text.lower()
+        for label, terms in self.REQUIREMENT_GROUPS:
+            if any(term.lower() in normalized_text for term in terms):
+                found.append({"label": label, "terms": terms})
+        existing_labels = {item["label"] for item in found}
+        for keyword in self._extract_requirements(text):
+            if keyword not in existing_labels:
+                found.append({"label": keyword, "terms": [keyword]})
+        return found
+
+    def _find_requirement_evidence(self, terms: list[str], evidence_sources: list[tuple[str, str]]) -> tuple[str, str] | None:
+        for source_name, text in evidence_sources:
+            lower_text = text.lower()
+            for term in terms:
+                if term.lower() in lower_text:
+                    return source_name, term
+        return None
+
+    def _plain_requirement_label(self, item: str) -> str:
+        value = item.replace("요구사항:", "").strip()
+        return value.split(" / ", 1)[0].strip()
 
     def _extract_requirements(self, text: str) -> list[str]:
         found = []

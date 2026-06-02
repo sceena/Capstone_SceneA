@@ -20,7 +20,7 @@ function getAuthHeaders() {
   }
 }
 
-function AudioPlayer({ sessionId, questionId, answerId, audioUrl }) {
+function AudioPlayer({ sessionId, questionId, answerId, audioUrl, menteeId }) {
   const [state, setState] = useState("idle");
   const audioRef = useRef(null);
   const blobUrlRef = useRef(null);
@@ -55,7 +55,10 @@ function AudioPlayer({ sessionId, questionId, answerId, audioUrl }) {
       let resolvedAnswerId = answerId;
       if (!resolvedAnswerId && questionId) {
         const answers = await getQuestionAnswers(sessionId, questionId);
-        resolvedAnswerId = answers?.[0]?.id;
+        const matched = menteeId == null
+          ? null
+          : answers?.find((answer) => String(answer?.mentee_id ?? answer?.menteeId ?? "") === String(menteeId));
+        resolvedAnswerId = matched?.id;
       }
 
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
@@ -762,6 +765,7 @@ export default function FinalReportPage() {
                   questionId={qna.questionId ?? qna.id}
                   answerId={qna.answerId}
                   audioUrl={qna.audioUrl}
+                  menteeId={qna.menteeId}
                 />
               </div>
 

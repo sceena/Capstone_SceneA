@@ -11,6 +11,7 @@ public record MenteeReportFeedbackResponse(
         @JsonProperty("mentee_name") String menteeName,
         @JsonProperty("mentor_feedback") String mentorFeedback,
         @JsonProperty("mentor_score") Float mentorScore,
+        @JsonProperty("mentor_question_feedbacks") String mentorQuestionFeedbacks,
         @JsonProperty("updated_at") LocalDateTime updatedAt
 ) {
     public static MenteeReportFeedbackResponse from(MenteeReportFeedback feedback) {
@@ -20,6 +21,7 @@ public record MenteeReportFeedbackResponse(
                 feedback.getMentee().getName(),
                 feedback.getMentorFeedback(),
                 feedback.getMentorScore(),
+                feedback.getMentorQuestionFeedbacksJson(),
                 feedback.getModifyDate()
         );
     }

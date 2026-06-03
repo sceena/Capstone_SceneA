@@ -234,13 +234,15 @@ export async function getFitGapAnalysis(sessionId) {
  * 멘토 종합 피드백 작성. 저장 시 report_status가 final로 변경됨.
  * @param {string} feedback
  */
-export async function saveMentorFeedback(sessionId, feedback, mentorScore, answerEvaluations = []) {
+export async function saveMentorFeedback(sessionId, feedback, mentorScore, answerEvaluations = [], options = {}) {
   const res = await fetch(`/api/sessions/${sessionId}/report/mentor-feedback`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify({
       mentor_feedback: feedback,
       mentor_score: mentorScore,
+      mentee_id: options.menteeId ?? null,
+      mentee_name: options.menteeName ?? null,
       answer_evaluations: answerEvaluations,
     }),
   });

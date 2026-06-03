@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getAnswerAudio, getAnswerAudioByAnswerId, getFitGapAnalysis, getQuestionAnswers, getQuestions } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
+import { createDemoFallbackReport } from "./AIReport";
 
 const NAVY = "#0D2240";
 const GREEN = "#0CA678";
@@ -10,6 +11,21 @@ const CARD = "#FFFFFF";
 const PRIMARY_GRAD = "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const VIEWED_KEY = "scena_viewed_finals";
+
+async function ensureFinalReportBody(sessionId, role, data) {
+  if (data?.ai_report) return data;
+  const fallback = await createDemoFallbackReport(sessionId, role);
+  return {
+    ...fallback,
+    ...data,
+    ai_report: fallback.ai_report,
+    total_score: data?.total_score ?? fallback.total_score,
+    mentor_feedback: data?.mentor_feedback ?? fallback.mentor_feedback,
+    mentor_score: data?.mentor_score ?? fallback.mentor_score,
+    answer_evaluations: data?.answer_evaluations ?? fallback.answer_evaluations ?? [],
+    mentee_report_feedbacks: data?.mentee_report_feedbacks ?? fallback.mentee_report_feedbacks ?? [],
+  };
+}
 
 function getAuthHeaders() {
   const user = getAuthUser();
@@ -138,6 +154,30 @@ function hasItems(items) {
   return Array.isArray(items) && items.length > 0;
 }
 
+function normalizeLooseText(value) {
+  return String(value || "")
+    .replace(/^Q\d+\s*[·.-]\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function namesMatch(left, right) {
+  const a = String(left || "").trim();
+  const b = String(right || "").trim();
+  return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)));
+}
+
+function parseMentorQuestionFeedbacks(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function buildEvaluationMaps(evaluations = []) {
   const byAnswerId = new Map();
   const byQuestionId = new Map();
@@ -206,15 +246,40 @@ function FitGapBar({ label, pct }) {
   );
 }
 
+function normalizeReportDisplayText(value) {
+  return String(value || "")
+    .replace(/면접\(Q[0-9, ]+\)에서/g, "답변에서")
+    .replace(/면접 중/g, "답변 과정에서")
+    .replace(/면접 과정에서/g, "답변 과정에서");
+}
+
 function parseFitGapItem(item) {
-  const [requirementPart, detailPart] = String(item || "").split(" / ");
-  const requirement = requirementPart?.replace(/^요구사항:\s*/, "") || item;
+  const text = normalizeReportDisplayText(item).replace(/^\[[^:\]]+\]\s+(?=\[[^\]]+:)/, "").trim();
+  const bracketMatch = text.match(/^\[([^\]]+)\]\s*-\s*\[([^:]+):\s*([\s\S]+)\]$/);
+  if (bracketMatch) {
+    return {
+      requirement: normalizeReportDisplayText(bracketMatch[1]).replace(/^[^:]+:\s*/, "").trim(),
+      detail: normalizeReportDisplayText(bracketMatch[3]).replace(/\]$/, "").trim(),
+    };
+  }
+
+  const [requirementPart, detailPart] = text.split(" / ");
+  const requirement = (requirementPart || text)
+    .replace(/^\[[^:\]]+\]\s+(?=\[[^\]]+:)/, "")
+    .replace(/^\[[^\]]+\]\s*/, "")
+    .replace(/^[^:]+:\s*/, "")
+    .trim();
   const detail = detailPart
-    ?.replace(/^근거\(([^)]+)\):\s*/, "$1 · ")
-    ?.replace(/^부족 근거:\s*/, "")
+    ?.replace(/^[^(]+\(([^)]+)\):\s*/, "$1 - ")
+    ?.replace(/^[^:]+:\s*/, "")
+    ?.replace(/\]$/, "")
+    ?.trim()
     || "";
 
-  return { requirement, detail };
+  return {
+    requirement: normalizeReportDisplayText(requirement),
+    detail: normalizeReportDisplayText(detail),
+  };
 }
 
 function normalizeQuestionItems(data) {
@@ -391,9 +456,13 @@ export default function FinalReportPage() {
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     })
       .then((r) => (r.ok ? r.json() : null))
+      .then((data) => ensureFinalReportBody(sessionId, role, data))
       .then((data) => { setAiData(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [sessionId]);
+      .catch(async () => {
+        setAiData(await createDemoFallbackReport(sessionId, role));
+        setLoading(false);
+      });
+  }, [sessionId, role]);
 
   // 멘티 경로: session 객체가 없으면 세션 상세 fetch
   useEffect(() => {
@@ -421,6 +490,13 @@ export default function FinalReportPage() {
   const answerEvaluations = aiData?.answer_evaluations || [];
   const evaluationMaps = buildEvaluationMaps(answerEvaluations);
   const { byAnswerId, byQuestionId, byQuestionMentee } = evaluationMaps;
+  const currentUser = getAuthUser();
+  const currentUserName = currentUser?.name || currentUser?.nickname || currentUser?.username || "";
+  const selectedMenteeFeedback = (aiData?.mentee_report_feedbacks || aiData?.menteeReportFeedbacks || [])
+    .find((feedback) => namesMatch(feedback?.mentee_name ?? feedback?.menteeName, currentUserName));
+  const mentorQuestionFeedbacks = parseMentorQuestionFeedbacks(
+    selectedMenteeFeedback?.mentor_question_feedbacks ?? selectedMenteeFeedback?.mentorQuestionFeedbacks
+  );
   const mentorEvaluationScores = answerEvaluations
     .map((evaluation) => evaluation?.mentor_score ?? evaluation?.mentorScore)
     .filter((score) => Number.isFinite(Number(score)));
@@ -552,10 +628,27 @@ export default function FinalReportPage() {
     const evaluation = answerId != null
       ? byAnswerId.get(String(answerId)) || byQuestionMentee.get(`${questionId}:${menteeId}`) || byQuestionId.get(String(questionId))
       : byQuestionMentee.get(`${questionId}:${menteeId}`) || byQuestionId.get(String(questionId));
-    const mentorReasoning = evaluation?.mentor_reasoning ?? evaluation?.mentorReasoning;
-    const mentorScoreValue = evaluation?.mentor_score ?? evaluation?.mentorScore;
-    const mentorStrengths = evaluation?.mentor_strengths ?? evaluation?.mentorStrengths;
-    const mentorImprovements = evaluation?.mentor_improvements ?? evaluation?.mentorImprovements;
+    const snapshotFeedback = mentorQuestionFeedbacks.find((item) => {
+      const itemQuestionId = item?.question_id ?? item?.questionId;
+      const itemAnswerId = item?.answer_id ?? item?.answerId;
+      const itemQuestionText = item?.question_text ?? item?.questionText;
+      const itemAnswerText = item?.answer_text ?? item?.answerText;
+      if (answerId != null && itemAnswerId != null && String(itemAnswerId) === String(answerId)) return true;
+      if (questionId != null && itemQuestionId != null && String(itemQuestionId) === String(questionId)) return true;
+      const qText = normalizeLooseText(qna.question || aiQ?.question);
+      const aText = normalizeLooseText(qna.transcript || aiQ?.answer);
+      const snapshotQText = normalizeLooseText(itemQuestionText);
+      const snapshotAText = normalizeLooseText(itemAnswerText);
+      return Boolean(
+        snapshotQText && qText && (snapshotQText === qText || snapshotQText.includes(qText) || qText.includes(snapshotQText))
+      ) || Boolean(
+        snapshotAText && aText && (snapshotAText === aText || snapshotAText.includes(aText) || aText.includes(snapshotAText))
+      );
+    });
+    const mentorReasoning = evaluation?.mentor_reasoning ?? evaluation?.mentorReasoning ?? snapshotFeedback?.reasoning;
+    const mentorScoreValue = evaluation?.mentor_score ?? evaluation?.mentorScore ?? snapshotFeedback?.score;
+    const mentorStrengths = evaluation?.mentor_strengths ?? evaluation?.mentorStrengths ?? snapshotFeedback?.strengths;
+    const mentorImprovements = evaluation?.mentor_improvements ?? evaluation?.mentorImprovements ?? snapshotFeedback?.improvements;
 
     return {
       ...qna,

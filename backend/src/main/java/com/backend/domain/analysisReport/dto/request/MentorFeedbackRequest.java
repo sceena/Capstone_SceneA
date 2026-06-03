@@ -5,19 +5,24 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
 public record MentorFeedbackRequest(
         @NotBlank @JsonProperty("mentor_feedback") String mentorFeedback,
         @JsonProperty("mentor_score") Float mentorScore,
+        @JsonProperty("mentee_id") Long menteeId,
+        @JsonProperty("mentee_name") String menteeName,
         @Valid @JsonProperty("answer_evaluations") List<MentorAnswerEvaluationPayload> answerEvaluations
 ) {
     public record MentorAnswerEvaluationPayload(
-            @NotNull @JsonProperty("answer_id") Long answerId,
+            @JsonProperty("answer_id") Long answerId,
+            @JsonProperty("question_id") Long questionId,
+            @JsonProperty("mentee_id") Long menteeId,
+            @JsonProperty("mentee_name") String menteeName,
+            @JsonProperty("question_text") String questionText,
+            @JsonProperty("answer_text") String answerText,
             @NotBlank String reasoning,
-            @NotNull
             @DecimalMin("1.0")
             @DecimalMax("5.0")
             Float score,
@@ -26,6 +31,6 @@ public record MentorFeedbackRequest(
     ) {}
 
     public MentorFeedbackRequest(String mentorFeedback, Float mentorScore) {
-        this(mentorFeedback, mentorScore, List.of());
+        this(mentorFeedback, mentorScore, null, null, List.of());
     }
 }

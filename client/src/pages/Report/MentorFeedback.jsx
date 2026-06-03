@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { getQuestionAnswers, getSession, getSessionReport, saveMentorFeedback } from "../../api/sessions";
 import mockAiReport from "./mockAiReport";
+import { createDemoFallbackReport } from "./AIReport";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_REPORT === "true";
 
@@ -171,10 +172,10 @@ function buildMenteesFromQuestionReports(
 ) {
   const groups = new Map();
   const { byAnswerId: evaluationsByAnswerId, byQuestionMentee: evaluationsByQuestionMentee } = buildEvaluationMap(answerEvaluations);
-  const reportMenteeIds = new Set(
+  const reportMenteeKeys = new Set(
     questionReports
-      .map((report) => report?.mentee_id ?? report?.menteeId)
-      .filter((menteeId) => menteeId != null)
+      .map((report) => report?.mentee_id ?? report?.menteeId ?? report?.mentee_name ?? report?.menteeName)
+      .filter((menteeKey) => menteeKey != null)
       .map(String)
   );
   // answer_evaluations의 mentee_id로도 그룹 여부 판별 (AI가 question_report.mentee_id를 안 채운 경우 대비)
@@ -184,7 +185,7 @@ function buildMenteesFromQuestionReports(
       .filter(Boolean)
       .map(String)
   );
-  const isGroupReport = reportMenteeIds.size > 1 || evalMenteeIds.size > 1;
+  const isGroupReport = reportMenteeKeys.size > 1 || evalMenteeIds.size > 1;
   const feedbackByMentee = new Map();
   menteeReportFeedbacks.forEach((feedback) => {
     const menteeId = feedback?.mentee_id ?? feedback?.menteeId;
@@ -209,8 +210,9 @@ function buildMenteesFromQuestionReports(
     const rawMenteeId = report.mentee_id ?? report.menteeId;
     const answerId = String(report.answer_id ?? report.answerId ?? "");
     const resolvedFromEval = !rawMenteeId && answerId ? evalByAnswerId.get(answerId) : null;
-    const menteeId = rawMenteeId ?? resolvedFromEval?.menteeId ?? `session-${sessionId}`;
+    const menteeId = rawMenteeId ?? resolvedFromEval?.menteeId ?? report.mentee_name ?? report.menteeName ?? `session-${sessionId}`;
     const menteeName = report.mentee_name
+      || report.menteeName
       || resolvedFromEval?.menteeName
       || menteeNameFromEval.get(String(menteeId))
       || participantNameMap[String(menteeId)]
@@ -243,7 +245,8 @@ function buildMenteesFromQuestionReports(
       questionId: report.question_id,
       answerId: report.answer_id,
       audioUrl: report.replay?.audio_url ?? report.replay?.audioUrl ?? null,
-      question: `Q${index + 1} · ${report.question}`,
+      question: `Q${groups.get(menteeId).qnas.length + 1} · ${report.question}`,
+      questionText: report.question || "",
       aiScore: toFivePointMentorScore(aiScore) ?? 3,
       aiComment: aiReasoning || "",
       transcript: report.answer || "",
@@ -285,8 +288,12 @@ export default function MentorFeedbackPage() {
   const [sentMentees, setSentMentees] = useState(new Set());
   const [isSending, setIsSending] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState(null);
+  const [usesLocalFallbackReport, setUsesLocalFallbackReport] = useState(false);
 
   const applyReportData = (data, participantNameMap = {}) => {
+    if (data?.__mock) {
+      setUsesLocalFallbackReport(true);
+    }
     if (data?.mentees?.length) {
       setMenteeList(data.mentees);
       return;
@@ -341,11 +348,11 @@ export default function MentorFeedbackPage() {
 
         if (reportData.status === "fulfilled" && reportData.value) {
           applyReportData(reportData.value, participantNameMap);
-        } else if (USE_MOCK) {
-          applyReportData(mockAiReport, {});
+        } else {
+          applyReportData(await createDemoFallbackReport(sessionId, "mentor"));
         }
       } catch {
-        if (USE_MOCK) applyReportData(mockAiReport);
+        applyReportData(await createDemoFallbackReport(sessionId, "mentor"));
       }
       if (!cancelled) setLoading(false);
     };
@@ -426,23 +433,25 @@ export default function MentorFeedbackPage() {
     updateCurrentFb(fb => ({ ...fb, mentorScore: val }));
   };
 
+  const currentMenteeTarget = () => {
+    const numericId = Number(currentMentee?.menteeId);
+    return {
+      menteeId: Number.isInteger(numericId) ? numericId : null,
+      menteeName: currentMentee?.menteeName || null,
+    };
+  };
+
   const resolveAnswerId = async (qna) => {
     if (qna.answerId) return qna.answerId;
-    if (!qna.questionId) {
-      throw new Error("질문/답변 ID를 찾을 수 없어 질문별 수정본을 저장할 수 없습니다.");
-    }
+    if (usesLocalFallbackReport || !qna.questionId) return null;
 
-    const answers = await getQuestionAnswers(sessionId, qna.questionId);
+    const answers = await getQuestionAnswers(sessionId, qna.questionId).catch(() => []);
     const matched = answers.find((answer) =>
       String(answer.mentee_id ?? answer.menteeId ?? "") === String(currentMentee?.menteeId ?? "")
     ) || answers[0];
 
-    if (!matched?.id) {
-      throw new Error("답변 ID를 찾을 수 없어 질문별 수정본을 저장할 수 없습니다.");
-    }
-    return matched.id;
+    return matched?.id ?? null;
   };
-
   const TEMPLATES = [
     { label: "강점 어필 권장", color: GREEN, bg: "#E1F5EE", text: "기술 스택 이해도는 탄탄합니다. 다음 면접에서는 경험 기반 근거를 수치와 함께 제시하면 더욱 설득력 있는 답변이 될 것입니다." },
     { label: "속도·명확성 개선", color: "#9B1C1C", bg: "#FFF5F5", text: "말하기 속도를 130~150 WPM으로 맞추는 연습을 권장합니다. 타이머를 사용해 답변을 녹음하고 자가 점검해 보세요." },
@@ -463,7 +472,56 @@ export default function MentorFeedbackPage() {
       return;
     }
     const wasAlreadySent = sentMentees.has(currentMentee.menteeId);
+    const markCurrentAsSent = () => {
+      const newSent = new Set([...sentMentees, currentMentee.menteeId]);
+      setSentMentees(newSent);
+      if (!wasAlreadySent) {
+        const nextIdx = menteeList.findIndex((m, i) => i > currentMenteeIdx && !newSent.has(m.menteeId));
+        if (nextIdx !== -1) setCurrentMenteeIdx(nextIdx);
+      }
+    };
+
     setIsSending(true);
+    if (usesLocalFallbackReport) {
+      try {
+        const answerEvaluations = currentMentee.qnas
+          .map((qna) => {
+            const fb = currentFbData.feedbacks[qna.id] || {};
+            const score = Number.isFinite(Number(fb.score))
+              ? Number(fb.score)
+              : qna.mentorScore ?? qna.aiScore;
+            return {
+              answer_id: qna.answerId ?? null,
+              question_id: qna.questionId ?? null,
+              mentee_id: currentMenteeTarget().menteeId,
+              mentee_name: currentMenteeTarget().menteeName,
+              question_text: qna.questionText || qna.question?.replace(/^Q\d+\s*[·.-]\s*/, "") || "",
+              answer_text: qna.transcript || "",
+              reasoning: fb.reasoning || fb.comment || "멘토가 점수와 피드백을 검토했습니다.",
+              score: toApiMentorScore(score),
+              strengths: splitLines(fb.strengths),
+              improvements: splitLines(fb.improvements),
+            };
+          });
+        await saveMentorFeedback(
+          sessionId,
+          currentFbData.totalFeedback,
+          currentFbData.mentorScore,
+          answerEvaluations,
+          currentMenteeTarget()
+        );
+        const latestReport = await getSessionReport(sessionId);
+        applyReportData(latestReport);
+        markCurrentAsSent();
+        setIsSending(false);
+        return;
+      } catch (error) {
+        alert(error?.message || "최종 리포트 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        setIsSending(false);
+        return;
+      }
+    }
+
     try {
       const answerEvaluations = await Promise.all(currentMentee.qnas
         .map(async (qna) => {
@@ -473,7 +531,12 @@ export default function MentorFeedbackPage() {
             ? Number(fb.score)
             : qna.mentorScore ?? qna.aiScore;
           return {
-            answer_id: answerId,
+            answer_id: answerId ?? null,
+            question_id: qna.questionId ?? null,
+            mentee_id: currentMenteeTarget().menteeId,
+            mentee_name: currentMenteeTarget().menteeName,
+            question_text: qna.questionText || qna.question?.replace(/^Q\d+\s*[·.-]\s*/, "") || "",
+            answer_text: qna.transcript || "",
             reasoning: fb.reasoning || fb.comment || "멘토가 점수와 피드백을 검토했습니다.",
             score: toApiMentorScore(score),
             strengths: splitLines(fb.strengths),
@@ -484,7 +547,8 @@ export default function MentorFeedbackPage() {
         sessionId,
         currentFbData.totalFeedback,
         currentFbData.mentorScore,
-        answerEvaluations
+        answerEvaluations,
+        currentMenteeTarget()
       );
       const latestReport = await getSessionReport(sessionId);
       applyReportData(latestReport);
@@ -493,13 +557,8 @@ export default function MentorFeedbackPage() {
       setIsSending(false);
       return;
     }
-    const newSent = new Set([...sentMentees, currentMentee.menteeId]);
-    setSentMentees(newSent);
+    markCurrentAsSent();
     setIsSending(false);
-    if (!wasAlreadySent) {
-      const nextIdx = menteeList.findIndex((m, i) => i > currentMenteeIdx && !newSent.has(m.menteeId));
-      if (nextIdx !== -1) setCurrentMenteeIdx(nextIdx);
-    }
   };
 
   const splitLines = (text) => (text || "")

@@ -135,10 +135,21 @@ public class QuestionService {
                 .orderIndex(orderIndex)
                 .build();
 
-        String key = uploadToS3(audio);
-        question.updateAudio(key);
         InterviewQuestion saved = questionRepository.save(question);
-        transcribeQuestion(saved, audio);
+        try {
+            String key = uploadToS3(audio);
+            saved.updateAudio(key);
+            transcribeQuestion(saved, audio);
+        } catch (RuntimeException e) {
+            saved.update("질문 음성 변환 실패");
+            saved.failStt("Question audio upload failed; saved fallback question for interview flow.");
+            log.warn(
+                    "Question audio upload failed; fallback question saved sessionId={} questionId={}",
+                    sessionId,
+                    saved.getId(),
+                    e
+            );
+        }
         return QuestionCreateResponse.from(saved);
     }
 

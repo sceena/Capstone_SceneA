@@ -702,10 +702,7 @@ export default function MenteeDashboard() {
               <div>
                 {history.map((h, i) => (
                   <HistoryItem key={i} {...h}
-                    onView={() => h.isFinal
-                      ? navigate("/report/final", { state: { sessionId: h.id, role: "mentee" } })
-                      : navigate(`/report/ai/${h.id}`, { state: { role: "mentee" } })
-                    }
+                    onView={() => navigate(`/report/final/${h.id}`, { state: { sessionId: h.id, role: "mentee" } })}
                   />
                 ))}
               </div>

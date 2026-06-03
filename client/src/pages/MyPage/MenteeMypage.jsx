@@ -210,14 +210,24 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
             {silence > 0 && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.dangerLight, color: C.danger }}>침묵 {silence}회</span>}
           </div>
           <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>멘토 {mentor} · {date} · {type}</p>
-          <button onClick={() => id && navigate(`/report/ai/${id}`)} style={{
-            padding: "8px 18px", background: C.primaryGrad, color: C.white,
-            border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-            boxShadow: "0 4px 10px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-          >리포트 보기 →</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => id && navigate(`/report/ai/${id}`)} style={{
+              padding: "8px 14px", background: C.white, color: C.primary,
+              border: `1px solid ${C.primary}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+              transition: "opacity 0.15s",
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >AI 리포트</button>
+            <button onClick={() => id && navigate(`/report/final/${id}`, { state: { sessionId: id, role: "mentee" } })} style={{
+              padding: "8px 14px", background: C.primaryGrad, color: C.white,
+              border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+              boxShadow: "0 4px 10px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >최종 리포트 →</button>
+          </div>
         </div>
       </div>
     </div>
@@ -232,8 +242,22 @@ const RESERVATION_STATUS = {
   CANCELLED: { label: "취소됨",  bg: C.bg,      color: C.textMuted },
 };
 
+const SESSION_STATUS = {
+  COMPLETED:   { label: "세션 종료", bg: "#F0F4FF", color: "#4C6EF5" },
+  IN_PROGRESS: { label: "진행 중",   bg: "#FFF3BF", color: "#E67700" },
+  SCHEDULED:   { label: "예정됨",    bg: "#E6FCF5", color: "#0CA678" },
+  PENDING:     { label: "대기 중",   bg: C.bg,      color: C.textMuted },
+};
+
 const ReservationItem = ({ r }) => {
-  const status = RESERVATION_STATUS[r.status?.toUpperCase()] || RESERVATION_STATUS.PENDING;
+  const sessionStatus = r.session_status || r.sessionStatus;
+  const reservStatus = r.status?.toUpperCase();
+  // 세션이 완료된 경우 "세션 종료"를 우선 표시
+  const status = (reservStatus === "ACCEPTED" && sessionStatus === "COMPLETED")
+    ? SESSION_STATUS.COMPLETED
+    : (sessionStatus && reservStatus === "ACCEPTED" && SESSION_STATUS[sessionStatus?.toUpperCase()])
+    ? SESSION_STATUS[sessionStatus.toUpperCase()]
+    : RESERVATION_STATUS[reservStatus] || RESERVATION_STATUS.PENDING;
   const scheduledAt = r.scheduled_at || r.scheduledAt;
   const createdAt   = r.created_at   || r.createdAt;
   const formatDate  = v => v ? new Date(v).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
@@ -545,8 +569,7 @@ export default function MenteeMyPage() {
       if (!data?.length) return;
       setApiSessions(data);
       const latestId = data[0]?.id;
-      const hasReport = data[0]?.aiScore != null;
-      if (latestId && hasReport) getSessionReport(latestId).then(setLatestReport).catch(() => {});
+      if (latestId) getSessionReport(latestId).then(setLatestReport).catch(() => {});
     }).catch(() => {});
 
     getMenteeReservations().then(setReservations).catch(() => {});
@@ -815,6 +838,48 @@ export default function MenteeMyPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* 최종 리포트 바로가기 */}
+                {latestSession && (
+                  <div style={{ background: C.white, borderRadius: 16, padding: "18px 22px", boxShadow: C.shadow, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: C.successLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.success} strokeWidth="2" strokeLinecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                      </div>
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>
+                          {latestReport?.report_status === "final" ? "최종 리포트 완성" : "최신 세션 리포트"}
+                        </p>
+                        <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>
+                          {latestReport?.report_status === "final"
+                            ? "멘토 코멘트와 AI 분석이 모두 포함된 최종 리포트입니다"
+                            : latestReport ? "AI 리포트가 준비됐어요 · 멘토 최종 리포트 작성 대기 중" : "리포트 준비 중입니다"}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      {latestReport && (
+                        <button onClick={() => navigate(`/report/ai/${latestSession.id}`)} style={{
+                          padding: "9px 16px", borderRadius: 10, border: `1px solid ${C.primary}`, background: C.white,
+                          color: C.primary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.15s",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                        >AI 리포트</button>
+                      )}
+                      {latestSession && (
+                        <button onClick={() => navigate(`/report/final/${latestSession.id}`, { state: { sessionId: latestSession.id, role: "mentee" } })} style={{
+                          padding: "9px 16px", borderRadius: 10, border: "none", background: C.primaryGrad,
+                          color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                          boxShadow: "0 4px 12px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                        >최종 리포트 →</button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* 레이더 + Fit-Gap */}
                 <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

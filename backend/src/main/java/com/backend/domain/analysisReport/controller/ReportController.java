@@ -36,8 +36,9 @@ public class ReportController {
     @GetMapping("/{id}/report")
     public ResponseEntity<ReportResponse> getReport(
             @AuthenticationPrincipal Long memberId,
-            @PathVariable Long id) {
-        return ResponseEntity.ok(reportService.getReport(memberId, id));
+            @PathVariable Long id,
+            @RequestParam(required = false) Long menteeId) {
+        return ResponseEntity.ok(reportService.getReport(memberId, id, menteeId));
     }
 
     @Operation(summary = "AI 리포트 생성", description = "세션의 질문/답변/자소서/채용공고 정보를 AI 서버에 보내 리포트를 생성하고 저장한다.")

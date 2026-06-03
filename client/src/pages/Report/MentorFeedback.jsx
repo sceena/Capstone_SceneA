@@ -166,7 +166,8 @@ function buildMenteesFromQuestionReports(
   answerEvaluations = [],
   mentorFeedback = "",
   reportMentorScore = null,
-  menteeReportFeedbacks = []
+  menteeReportFeedbacks = [],
+  participantNameMap = {}
 ) {
   const groups = new Map();
   const { byAnswerId: evaluationsByAnswerId, byQuestionMentee: evaluationsByQuestionMentee } = buildEvaluationMap(answerEvaluations);
@@ -176,24 +177,44 @@ function buildMenteesFromQuestionReports(
       .filter((menteeId) => menteeId != null)
       .map(String)
   );
-  const isGroupReport = reportMenteeIds.size > 1;
+  // answer_evaluations의 mentee_id로도 그룹 여부 판별 (AI가 question_report.mentee_id를 안 채운 경우 대비)
+  const evalMenteeIds = new Set(
+    answerEvaluations
+      .map(ev => ev?.mentee_id ?? ev?.menteeId)
+      .filter(Boolean)
+      .map(String)
+  );
+  const isGroupReport = reportMenteeIds.size > 1 || evalMenteeIds.size > 1;
   const feedbackByMentee = new Map();
   menteeReportFeedbacks.forEach((feedback) => {
     const menteeId = feedback?.mentee_id ?? feedback?.menteeId;
     if (menteeId != null) feedbackByMentee.set(String(menteeId), feedback);
   });
 
-  // answer_evaluations에서 menteeId → menteeName 역방향 맵 구성
+  // answer_evaluations에서 answerId → { menteeId, menteeName } 역방향 맵
+  const evalByAnswerId = new Map();
   const menteeNameFromEval = new Map();
   answerEvaluations.forEach(ev => {
     const eid = ev?.mentee_id ?? ev?.menteeId;
     const ename = ev?.mentee_name ?? ev?.menteeName;
-    if (eid != null && ename) menteeNameFromEval.set(String(eid), ename);
+    const aid = ev?.answer_id ?? ev?.answerId;
+    if (eid != null) {
+      if (ename) menteeNameFromEval.set(String(eid), ename);
+      if (aid != null) evalByAnswerId.set(String(aid), { menteeId: eid, menteeName: ename });
+    }
   });
 
   questionReports.forEach((report, index) => {
-    const menteeId = report.mentee_id || `session-${sessionId}`;
-    const menteeName = report.mentee_name || menteeNameFromEval.get(String(menteeId)) || `멘티 ${menteeId !== `session-${sessionId}` ? menteeId : index + 1}`;
+    // question_report.mentee_id가 없으면 answer_id로 멘티 식별
+    const rawMenteeId = report.mentee_id ?? report.menteeId;
+    const answerId = String(report.answer_id ?? report.answerId ?? "");
+    const resolvedFromEval = !rawMenteeId && answerId ? evalByAnswerId.get(answerId) : null;
+    const menteeId = rawMenteeId ?? resolvedFromEval?.menteeId ?? `session-${sessionId}`;
+    const menteeName = report.mentee_name
+      || resolvedFromEval?.menteeName
+      || menteeNameFromEval.get(String(menteeId))
+      || participantNameMap[String(menteeId)]
+      || `멘티 ${String(menteeId).startsWith("session-") ? index + 1 : menteeId}`;
     const menteeFeedback = feedbackByMentee.get(String(menteeId));
     if (!groups.has(menteeId)) {
       groups.set(menteeId, {
@@ -265,7 +286,7 @@ export default function MentorFeedbackPage() {
   const [isSending, setIsSending] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState(null);
 
-  const applyReportData = (data) => {
+  const applyReportData = (data, participantNameMap = {}) => {
     if (data?.mentees?.length) {
       setMenteeList(data.mentees);
       return;
@@ -280,7 +301,8 @@ export default function MentorFeedbackPage() {
         data?.answer_evaluations || [],
         data?.mentor_feedback || "",
         data?.mentor_score ?? null,
-        data?.mentee_report_feedbacks || data?.menteeReportFeedbacks || []
+        data?.mentee_report_feedbacks || data?.menteeReportFeedbacks || [],
+        participantNameMap
       ));
     }
   };
@@ -300,6 +322,8 @@ export default function MentorFeedbackPage() {
 
         if (cancelled) return;
 
+        // 참여자 이름 맵 (user_id → name)
+        let participantNameMap = {};
         if (sessionData.status === "fulfilled" && sessionData.value) {
           const s = sessionData.value;
           setSessionInfo({
@@ -308,12 +332,17 @@ export default function MentorFeedbackPage() {
             duration: s.duration || "",
             type: s.sessionType || "1:1",
           });
+          (s.participants || []).forEach(p => {
+            if (p.user_id ?? p.userId) {
+              participantNameMap[String(p.user_id ?? p.userId)] = p.name;
+            }
+          });
         }
 
         if (reportData.status === "fulfilled" && reportData.value) {
-          applyReportData(reportData.value);
+          applyReportData(reportData.value, participantNameMap);
         } else if (USE_MOCK) {
-          applyReportData(mockAiReport);
+          applyReportData(mockAiReport, {});
         }
       } catch {
         if (USE_MOCK) applyReportData(mockAiReport);

@@ -539,6 +539,7 @@ export default function MenteeMyPage() {
   const [profile, setProfile]         = useState(user?.profileData || null);
   const [apiSessions, setApiSessions] = useState([]);
   const [latestReport, setLatestReport] = useState(null);
+  const [mentorScoreTrend, setMentorScoreTrend] = useState([]);
   const [reservations, setReservations] = useState([]);
 
   const hasResume = (() => {
@@ -586,7 +587,7 @@ export default function MenteeMyPage() {
       }
     }).catch(() => {});
 
-    getMySessions().then(data => {
+    getMySessions().then(async data => {
       if (!data?.length) return;
       // 완료된 세션만, 최신순
       const completed = [...data]
@@ -595,6 +596,23 @@ export default function MenteeMyPage() {
       setApiSessions(completed);
       const latestId = completed[0]?.id;
       if (latestId) getSessionReport(latestId).then(setLatestReport).catch(() => {});
+
+      // 최종 리포트가 있는 세션들의 mentor_score로 추이 구성 (오래된 순)
+      const finalSessions = [...completed]
+        .filter(s => (s.reportStatus ?? s.report_status) === "final")
+        .reverse();
+      if (finalSessions.length > 0) {
+        const reports = await Promise.all(
+          finalSessions.map(s => getSessionReport(s.id).catch(() => null))
+        );
+        const trend = reports
+          .map((report, i) => ({
+            ai:   report?.mentor_score ?? null,
+            date: (finalSessions[i].scheduledAt ?? finalSessions[i].scheduled_at ?? "").slice(0, 10).replace(/-/g, "."),
+          }))
+          .filter(item => item.ai != null);
+        setMentorScoreTrend(trend);
+      }
     }).catch(() => {});
 
     getMenteeReservations().then(setReservations).catch(() => {});
@@ -620,14 +638,6 @@ export default function MenteeMyPage() {
   });
 
   const displayName    = profile?.name ?? userName;
-  // 멘토 최종 평점이 있는(final) 세션만, 오래된 순으로
-  const mentorScoreTrend = apiSessions
-    .filter(s => (s.reportStatus ?? s.report_status) === "final" && s.aiScore != null)
-    .reverse()
-    .map(s => ({
-      ai:   s.aiScore,
-      date: (s.scheduledAt ?? s.scheduled_at ?? "").slice(0, 10).replace(/-/g, "."),
-    }));
   const aiReport       = latestReport?.ai_report;
   const qReports       = aiReport?.question_reports || [];
   const fitGapRaw      = aiReport?.fit_gap;

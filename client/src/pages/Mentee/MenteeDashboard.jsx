@@ -331,6 +331,11 @@ const getMentorName   = s => s.mentorName ?? s.mentor_name ?? "";
 const getSessionType  = s => s.sessionType ?? s.session_type ?? "1:1 면접";
 const toDateText      = v => v ? String(v).slice(5, 10).replace("-", ".") : "";
 const toTimeText      = v => v ? String(v).slice(11, 16) : "";
+const toScheduledTime = s => {
+  const time = new Date(getScheduledAt(s)).getTime();
+  return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+};
+const compareByScheduledAtAsc = (a, b) => toScheduledTime(a) - toScheduledTime(b);
 
 /* ════════════════════════════════════════
    메인 컴포넌트
@@ -373,7 +378,7 @@ export default function MenteeDashboard() {
   const enterableSessions = sessions.filter(s => {
     const status = normalizeStatus(s.status);
     return status === "scheduled" || status === "in_progress";
-  });
+  }).sort(compareByScheduledAtAsc);
   const enterableCards = enterableSessions.map(s => ({
     id: s.id,
     date: toDateText(getScheduledAt(s)),

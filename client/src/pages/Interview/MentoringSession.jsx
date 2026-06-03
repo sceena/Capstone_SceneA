@@ -30,6 +30,44 @@ function toFivePointScore(score) {
   return Math.max(1, Math.min(5, numeric > 5 ? numeric / 2 : numeric));
 }
 
+function getReportMenteeId(report) {
+  return report?.mentee_id ?? report?.menteeId ?? null;
+}
+
+function getReportAnswerId(report) {
+  return report?.answer_id ?? report?.answerId ?? null;
+}
+
+function getReportQuestionId(report) {
+  return report?.question_id ?? report?.questionId ?? null;
+}
+
+function getReportCommentKey(report, index = 0) {
+  const answerId = getReportAnswerId(report);
+  if (answerId != null) return `answer-${answerId}`;
+  return `question-${getReportQuestionId(report) ?? "unknown"}-mentee-${getReportMenteeId(report) ?? "session"}-${index}`;
+}
+
+function filterReportsForMentee(questionReports = [], currentMentee) {
+  const menteeId = currentMentee?.id ?? currentMentee?.menteeId ?? currentMentee?.memberId;
+  if (menteeId == null) return questionReports;
+  const filtered = questionReports.filter((report) => String(getReportMenteeId(report) ?? "") === String(menteeId));
+  return filtered.length > 0 ? filtered : questionReports;
+}
+
+function pickReportExtremes(reports = []) {
+  if (reports.length === 0) return { bestReport: null, worstReport: null };
+  return reports.reduce((acc, report) => {
+    const score = toFivePointScore(report?.score);
+    const bestScore = acc.bestReport ? toFivePointScore(acc.bestReport.score) : -Infinity;
+    const worstScore = acc.worstReport ? toFivePointScore(acc.worstReport.score) : Infinity;
+    return {
+      bestReport: score > bestScore ? report : acc.bestReport,
+      worstReport: score < worstScore ? report : acc.worstReport,
+    };
+  }, { bestReport: null, worstReport: null });
+}
+
 // ─── 아바타 ─────────────────────────────────────────────────────
 function Avatar({ name, size = 36, bg = NAVY, fontSize = 12 }) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -86,7 +124,7 @@ const D = {
 };
 
 // ─── 공유 리포트 뷰 ──────────────────────────────────────────────
-function SharedReport({ report, isMentor = false, mentorComments = {}, onCommentChange }) {
+function SharedReport({ report, isMentor = false, currentMentee = null, mentorComments = {}, onCommentChange }) {
   if (!report?.ai_report) {
     return (
       <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
@@ -104,16 +142,20 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
 
   const aiReport = report.ai_report;
   const questionReports = aiReport?.question_reports || [];
+  const visibleQuestionReports = filterReportsForMentee(questionReports, currentMentee);
   const topSummary = aiReport?.top_summary;
-  const best = topSummary?.best_question;
-  const worst = topSummary?.worst_question;
-  const bestReport  = questionReports.find(item => item.question_id === best?.question_id);
-  const worstReport = questionReports.find(item => item.question_id === worst?.question_id);
+  const { bestReport, worstReport } = pickReportExtremes(visibleQuestionReports);
+  const best = bestReport
+    ? { question_id: bestReport.question_id, question: bestReport.question, reason: bestReport.reasoning }
+    : topSummary?.best_question;
+  const worst = worstReport
+    ? { question_id: worstReport.question_id, question: worstReport.question, reason: worstReport.reasoning }
+    : topSummary?.worst_question;
   const fitGap = aiReport?.fit_gap;
   const overallScore = toFivePointScore(aiReport?.overall_score ?? report?.total_score ?? 0);
   const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#C0392B";
 
-  const commentedCount = questionReports.filter(qr => (mentorComments[qr.question_id] || "").trim().length > 0).length;
+  const commentedCount = visibleQuestionReports.filter((qr, index) => (mentorComments[getReportCommentKey(qr, index)] || "").trim().length > 0).length;
   return (
     <div style={{ background: D.bg, minHeight: "100%", padding: "22px 20px", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
       <div style={{ maxWidth: 700, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -221,20 +263,23 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
               <p style={{ fontSize: 10, fontWeight: 800, color: D.dim, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 4px" }}>QUESTION REPORTS</p>
               <h3 style={{ fontSize: 15, fontWeight: 800, color: D.text, margin: 0 }}>전체 Q&A 답변 분석</h3>
             </div>
-            {isMentor && questionReports.length > 0 && (
-              <span style={{ fontSize: 11, color: commentedCount === questionReports.length ? GREEN : D.muted, fontWeight: 700, background: commentedCount === questionReports.length ? "#F0FDF4" : D.card2, padding: "4px 12px", borderRadius: 99, border: `1px solid ${commentedCount === questionReports.length ? "rgba(29,158,117,0.3)" : D.border}` }}>
-                코멘트 {commentedCount}/{questionReports.length}
+            {isMentor && visibleQuestionReports.length > 0 && (
+              <span style={{ fontSize: 11, color: commentedCount === visibleQuestionReports.length ? GREEN : D.muted, fontWeight: 700, background: commentedCount === visibleQuestionReports.length ? "#F0FDF4" : D.card2, padding: "4px 12px", borderRadius: 99, border: `1px solid ${commentedCount === visibleQuestionReports.length ? "rgba(29,158,117,0.3)" : D.border}` }}>
+                코멘트 {commentedCount}/{visibleQuestionReports.length}
               </span>
             )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {questionReports.map((qr, i) => {
-              const isBad = qr.question_id === worst?.question_id;
+            {visibleQuestionReports.map((qr, i) => {
+              const commentKey = getReportCommentKey(qr, i);
+              const worstIndex = worstReport ? visibleQuestionReports.indexOf(worstReport) : -1;
+              const worstKey = worstReport ? getReportCommentKey(worstReport, worstIndex) : null;
+              const isBad = commentKey === worstKey;
               const score = toFivePointScore(qr.score);
               const scColor = score >= 4 ? GREEN : score >= 3 ? "#F59E0B" : "#E53E3E";
-              const hasComment = (mentorComments[qr.question_id] || "").trim().length > 0;
+              const hasComment = (mentorComments[commentKey] || "").trim().length > 0;
               return (
-                <div key={qr.question_id ?? i} style={{ background: D.card2, border: `1px solid ${D.border}`, borderLeft: `3px solid ${isBad ? "#E53E3E" : GREEN}`, borderRadius: 12, padding: 16 }}>
+                <div key={commentKey} style={{ background: D.card2, border: `1px solid ${D.border}`, borderLeft: `3px solid ${isBad ? "#E53E3E" : GREEN}`, borderRadius: 12, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
                     <div>
                       <p style={{ fontSize: 13, fontWeight: 700, color: D.text, lineHeight: 1.55, margin: "0 0 4px" }}>Q{i + 1} · {qr.question}</p>
@@ -280,8 +325,8 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
                         멘토 코멘트 {hasComment ? "✓" : ""}
                       </p>
                       <textarea
-                        value={mentorComments[qr.question_id] || ""}
-                        onChange={e => onCommentChange(qr.question_id, e.target.value)}
+                        value={mentorComments[commentKey] || ""}
+                        onChange={e => onCommentChange(commentKey, e.target.value)}
                         placeholder="이 답변에 대한 코멘트를 입력해주세요..."
                         style={{
                           width: "100%", minHeight: 68, borderRadius: 8,
@@ -699,6 +744,7 @@ export default function MentoringSessionPage() {
             <SharedReport
               report={reportData}
               isMentor={isMentor}
+              currentMentee={currentMentee}
               mentorComments={mentorComments}
               onCommentChange={handleCommentChange}
             />

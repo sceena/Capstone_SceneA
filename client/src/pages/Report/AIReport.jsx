@@ -112,6 +112,129 @@ function formatReplayTime(replay = {}) {
   return start && end ? `${start} - ${end}` : "다시듣기";
 }
 
+async function loadQuestions(sessionId) {
+  try {
+    return await requestJson(`/api/sessions/${sessionId}/questions`);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeQuestionItems(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.questions)) return data.questions;
+  if (Array.isArray(data?.content)) return data.content;
+  return [];
+}
+
+function getReportQuestionId(item) {
+  return item?.question_id ?? item?.questionId ?? item?.id ?? null;
+}
+
+function getReportMenteeId(item) {
+  return item?.mentee_id ?? item?.menteeId ?? item?.candidate_id ?? item?.candidateId ?? null;
+}
+
+function getQuestionTypeValue(item) {
+  const raw = item?.question_type ?? item?.questionType ?? item?.type ?? "";
+  return String(raw || "").toUpperCase();
+}
+
+function getQuestionCandidateId(item) {
+  const value = item?.candidate_id ?? item?.candidateId ?? item?.target_mentee_id ?? item?.targetMenteeId ?? null;
+  return value == null ? null : Number(value);
+}
+
+function buildQuestionMetaMap(questions = []) {
+  const map = new Map();
+  normalizeQuestionItems(questions).forEach((question) => {
+    const questionId = getReportQuestionId(question);
+    if (questionId != null) map.set(String(questionId), question);
+  });
+  return map;
+}
+
+function useQuestionMetaMap(sessionId) {
+  const [questionMetaMap, setQuestionMetaMap] = useState(() => new Map());
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    loadQuestions(sessionId).then((questions) => {
+      if (!cancelled) setQuestionMetaMap(buildQuestionMetaMap(questions));
+    });
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+  return questionMetaMap;
+}
+
+function buildMenteeNameMap(questionReports = []) {
+  const map = new Map();
+  questionReports.forEach((report) => {
+    const menteeId = getReportMenteeId(report);
+    const menteeName = report?.mentee_name ?? report?.menteeName;
+    if (menteeId != null && menteeName) map.set(String(menteeId), menteeName);
+  });
+  return map;
+}
+
+function getQuestionMetaForReport(report, questionMetaMap) {
+  const questionId = getReportQuestionId(report);
+  return questionId == null ? null : questionMetaMap.get(String(questionId));
+}
+
+function getQuestionKindLabel(report, questionMetaMap, menteeNameMap = new Map()) {
+  const meta = getQuestionMetaForReport(report, questionMetaMap);
+  const type = getQuestionTypeValue(report) || getQuestionTypeValue(meta);
+  const candidateId = getQuestionCandidateId(report) ?? getQuestionCandidateId(meta);
+  if (type === "COMMON") return "공통 질문";
+  if (type === "PERSONAL" || candidateId != null) {
+    const targetName = candidateId != null ? menteeNameMap.get(String(candidateId)) : "";
+    return targetName ? `${targetName} 대상 개인 질문` : "개인 질문";
+  }
+  return "질문";
+}
+
+function getAnswererLabel(report) {
+  const name = report?.mentee_name ?? report?.menteeName;
+  return name ? `답변자 ${name}` : "";
+}
+
+function makeReportCardKey(report, index) {
+  return report?.answer_id ?? report?.answerId ?? `${getReportQuestionId(report) ?? "q"}-${getReportMenteeId(report) ?? "m"}-${index}`;
+}
+
+function groupQuestionReportsByMentee(questionReports = [], sessionId) {
+  const groups = new Map();
+  questionReports.forEach((report, index) => {
+    const menteeId = getReportMenteeId(report) ?? `session-${sessionId}`;
+    const key = String(menteeId);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        menteeId,
+        menteeName: report?.mentee_name ?? report?.menteeName ?? "면접 참여자",
+        reports: [],
+      });
+    }
+    groups.get(key).reports.push({ ...report, __reportIndex: index });
+  });
+  return Array.from(groups.values());
+}
+
+function pickBestWorstReports(reports = []) {
+  if (reports.length === 0) return { best: null, worst: null };
+  return reports.reduce((acc, report) => {
+    const score = toFivePointScore(report?.score);
+    const bestScore = acc.best ? toFivePointScore(acc.best.score) : -Infinity;
+    const worstScore = acc.worst ? toFivePointScore(acc.worst.score) : Infinity;
+    return {
+      best: score > bestScore ? report : acc.best,
+      worst: score < worstScore ? report : acc.worst,
+    };
+  }, { best: null, worst: null });
+}
+
 // ─── Audio Player ────────────────────────────────────────────────
 function AudioPlayer({ sessionId, questionId, answerId }) {
   const [state, setState] = useState("idle"); // idle | loading | playing | paused | error
@@ -450,6 +573,8 @@ function RecommendationList({ items = [] }) {
 function MenteeReport({ sessionId, report }) {
   const aiReport = report?.ai_report;
   const questionReports = aiReport?.question_reports || [];
+  const questionMetaMap = useQuestionMetaMap(sessionId);
+  const menteeNameMap = buildMenteeNameMap(questionReports);
   const topSummary = aiReport?.top_summary;
   const best = topSummary?.best_question;
   const worst = topSummary?.worst_question;
@@ -471,6 +596,8 @@ function MenteeReport({ sessionId, report }) {
     replay: item.replay,
     questionId: item.question_id,
     answerId: item.answer_id,
+    questionKind: getQuestionKindLabel(item, questionMetaMap, menteeNameMap),
+    answererLabel: getAnswererLabel(item),
   }));
   const metaBadges = report?.__mock
     ? ["1차 AI 리포트", "분석 완료", "개발 mock"]
@@ -542,6 +669,8 @@ function MenteeReport({ sessionId, report }) {
                 <div>
                   <p style={{ fontSize: 15, fontWeight: 800, color: NAVY, lineHeight: 1.55, margin: "0 0 8px" }}>{qa.q}</p>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: NAVY, background: "rgba(13,34,64,0.06)", padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(13,34,64,0.08)", fontWeight: 700 }}>{qa.questionKind}</span>
+                    {qa.answererLabel && <span style={{ fontSize: 11, color: "#495057", background: BG, padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(13,34,64,0.08)" }}>{qa.answererLabel}</span>}
                     {qa.note && <span style={{ fontSize: 11, color: "#868E96", background: BG, padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(13,34,64,0.08)" }}>{qa.note}</span>}
                     {qa.bad && <span style={{ fontSize: 11, color: "#C0392B", background: "rgba(13,34,64,0.06)", padding: "3px 10px", borderRadius: 99, fontWeight: 700 }}>보완 필요</span>}
                   </div>
@@ -597,11 +726,12 @@ function MentorReport({ sessionId, report }) {
   const navigate = useNavigate();
   const aiReport = report?.ai_report;
   const questionReports = aiReport?.question_reports || [];
+  const questionMetaMap = useQuestionMetaMap(sessionId);
+  const menteeNameMap = buildMenteeNameMap(questionReports);
+  const menteeGroups = groupQuestionReportsByMentee(questionReports, sessionId);
+  const isGroupReport = menteeGroups.length > 1;
   const overallScore = toFivePointScore(aiReport?.overall_score ?? report?.total_score ?? 0);
   const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#E24B4A";
-  const topSummary = aiReport?.top_summary;
-  const best = topSummary?.best_question;
-  const worst = topSummary?.worst_question;
 
   return (
     <div id="report-content" style={{ background: BG, minHeight: "100vh", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", paddingBottom: 80 }}>
@@ -629,38 +759,80 @@ function MentorReport({ sessionId, report }) {
         </div>
 
         {/* Best / Worst 문항 */}
-        {(best || worst) && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
-            {[{ type: "best", data: best, accent: GREEN, accentBg: "rgba(12,166,120,0.06)", label: "BEST 문항" }, { type: "worst", data: worst, accent: "#C0392B", accentBg: "rgba(192,57,43,0.05)", label: "WORST 문항" }].map(({ type, data, accent, accentBg, label }) => (
-              data ? (
-                <div key={type} style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderTop: `3px solid ${accent}`, borderRadius: 20, padding: 18, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
-                  <p style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 10px" }}>{label}</p>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: "0 0 8px", lineHeight: 1.55 }}>{data.question}</p>
-                  <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.65, margin: 0, background: accentBg, borderRadius: 10, padding: "10px 12px" }}>{data.reason}</p>
-                </div>
-              ) : null
-            ))}
+        {questionReports.length > 0 && (
+          <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 22, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 6px" }}>{isGroupReport ? "멘티별 BEST / WORST 문항" : "BEST / WORST 문항"}</p>
+            <p style={{ fontSize: 12, color: "#868E96", lineHeight: 1.6, margin: "0 0 16px" }}>그룹 면접에서는 답변자별 점수 기준으로 핵심 문항을 분리해 보여줍니다.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {menteeGroups.map((group) => {
+                const { best, worst } = pickBestWorstReports(group.reports);
+                return (
+                  <div key={group.menteeId} style={{ background: BG, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 16, padding: 16 }}>
+                    {isGroupReport && <p style={{ fontSize: 13, fontWeight: 900, color: NAVY, margin: "0 0 12px" }}>{group.menteeName}</p>}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                      {[
+                        { type: "best", report: best, accent: GREEN, accentBg: "rgba(12,166,120,0.06)", label: "BEST 문항" },
+                        { type: "worst", report: worst, accent: "#C0392B", accentBg: "rgba(192,57,43,0.05)", label: "WORST 문항" },
+                      ].map(({ type, report: item, accent, accentBg, label }) => (
+                        item ? (
+                          <div key={type} style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderTop: `3px solid ${accent}`, borderRadius: 14, padding: 14 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                              <p style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>{label}</p>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: accent }}>AI {toFivePointScore(item.score)}</span>
+                            </div>
+                            <p style={{ fontSize: 13, fontWeight: 800, color: NAVY, margin: "0 0 8px", lineHeight: 1.55 }}>{item.question}</p>
+                            <p style={{ fontSize: 12, color: "#495057", lineHeight: 1.65, margin: 0, background: accentBg, borderRadius: 10, padding: "9px 11px" }}>
+                              {item.reasoning || (type === "best" ? "가장 높은 평가를 받은 답변입니다." : "보완이 가장 필요한 답변입니다.")}
+                            </p>
+                          </div>
+                        ) : null
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
         {/* Q&A 답변 목록 */}
         {questionReports.length > 0 && (
           <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 22, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 18px" }}>전체 Q&A 답변</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {questionReports.map((qr, i) => {
-                const sc = toFivePointScore(qr.score);
-                const isBad = qr.question_id === worst?.question_id;
+            <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 18px" }}>{isGroupReport ? "멘티별 Q&A 답변" : "전체 Q&A 답변"}</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              {menteeGroups.map((group) => {
+                const { worst } = pickBestWorstReports(group.reports);
+                const worstKey = worst ? makeReportCardKey(worst, worst.__reportIndex ?? 0) : null;
                 return (
-                  <div key={qr.question_id ?? i} style={{ background: BG, borderRadius: 14, padding: 16, borderLeft: `3px solid ${isBad ? "#C0392B" : GREEN}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, lineHeight: 1.5, margin: 0 }}>Q{i + 1} · {qr.question}</p>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: "rgba(13,34,64,0.08)", padding: "3px 10px", borderRadius: 99, flexShrink: 0 }}>AI {sc}</span>
-                    </div>
-                    <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.75, background: CARD, borderRadius: 10, padding: "10px 12px", margin: 0 }}>{qr.answer}</p>
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-                      <AudioPlayer sessionId={sessionId} questionId={qr.question_id} answerId={qr.answer_id} />
-                    </div>
+                  <div key={group.menteeId} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {isGroupReport && (
+                      <p style={{ fontSize: 13, fontWeight: 900, color: NAVY, margin: 0, paddingLeft: 2 }}>{group.menteeName}</p>
+                    )}
+                    {group.reports.map((qr, i) => {
+                      const sc = toFivePointScore(qr.score);
+                      const cardKey = makeReportCardKey(qr, qr.__reportIndex ?? i);
+                      const isBad = String(cardKey) === String(worstKey);
+                      const questionKind = getQuestionKindLabel(qr, questionMetaMap, menteeNameMap);
+                      const answererLabel = getAnswererLabel(qr);
+                      return (
+                        <div key={cardKey} style={{ background: BG, borderRadius: 14, padding: 16, borderLeft: `3px solid ${isBad ? "#C0392B" : GREEN}` }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+                            <div>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, lineHeight: 1.5, margin: "0 0 7px" }}>Q{i + 1} · {qr.question}</p>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 11, color: NAVY, background: "rgba(13,34,64,0.08)", padding: "3px 10px", borderRadius: 99, fontWeight: 800 }}>{questionKind}</span>
+                                {answererLabel && <span style={{ fontSize: 11, color: "#495057", background: CARD, padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(13,34,64,0.08)" }}>{answererLabel}</span>}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: "rgba(13,34,64,0.08)", padding: "3px 10px", borderRadius: 99, flexShrink: 0 }}>AI {sc}</span>
+                          </div>
+                          <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.75, background: CARD, borderRadius: 10, padding: "10px 12px", margin: 0 }}>{qr.answer}</p>
+                          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                            <AudioPlayer sessionId={sessionId} questionId={qr.question_id} answerId={qr.answer_id} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}

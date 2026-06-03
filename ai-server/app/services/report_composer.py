@@ -291,7 +291,7 @@ class ReportComposer:
             return self.fit_gap_composer.generate_fit_gap(job_description, interview_session, applicant_document)
         except (FitGapComposerUnavailable, ValueError) as exc:
             self.logger.warning("Fit-Gap Gemini unavailable; using fallback fit-gap. reason=%s", exc)
-            return self._build_keyword_fit_gap(request, evaluations)
+            return self.fit_gap_composer.generate_fit_gap_fallback(job_description, interview_session, applicant_document)
 
     def _format_interview_session(self, evaluations: list[AnswerEvaluation]) -> str:
         lines = []

@@ -6,7 +6,7 @@ import re
 import time
 from typing import Any
 
-from app.schemas.fit_gap import FitGapAnalysisResponse
+from app.schemas.fit_gap import FitAnalysisItem, FitGapAnalysisResponse, GapAnalysisItem
 from app.schemas.report import FitGap
 
 
@@ -18,6 +18,61 @@ class FitGapComposer:
     """LLM composer for the middle Fit-Gap report section."""
 
     model = "gemini-3-flash-preview"
+    TECH_TERMS = [
+        "Java", "Kotlin", "Spring", "Spring Boot", "JPA", "Querydsl",
+        "C", "C++", "C/C++", "Python", "JavaScript", "TypeScript",
+        "React", "Node", "FastAPI", "API", "REST", "WebSocket", "WebRTC",
+        "MSSQL", "MySQL", "PostgreSQL", "Mongo", "MongoDB", "Redis",
+        "DB", "RDBMS", "NoSQL", "ERD", "SQL", "쿼리", "인덱스", "튜닝",
+        "AWS", "EC2", "RDS", "S3", "IDC", "Docker", "Kubernetes",
+        "Jenkins", "GitHub Actions", "CI/CD", "Linux", "리눅스",
+        "임베디드", "Embedded", "OTA", "SDV", "자율주행", "커넥티드",
+        "성능", "최적화", "장애", "로그", "모니터링", "보안", "테스트",
+        "예약", "결제", "쿠폰", "빌링", "무인화", "스크린 골프",
+        "메모리", "메모리 누수", "디버깅", "트러블슈팅", "아키텍처",
+    ]
+    REQUIREMENT_GROUPS = [
+        ("Java/Spring 기반 백엔드 개발 역량", ["Java", "Spring", "Spring Boot", "JPA", "백엔드"]),
+        ("API 개발 및 서비스 운영 경험", ["API", "REST", "서비스", "운영", "백엔드"]),
+        ("관계형 데이터베이스 개발 및 운영", ["DB", "RDBMS", "MSSQL", "MySQL", "PostgreSQL", "SQL", "데이터베이스"]),
+        ("MongoDB 등 NoSQL 활용 경험", ["Mongo", "MongoDB", "NoSQL"]),
+        ("ERD 설계 및 데이터 모델링", ["ERD", "설계", "모델링", "데이터 모델"]),
+        ("쿼리 성능 개선 및 튜닝", ["쿼리", "튜닝", "성능", "인덱스", "실행 계획", "최적화"]),
+        ("예약/결제/쿠폰/빌링 도메인 이해", ["예약", "결제", "쿠폰", "빌링", "무인화"]),
+        ("AWS 또는 IDC 운영 경험", ["AWS", "EC2", "RDS", "S3", "IDC", "클라우드"]),
+        ("배포 자동화 및 운영 경험", ["Docker", "CI/CD", "GitHub Actions", "Jenkins", "배포", "운영"]),
+        ("장애 분석 및 로그 기반 문제 해결", ["장애", "로그", "모니터링", "알림", "트러블슈팅"]),
+        ("임베디드 C/C++ 및 Linux 개발 역량", ["임베디드", "C/C++", "C++", "Linux", "리눅스"]),
+        ("차량 SW/SDV/OTA 도메인 이해", ["차량", "SDV", "OTA", "자율주행", "커넥티드"]),
+        ("시스템 안정성 및 예외 상황 디버깅 역량", ["안정성", "예외", "디버깅", "메모리", "트러블슈팅"]),
+        ("테스트 코드와 협업 경험", ["테스트", "코드 리뷰", "협업", "Git"]),
+    ]
+    WEAK_EVIDENCE_TERMS = {
+        "개발", "운영", "서비스", "플랫폼", "경험", "관리", "업무", "기술", "프로젝트",
+    }
+    ACTION_MARKERS = [
+        "적용", "도입", "구현", "개발", "설계", "분석", "추적", "해결", "개선",
+        "튜닝", "배포", "운영", "수정", "추가", "확인", "측정", "작성", "연동",
+        "설정", "처리", "찾", "줄", "낮", "높", "최적화",
+    ]
+    RESULT_PATTERNS = [
+        r"\d+\s*(ms|초|분|시간|%|배|건|명)",
+        "감소", "단축", "향상", "개선", "안정", "줄였", "줄었습니다",
+        "유지", "성공", "해결", "낮췄", "높였", "빨라",
+    ]
+    WEAK_CONTEXT_PATTERNS = [
+        "이론적으로", "개념을", "알고 있습니다", "공부", "학습", "자격증",
+        "준비", "들어봤", "기본 개념", "수업 시간", "아직 프로젝트",
+    ]
+    NEGATIVE_CONTEXT_PATTERNS = [
+        "해본 적은 없", "해본 적 없", "써본 적은 없", "써본 적 없",
+        "직접 해보지 못", "직접 써본 적", "경험은 부족", "경험이 부족",
+        "경험은 아직", "경험이 아직", "경험은 없습니다", "경험이 없습니다",
+        "많지 않습니다", "부족합니다", "시도해 보지는 못", "시도하지 못",
+        "프로젝트에서 사용해본 적은 없", "프로젝트에서 사용해본 적이 없",
+        "실무에서 사용해본 적은 없", "실무에서 사용해본 적이 없",
+        "직접 경험은 부족", "직접 경험은 없습니다",
+    ]
 
     def generate(
         self,
@@ -106,6 +161,337 @@ class FitGapComposer:
             ][:5],
             recommendations=response.improvement_suggestions[:3],
         )
+
+    def generate_fallback(
+        self,
+        job_description: str,
+        interview_session: str,
+        resume_summary: str = "",
+    ) -> FitGapAnalysisResponse:
+        requirements = self._extract_requirement_items(job_description)
+        if not requirements:
+            requirements = self._extract_requirement_items(f"{resume_summary}\n{interview_session}")
+
+        sources = self._build_evidence_sources(interview_session, resume_summary)
+        fit_items: list[FitAnalysisItem] = []
+        gap_items: list[GapAnalysisItem] = []
+
+        for requirement in requirements:
+            evidence = self._find_requirement_evidence(requirement["terms"], sources)
+            if evidence and evidence["quality"] == "strong" and len(fit_items) < 5:
+                fit_items.append(
+                    FitAnalysisItem(
+                        question_no=evidence["source"],
+                        matched_skill=requirement["label"],
+                        evidence=evidence["summary"],
+                    )
+                )
+            elif len(gap_items) < 5:
+                gap_items.append(
+                    GapAnalysisItem(
+                        missing_skill=requirement["label"],
+                        reason=self._build_gap_reason(requirement["label"], evidence),
+                    )
+                )
+
+        if not requirements:
+            gap_items.append(
+                GapAnalysisItem(
+                    missing_skill="채용공고 핵심 요구사항",
+                    reason="채용공고 원문에서 분석 가능한 요구사항 문장을 충분히 추출하지 못했습니다.",
+                )
+            )
+
+        suggestions = [self._build_recommendation(item.missing_skill) for item in gap_items[:3]]
+        if not suggestions:
+            suggestions = [
+                "충족된 요구사항도 적용 전후 수치와 본인 의사결정 근거를 함께 말하면 설득력이 더 높아집니다.",
+                "채용공고에 나온 기술명을 답변 첫 문장에 연결하고, 뒤에서 실제 프로젝트 근거를 설명하세요.",
+            ]
+
+        summary = (
+            "Gemini 호출이 제한되어 규칙 기반 fallback으로 분석했습니다. "
+            "채용공고의 요구사항 문장과 지원자 제출 문서, 면접 답변의 직접 키워드 근거를 기준으로 Fit-Gap을 산출했습니다."
+        )
+        return FitGapAnalysisResponse(
+            fit_analysis=fit_items,
+            gap_analysis=gap_items,
+            improvement_suggestions=suggestions[:3],
+            overall_summary=summary,
+        )
+
+    def generate_fit_gap_fallback(
+        self,
+        job_description: str,
+        interview_session: str,
+        resume_summary: str = "",
+    ) -> FitGap:
+        response = self.generate_fallback(job_description, interview_session, resume_summary)
+        matched_requirement_keys = {
+            self._normalize_requirement(item.matched_skill)
+            for item in response.fit_analysis
+        }
+        gap_items = [
+            item
+            for item in response.gap_analysis
+            if self._normalize_requirement(item.missing_skill) not in matched_requirement_keys
+        ]
+        return FitGap(
+            matched_requirements=[
+                f"요구사항: {item.matched_skill} / 근거({item.question_no}): {item.evidence}"
+                for item in response.fit_analysis
+            ][:5],
+            missing_requirements=[
+                f"요구사항: {item.missing_skill} / 부족 근거: {item.reason}"
+                for item in gap_items
+            ][:5],
+            recommendations=response.improvement_suggestions[:3],
+        )
+
+    def _extract_requirement_items(self, text: str) -> list[dict[str, list[str] | str]]:
+        normalized_text = (text or "").lower()
+        found: list[dict[str, list[str] | str]] = []
+
+        for line in self._extract_requirement_lines(text):
+            terms = self._extract_terms_for_requirement(line)
+            if terms:
+                found.append({"label": line, "terms": terms})
+
+        for label, terms in self.REQUIREMENT_GROUPS:
+            if any(self._contains_term(normalized_text, term) for term in terms):
+                found.append({"label": label, "terms": terms})
+
+        for keyword in self.TECH_TERMS:
+            if self._contains_term(normalized_text, keyword):
+                found.append({"label": keyword, "terms": [keyword]})
+
+        deduped = []
+        seen = set()
+        for item in found:
+            key = self._normalize_requirement(item["label"])
+            if key and key not in seen:
+                seen.add(key)
+                deduped.append(item)
+        return deduped[:10]
+
+    def _extract_requirement_lines(self, text: str) -> list[str]:
+        lines = []
+        for raw in re.split(r"\n|(?<=[.!?])\s+", text or ""):
+            line = re.sub(r"^[\s*•·\-–—\d.)]+", "", raw).strip()
+            line = re.sub(r"\s+", " ", line).strip(" .")
+            if not line or len(line) < 6:
+                continue
+            if self._is_requirement_heading(line):
+                continue
+            if self._looks_like_requirement(line):
+                lines.append(self._normalize_requirement_label(line))
+        return lines
+
+    def _is_requirement_heading(self, line: str) -> bool:
+        headings = [
+            "합류하시면", "이런 경험을 가진 분", "이런 경험을 우대", "지원 자격",
+            "주요 업무", "자격 요건", "우대 사항", "필수 자격", "담당 업무",
+        ]
+        return any(heading in line for heading in headings) and not any(
+            self._contains_term(line, term) for term in self.TECH_TERMS
+        )
+
+    def _looks_like_requirement(self, line: str) -> bool:
+        if any(self._contains_term(line, term) for term in self.TECH_TERMS):
+            return True
+        markers = ["경험", "역량", "담당", "개발", "운영", "설계", "개선", "최적화", "유지보수"]
+        return any(marker in line for marker in markers)
+
+    def _normalize_requirement_label(self, line: str) -> str:
+        label = re.sub(r"\s*개발합니다$", " 개발", line)
+        label = re.sub(r"\s*운영합니다$", " 운영", label)
+        label = re.sub(r"\s*(담당|수행)합니다$", "", label)
+        label = re.sub(r"\s*찾습니다$", "", label)
+        label = re.sub(r"\s*우대합니다$", "", label)
+        label = re.sub(r"\s*(있는|있으신|이신|하신)?\s*분[을를]?$", "", label)
+        label = re.sub(r"([가-힣])[을를]\s+(개발|운영)$", r"\1 \2", label)
+        label = re.sub(r"([가-힣])[이가은는을를]$", r"\1", label)
+        label = label.strip(" .")
+        return label
+
+    def _extract_terms_for_requirement(self, line: str) -> list[str]:
+        terms = []
+        for term in self.TECH_TERMS:
+            if self._contains_term(line, term) and term not in terms:
+                terms.append(term)
+        english_tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#/.&-]{1,}", line)
+        for token in english_tokens:
+            if token not in terms:
+                terms.append(token)
+        korean_terms = [
+            "데이터베이스", "스크린 골프", "매장 관리", "타석 예약", "성능 개선",
+            "유지보수", "신규 개발", "무선 업데이트", "차량용 OS", "시스템 안정성",
+            "메모리 누수", "예외 처리", "트러블슈팅",
+        ]
+        for term in korean_terms:
+            if term in line and term not in terms:
+                terms.append(term)
+        return terms
+
+    def _build_evidence_sources(self, interview_session: str, resume_summary: str) -> list[dict[str, str]]:
+        sources = []
+        if resume_summary.strip():
+            sources.append({"source": "지원자 제출 문서", "text": resume_summary, "answer": resume_summary})
+
+        pattern = re.compile(r"Q(\d+)\.\s*(.*?)(?:\nA\1\.\s*(.*?))(?=\nQ\d+\.|\Z)", re.DOTALL)
+        for match in pattern.finditer(interview_session or ""):
+            question_no, question, answer = match.groups()
+            sources.append({
+                "source": f"Q{question_no}",
+                "text": f"{question}\n{answer}",
+                "question": question,
+                "answer": answer,
+            })
+
+        if not sources and interview_session.strip():
+            sources.append({"source": "면접 답변", "text": interview_session, "answer": interview_session})
+        return sources
+
+    def _find_requirement_evidence(self, terms: list[str], sources: list[dict[str, str]]) -> dict[str, str] | None:
+        weak_candidate: dict[str, str] | None = None
+
+        for source in sources:
+            text = source.get("answer") or source["text"]
+            lower_text = text.lower()
+            matched_terms = [
+                term
+                for term in terms
+                if term and self._contains_term(lower_text, term)
+            ]
+            if not matched_terms:
+                continue
+            strong_terms = [
+                term for term in matched_terms
+                if term not in self.WEAK_EVIDENCE_TERMS and len(term) > 1
+            ]
+            if len(matched_terms) < 2 and not strong_terms:
+                continue
+
+            context = self._evidence_context(text, matched_terms)
+            snippet = self._evidence_snippet(context, matched_terms[0])
+            if self._has_negative_context(context) or self._is_weak_context(context):
+                weak_candidate = weak_candidate or {
+                    "source": source["source"],
+                    "quality": "weak",
+                    "reason": (
+                        f"{source['source']}에서 '{snippet}'처럼 {', '.join(matched_terms[:3])} 언급은 있으나, "
+                        "직접 수행 경험이나 적용 결과가 충분히 확인되지 않습니다."
+                    ),
+                }
+                continue
+
+            if self._has_action_evidence(context) or self._has_result_evidence(context):
+                return {
+                    "source": source["source"],
+                    "quality": "strong",
+                    "summary": (
+                        f"{source['source']}에서 '{snippet}' 내용으로 "
+                        f"{', '.join(matched_terms[:3])} 관련 수행 근거가 확인됩니다."
+                    ),
+                }
+
+            weak_candidate = weak_candidate or {
+                "source": source["source"],
+                "quality": "weak",
+                "reason": (
+                    f"{source['source']}에서 '{snippet}'처럼 {', '.join(matched_terms[:3])} 언급은 있으나, "
+                    "본인 역할, 적용 방식, 결과 수치가 함께 제시되지 않았습니다."
+                ),
+            }
+        return weak_candidate
+
+    def _build_gap_reason(self, requirement_label: str, evidence: dict[str, str] | None) -> str:
+        if evidence and evidence.get("quality") == "weak":
+            return (
+                f"공고에는 {requirement_label}{self._subject_particle(requirement_label)} 요구됩니다. {evidence['reason']} "
+                "따라서 현재 답변만으로는 부분 충족 수준으로 보고, 추가 근거가 필요합니다."
+            )
+        return (
+            f"공고에는 {requirement_label}{self._subject_particle(requirement_label)} 요구되지만, "
+            "지원자 제출 문서와 면접 답변에서 직접적인 수행 근거가 충분히 확인되지 않습니다."
+        )
+
+    def _build_recommendation(self, missing_skill: str) -> str:
+        label = missing_skill or ""
+        if any(term in label for term in ["SDV", "OTA", "차량", "커넥티드", "자율주행"]):
+            return "SDV/OTA 구조와 차량 데이터 흐름을 정리하고, 서버와 차량 SW 안정성을 연결해 설명할 수 있는 사례를 준비하세요."
+        if any(term in label for term in ["C/C++", "C++", "Linux", "리눅스", "임베디드", "메모리", "디버깅"]):
+            return "C/C++ 또는 Linux 환경에서 재현 조건, 로그 분석, 수정 결과가 드러나는 시스템 디버깅 경험을 구체화하세요."
+        if any(term in label for term in ["AWS", "Docker", "배포", "CI/CD", "Jenkins", "GitHub Actions", "클라우드"]):
+            return "Docker/AWS 배포 흐름과 장애 시 롤백, 모니터링, 환경 변수 관리 경험을 간단한 프로젝트로 보완하세요."
+        if any(term in label for term in ["DB", "데이터베이스", "MySQL", "Mongo", "Redis", "인덱스", "쿼리", "튜닝", "성능"]):
+            return "실행 계획 기반 인덱스 튜닝, Redis 캐시 무효화, 적용 전후 성능 수치를 포함한 DB 개선 사례를 준비하세요."
+        if any(term in label for term in ["Spring", "Java", "API", "백엔드", "REST", "서비스"]):
+            return "Spring Boot API 설계, 예외 처리, 로그 기반 장애 추적까지 이어지는 백엔드 운영 경험을 한 사례로 정리하세요."
+        return f"{missing_skill}에 대해 사용 기술, 본인 역할, 적용 결과를 한 답변 안에서 함께 정리하세요."
+
+    def _has_action_evidence(self, text: str) -> bool:
+        return any(marker in (text or "") for marker in self.ACTION_MARKERS)
+
+    def _has_result_evidence(self, text: str) -> bool:
+        return any(re.search(pattern, text or "", re.IGNORECASE) for pattern in self.RESULT_PATTERNS)
+
+    def _has_negative_context(self, text: str) -> bool:
+        return any(pattern in (text or "") for pattern in self.NEGATIVE_CONTEXT_PATTERNS)
+
+    def _is_weak_context(self, text: str) -> bool:
+        normalized = text or ""
+        if not any(pattern in normalized for pattern in self.WEAK_CONTEXT_PATTERNS):
+            return False
+        return not (self._has_action_evidence(normalized) and self._has_result_evidence(normalized))
+
+    def _subject_particle(self, text: str) -> str:
+        stripped = (text or "").strip()
+        if not stripped:
+            return "이"
+        last_char = stripped[-1]
+        code = ord(last_char)
+        if 0xAC00 <= code <= 0xD7A3:
+            return "이" if (code - 0xAC00) % 28 else "가"
+        return "가"
+
+    def _contains_term(self, text: str, term: str) -> bool:
+        if not text or not term:
+            return False
+        normalized_text = text.lower()
+        normalized_term = term.lower()
+        if re.fullmatch(r"[a-z0-9+#/.&-]+", normalized_term):
+            pattern = rf"(?<![a-z0-9+#/.&-]){re.escape(normalized_term)}(?![a-z0-9+#/.&-])"
+            return re.search(pattern, normalized_text) is not None
+        return normalized_term in normalized_text
+
+    def _evidence_snippet(self, text: str, term: str) -> str:
+        compact = re.sub(r"\s+", " ", text or "").strip()
+        index = compact.lower().find(term.lower())
+        if index < 0:
+            return compact[:90]
+        start = max(0, index - 35)
+        end = min(len(compact), index + len(term) + 55)
+        snippet = compact[start:end].strip()
+        if start > 0:
+            snippet = "..." + snippet
+        if end < len(compact):
+            snippet += "..."
+        return snippet
+
+    def _evidence_context(self, text: str, matched_terms: list[str]) -> str:
+        compact = re.sub(r"\s+", " ", text or "").strip()
+        if not compact:
+            return ""
+        units = [
+            unit.strip()
+            for unit in re.split(r"(?<=[.!?。])\s+|\n+", text or "")
+            if unit.strip()
+        ]
+        for unit in units:
+            if any(self._contains_term(unit, term) for term in matched_terms):
+                return re.sub(r"\s+", " ", unit).strip()
+        return self._evidence_snippet(compact, matched_terms[0] if matched_terms else "")
 
     def _normalize_requirement(self, requirement: str) -> str:
         normalized = re.sub(r"\s+", "", requirement or "")

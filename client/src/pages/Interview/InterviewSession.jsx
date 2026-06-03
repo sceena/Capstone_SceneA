@@ -422,6 +422,23 @@ export default function InterviewSession({ role = "mentee" }) {
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const [connectionState, setConnectionState] = useState("connecting"); // connecting | connected | reconnecting | failed
 
+  /* peerId(=userId) → { name, role } 맵 */
+  const peerInfoMap = (() => {
+    const map = {};
+    (sessionData?.participants ?? []).forEach(p => {
+      const uid = String(p.user_id ?? p.userId ?? p.id ?? "");
+      if (uid) map[uid] = { name: p.name ?? "참여자", role: (p.role ?? p.memberRole ?? "").toLowerCase() };
+    });
+    return map;
+  })();
+
+  const getPeerLabel = (peerId) => {
+    const info = peerInfoMap[String(peerId)];
+    if (!info) return "참여자";
+    const roleLabel = info.role === "mentor" ? " (멘토)" : info.role === "mentee" ? " (멘티)" : "";
+    return `${info.name}${roleLabel}`;
+  };
+
   /* ── 미디어 소비 ── */
   const consumeProducer = useCallback((producerId, peerId, kind) => {
     return new Promise((resolve) => {
@@ -1159,7 +1176,7 @@ export default function InterviewSession({ role = "mentee" }) {
                     {mainViewId === '__local' ? (
                       <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted isSpeaking camOff={!camOn} micOff={!micOn} />
                     ) : (
-                      <VideoTile stream={peersRef.current[mainViewId]} label="상대방" isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
+                      <VideoTile stream={peersRef.current[mainViewId]} label={getPeerLabel(mainViewId)} isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
                     )}
                   </div>
                   <div style={{ height: 110, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
@@ -1168,7 +1185,7 @@ export default function InterviewSession({ role = "mentee" }) {
                     </div>
                     {peerIds.map(peerId => (
                       <div key={peerId} style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
-                        <VideoTile stream={peersRef.current[peerId]} label="참여자" isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
+                        <VideoTile stream={peersRef.current[peerId]} label={getPeerLabel(peerId)} isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
                       </div>
                     ))}
                   </div>

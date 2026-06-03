@@ -39,14 +39,6 @@ const KakaoIcon = () => (
   </svg>
 );
 
-/* ── 네이버 아이콘 ── */
-const NaverIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#03C75A"/>
-    <path d="M13.6 12.7L10 7H7v10h3.4v-5.7L14 17h3V7h-3.4z" fill="white"/>
-  </svg>
-);
-
 /* ── 눈 아이콘 (비밀번호 토글) ── */
 const EyeIcon = ({ open }) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -482,29 +474,6 @@ export default function Login() {
                   onMouseLeave={e => { e.currentTarget.style.background = "#FEE500"; e.currentTarget.style.transform = "translateY(0)"; }}
                 >
                   <KakaoIcon/> <span>카카오</span>
-                </button>
-                <button
-                  type="button"
-                  className="social-btn"
-                  onClick={() => setOauthTarget("naver")}
-                  style={{
-                    flex: 1,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    gap: 8, padding: "12px 0",
-                    background: "#03C75A",
-                    border: "1px solid #03C75A",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    fontFamily: "'Noto Sans KR', sans-serif",
-                    fontSize: 13, fontWeight: 500,
-                    color: "#FFFFFF",
-                    transition: "background 0.18s, transform 0.15s",
-                    whiteSpace: "nowrap",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "#02B350"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "#03C75A"; e.currentTarget.style.transform = "translateY(0)"; }}
-                >
-                  <NaverIcon/> <span>네이버</span>
                 </button>
               </div>
 

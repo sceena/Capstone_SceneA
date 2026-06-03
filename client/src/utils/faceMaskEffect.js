@@ -308,8 +308,7 @@ export class FaceMaskEffect {
     return { cx, cy, fw, fh };
   }
 
-  _getMaskBounds({ cx, cy, fw, fh }, padding = 0.28) {
-    const canvas = this._canvas;
+  _getMaskBounds({ cx, cy, fw, fh }, padding = 0.28, canvas = this._canvas) {
     if (!canvas) return null;
 
     const width = Math.max(32, fw * (1 + padding));
@@ -323,14 +322,12 @@ export class FaceMaskEffect {
     return { x, y, w, h };
   }
 
-  _applyBlurMask(parsed) {
-    const ctx = this._ctx;
-    const canvas = this._canvas;
+  _applyBlurMask(parsed, ctx = this._ctx, canvas = this._canvas, drawLabel = true) {
     const scratch = this._scratchCanvas;
     const scratchCtx = this._scratchCtx;
     if (!ctx || !canvas || !scratch || !scratchCtx) return;
 
-    const bounds = this._getMaskBounds(parsed, 0.5);
+    const bounds = this._getMaskBounds(parsed, 0.5, canvas);
     if (!bounds) return;
 
     const { x, y, w, h } = bounds;
@@ -350,11 +347,12 @@ export class FaceMaskEffect {
     ctx.fillRect(x, y, w, h);
     ctx.restore();
 
-    this._drawBlurLabel(parsed, w);
+    if (drawLabel) {
+      this._drawBlurLabel(parsed, w, ctx);
+    }
   }
 
-  _drawBlurLabel(parsed, maskWidth) {
-    const ctx = this._ctx;
+  _drawBlurLabel(parsed, maskWidth, ctx = this._ctx) {
     const label = this._displayName;
     if (!ctx || !label) return;
 
@@ -499,6 +497,23 @@ export class FaceMaskEffect {
     ctx.setTransform(-1, 0, 0, 1, target.width, 0);
     ctx.drawImage(source, 0, 0, target.width, target.height);
     ctx.restore();
+
+    if (this._maskOption.type !== "blur") return;
+
+    for (const det of this._latestDetections) {
+      const parsed = this._parseBoundingBox(det);
+      if (!parsed) continue;
+
+      const mirrored = {
+        ...parsed,
+        cx: target.width - parsed.cx,
+      };
+      const bounds = this._getMaskBounds(mirrored, 0.5, target);
+      if (!bounds) continue;
+
+      this._applyBlurMask(mirrored, ctx, target, false);
+      this._drawBlurLabel(mirrored, bounds.w, ctx);
+    }
   }
 
   _requestDetection() {

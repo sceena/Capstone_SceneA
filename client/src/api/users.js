@@ -69,7 +69,7 @@ export async function getUserSessions() {
  * GET /api/users/mentors
  * 멘토 목록 조회. keyword(검색어), page, size 지원.
  */
-export async function getMentors({ keyword = "", page = 0, size = 20 } = {}) {
+export async function getMentors({ keyword = "", page = 0, size = 1000 } = {}) {
   const params = new URLSearchParams({ page, size });
   if (keyword) params.set("keyword", keyword);
   const res = await fetch(`/api/users/mentors?${params}`, { headers: authHeaders() });

@@ -143,6 +143,7 @@ const Dropdown = ({ label, options, value, onChange }) => {
 const MentorCard = ({ m, onClick }) => {
   const { user } = useAuthStore();
   const isMentor = user?.role === "mentor";
+  const [imgFailed, setImgFailed] = useState(false);
   const jobStr = m.tags?.find(t => t.category === "직무")?.name
     || m.tags?.find(t => t.category === "기술스택")?.name
     || m.job_title || "";
@@ -162,9 +163,10 @@ const MentorCard = ({ m, onClick }) => {
     >
       {/* 상단: 아바타 + 이름 */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 16 }}>
-        {m.profile_image_url ? (
+        {m.profile_image_url && !imgFailed ? (
           <img src={m.profile_image_url} alt={m.name}
-            style={{ width: 68, height: 68, borderRadius: "50%", objectFit: "cover", marginBottom: 12, border: `2px solid ${C.border}` }}/>
+            style={{ width: 68, height: 68, borderRadius: "50%", objectFit: "cover", marginBottom: 12, border: `2px solid ${C.border}` }}
+            onError={() => setImgFailed(true)} />
         ) : (
           <JobAvatar jobStr={jobStr} size={68} style={{ marginBottom: 12 }}/>
         )}
@@ -289,7 +291,9 @@ export default function MentorSearch() {
   const [openPanel, setOpenPanel] = useState("");
   const [hoverMajor, setHoverMajor] = useState(JOB_TREE[0].major);
   const [filters, setFilters]     = useState({ job: "", career: "", sessionType: "" });
+  const [page, setPage]           = useState(1);
   const filterRef = useRef(null);
+  const PAGE_SIZE = 15;
 
   const fetchMentors = (kw = "") => {
     setLoading(true); setError("");
@@ -336,19 +340,24 @@ export default function MentorSearch() {
 
   const hasFilter = filters.job || filters.career || filters.sessionType;
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedMentors = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const togglePanel = (name) => setOpenPanel(p => p === name ? "" : name);
 
   // 대분류 클릭: 소분류 목록만 보여줌 (패널 유지)
   const selectMajor = (major) => {
     setHoverMajor(major);
     setFilters(p => ({ ...p, job: major }));
+    setPage(1);
   };
 
   // 소분류 클릭: 선택 후 패널 닫기
-  const selectJob = (val) => { setFilters(p => ({ ...p, job: val })); setOpenPanel(""); };
-  const selectCareer = (val) => { setFilters(p => ({ ...p, career: val })); setOpenPanel(""); };
-  const selectSession = (val) => { setFilters(p => ({ ...p, sessionType: val })); setOpenPanel(""); };
-  const resetAll = () => { setSearch(""); fetchMentors(""); setFilters({ job: "", career: "", sessionType: "" }); setOpenPanel(""); };
+  const selectJob = (val) => { setFilters(p => ({ ...p, job: val })); setOpenPanel(""); setPage(1); };
+  const selectCareer = (val) => { setFilters(p => ({ ...p, career: val })); setOpenPanel(""); setPage(1); };
+  const selectSession = (val) => { setFilters(p => ({ ...p, sessionType: val })); setOpenPanel(""); setPage(1); };
+  const resetAll = () => { setSearch(""); fetchMentors(""); setFilters({ job: "", career: "", sessionType: "" }); setOpenPanel(""); setPage(1); };
+  const handleSearchWithReset = () => { handleSearch(); setPage(1); };
 
   return (
     <>
@@ -385,7 +394,7 @@ export default function MentorSearch() {
               placeholder="멘토 이름, 태그, 소개로 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleSearch()}
+              onKeyDown={e => e.key === "Enter" && handleSearchWithReset()}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               style={{
@@ -398,7 +407,7 @@ export default function MentorSearch() {
               }}
             />
           </div>
-          <button onClick={handleSearch} style={{
+          <button onClick={handleSearchWithReset} style={{
             padding: "0 28px", borderRadius: 12,
             background: C.primaryGrad, color: C.white, border: "none",
             fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
@@ -625,11 +634,55 @@ export default function MentorSearch() {
         {/* 멘토 그리드 — minHeight 고정으로 스크롤바 변동 방지 */}
         <div style={{ minHeight: 600 }}>
         {!loading && !error && filtered.length > 0 && (
-          <div className="mgrid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
-            {filtered.map(m => (
-              <MentorCard key={m.id} m={m} onClick={() => navigate(`/mentor/apply/${m.id}`, { state: { mentor: m } })}/>
-            ))}
-          </div>
+          <>
+            <div className="mgrid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+              {pagedMentors.map(m => (
+                <MentorCard key={m.id} m={m} onClick={() => navigate(`/mentor/apply/${m.id}`, { state: { mentor: m } })}/>
+              ))}
+            </div>
+
+            {/* 페이지네이션 */}
+            {totalPages > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, marginTop: 40 }}>
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    border: `1.5px solid ${C.border}`, background: C.white,
+                    color: page === 1 ? C.textMuted : C.text,
+                    fontSize: 14, cursor: page === 1 ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: page === 1 ? 0.4 : 1, transition: "all 0.15s",
+                  }}
+                >‹</button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+                  <button key={n} onClick={() => setPage(n)} style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    border: `1.5px solid ${page === n ? C.primary : C.border}`,
+                    background: page === n ? C.primary : C.white,
+                    color: page === n ? C.white : C.text,
+                    fontSize: 13, fontWeight: page === n ? 700 : 400,
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}>{n}</button>
+                ))}
+
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    border: `1.5px solid ${C.border}`, background: C.white,
+                    color: page === totalPages ? C.textMuted : C.text,
+                    fontSize: 14, cursor: page === totalPages ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: page === totalPages ? 0.4 : 1, transition: "all 0.15s",
+                  }}
+                >›</button>
+              </div>
+            )}
+          </>
         )}
 
         {/* 빈 상태 */}

@@ -31,6 +31,7 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -67,7 +68,7 @@ public class QuestionService {
                 .mapToObj(i -> InterviewQuestion.builder()
                         .interviewSession(session)
                         .content(items.get(i).content())
-                        .questionType(items.get(i).questionType())
+                        .questionType(normalizeQuestionType(items.get(i).questionType()))
                         .candidateId(items.get(i).candidateId())
                         .orderIndex(nextOrderIndex + i)
                         .build())
@@ -94,7 +95,7 @@ public class QuestionService {
                 throw new CustomException(ErrorCode.INVALID_REQUEST);
             }
 
-            String questionType = item.questionType();
+            String questionType = normalizeQuestionType(item.questionType());
             if ("COMMON".equals(questionType) && item.candidateId() != null) {
                 throw new CustomException(ErrorCode.INVALID_REQUEST);
             }
@@ -111,14 +112,26 @@ public class QuestionService {
     }
 
     @Transactional
-    public QuestionCreateResponse uploadQuestionAudio(Long mentorId, Long sessionId, MultipartFile audio) {
+    public QuestionCreateResponse uploadQuestionAudio(Long mentorId, Long sessionId, MultipartFile audio,
+                                                      String questionType, Long candidateId) {
         InterviewSession session = findSession(sessionId);
         validateMentorAccess(mentorId, session);
+        String normalizedQuestionType = normalizeQuestionType(questionType);
+        validateQuestionTargets(
+                session,
+                List.of(new QuestionCreateRequest.QuestionItem(
+                        "질문 음성 변환 중입니다.",
+                        normalizedQuestionType,
+                        candidateId
+                ))
+        );
 
         int orderIndex = questionRepository.findAllByInterviewSessionOrderByOrderIndex(session).size();
         InterviewQuestion question = InterviewQuestion.builder()
                 .interviewSession(session)
                 .content("질문 음성 변환 중입니다.")
+                .questionType(normalizedQuestionType)
+                .candidateId(candidateId)
                 .orderIndex(orderIndex)
                 .build();
 
@@ -200,6 +213,18 @@ public class QuestionService {
         if (session.getStatus() != SessionStatus.SCHEDULED) {
             throw new CustomException(ErrorCode.QUESTION_MODIFICATION_LOCKED);
         }
+    }
+
+    private String normalizeQuestionType(String questionType) {
+        if (questionType == null || questionType.isBlank()) {
+            return null;
+        }
+
+        String normalized = questionType.trim().toUpperCase(Locale.ROOT);
+        if (!"COMMON".equals(normalized) && !"PERSONAL".equals(normalized)) {
+            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        }
+        return normalized;
     }
 
     private String uploadToS3(MultipartFile file) {

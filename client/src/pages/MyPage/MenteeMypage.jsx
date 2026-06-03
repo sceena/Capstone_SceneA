@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import useAuthStore, { clearAuthUser, setAuthUser, getAuthUser } from "../../store/authStore";
 import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
 import { getSessionReport } from "../../api/sessions";
 import { getMenteeReservations } from "../../api/reservations";
@@ -210,14 +210,24 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
             {silence > 0 && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.dangerLight, color: C.danger }}>침묵 {silence}회</span>}
           </div>
           <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>멘토 {mentor} · {date} · {type}</p>
-          <button onClick={() => id && navigate(`/report/ai/${id}`)} style={{
-            padding: "8px 18px", background: C.primaryGrad, color: C.white,
-            border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-            boxShadow: "0 4px 10px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-          >리포트 보기 →</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => id && navigate(`/report/ai/${id}`)} style={{
+              padding: "8px 14px", background: C.white, color: C.primary,
+              border: `1px solid ${C.primary}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+              transition: "opacity 0.15s",
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >AI 리포트</button>
+            <button onClick={() => id && navigate(`/report/final/${id}`, { state: { sessionId: id, role: "mentee" } })} style={{
+              padding: "8px 14px", background: C.primaryGrad, color: C.white,
+              border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+              boxShadow: "0 4px 10px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >최종 리포트 →</button>
+          </div>
         </div>
       </div>
     </div>
@@ -232,8 +242,22 @@ const RESERVATION_STATUS = {
   CANCELLED: { label: "취소됨",  bg: C.bg,      color: C.textMuted },
 };
 
+const SESSION_STATUS = {
+  COMPLETED:   { label: "세션 종료", bg: "#F0F4FF", color: "#4C6EF5" },
+  IN_PROGRESS: { label: "진행 중",   bg: "#FFF3BF", color: "#E67700" },
+  SCHEDULED:   { label: "예정됨",    bg: "#E6FCF5", color: "#0CA678" },
+  PENDING:     { label: "대기 중",   bg: C.bg,      color: C.textMuted },
+};
+
 const ReservationItem = ({ r }) => {
-  const status = RESERVATION_STATUS[r.status?.toUpperCase()] || RESERVATION_STATUS.PENDING;
+  const sessionStatus = r.session_status || r.sessionStatus;
+  const reservStatus = r.status?.toUpperCase();
+  // 세션이 완료된 경우 "세션 종료"를 우선 표시
+  const status = (reservStatus === "ACCEPTED" && sessionStatus === "COMPLETED")
+    ? SESSION_STATUS.COMPLETED
+    : (sessionStatus && reservStatus === "ACCEPTED" && SESSION_STATUS[sessionStatus?.toUpperCase()])
+    ? SESSION_STATUS[sessionStatus.toUpperCase()]
+    : RESERVATION_STATUS[reservStatus] || RESERVATION_STATUS.PENDING;
   const scheduledAt = r.scheduled_at || r.scheduledAt;
   const createdAt   = r.created_at   || r.createdAt;
   const formatDate  = v => v ? new Date(v).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
@@ -300,10 +324,15 @@ function deriveRadarFromReport(qr) {
 }
 
 /* ── 프로필 수정 모달 ── */
-function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
+function EditProfileModal({ onClose, userEmail, onImageChange, initialBio, profile, onProfileRefresh, onNameSaved }) {
   const [tab, setTab] = useState("name");
   const [name, setName] = useState("");
   const [bio, setBio] = useState(initialBio || "");
+  const [school, setSchool] = useState(() => profile?.tags?.find(t => t.category === "학교")?.name || "");
+  const [major, setMajor] = useState(() => profile?.tags?.find(t => t.category === "전공")?.name || "");
+  const [position, setPosition] = useState(() => profile?.tags?.find(t => t.category === "관심직무")?.name || "");
+  const [targetCompany, setTargetCompany] = useState(() => profile?.tags?.find(t => t.category === "목표기업")?.name || "");
+  const [techStack, setTechStack] = useState(() => profile?.tags?.filter(t => t.category === "기술스택").map(t => t.name).join(", ") || "");
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -325,10 +354,11 @@ function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
     if (!imgFile) { setError("이미지를 선택해주세요."); return; }
     setSaving(true);
     try {
-      const res = await updateMyProfile({}, imgFile);
-      const url = res?.profile_image_url || imgPreview;
-      localStorage.setItem(`profile_img_${userEmail}`, url);
-      onImageChange?.(url);
+      await updateMyProfile({}, imgFile);
+      // S3 URL은 img 태그에서 인증 없이 로드 불가 → base64 미리보기를 localStorage에 저장하고 즉시 표시
+      onImageChange?.(imgPreview);
+      try { if (imgPreview) localStorage.setItem(`profile_img_${userEmail}`, imgPreview); } catch {}
+      await onProfileRefresh?.();
       setDone(true); setTimeout(onClose, 900);
     } catch { setError("이미지 저장에 실패했습니다."); setSaving(false); }
   };
@@ -336,11 +366,36 @@ function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
   const handleSave = async () => {
     setError("");
     const data = {};
-    if (tab === "name") { if (!name.trim()) { setError("이름을 입력해주세요."); return; } data.name = name.trim(); }
-    else if (tab === "bio") { data.bio = bio.trim(); }
-    else { if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; } if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; } data.password = pwNew; }
+    if (tab === "name") {
+      if (!name.trim()) { setError("이름을 입력해주세요."); return; }
+      data.name = name.trim();
+    } else if (tab === "bio") {
+      data.bio = bio.trim();
+    } else if (tab === "info") {
+      const seen = new Set();
+      const tags = [];
+      const add = (val, category) => {
+        const trimmed = val?.trim();
+        if (trimmed && !seen.has(trimmed)) { seen.add(trimmed); tags.push({ name: trimmed, category }); }
+      };
+      add(school, "학교");
+      add(major, "전공");
+      add(position, "관심직무");
+      add(targetCompany, "목표기업");
+      techStack.split(",").forEach(v => add(v, "기술스택"));
+      data.tags = tags;
+    } else {
+      if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; }
+      if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
+      data.password = pwNew;
+    }
     setSaving(true);
-    try { await updateMyProfile(data); setDone(true); setTimeout(onClose, 900); }
+    try {
+      await updateMyProfile(data);
+      if (tab === "name" && data.name) onNameSaved?.(data.name);
+      await onProfileRefresh?.();
+      setDone(true); setTimeout(onClose, 900);
+    }
     catch (e) { setError(e?.status === 401 ? "로그인이 만료되었습니다." : "저장에 실패했습니다."); setSaving(false); }
   };
 
@@ -361,7 +416,7 @@ function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
         ) : (
           <>
             <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 22 }}>
-              {[{ k: "name", l: "이름" }, { k: "bio", l: "소개" }, { k: "password", l: "비밀번호" }, { k: "image", l: "사진" }].map(t => (
+              {[{ k: "name", l: "이름" }, { k: "bio", l: "소개" }, { k: "info", l: "프로필" }, { k: "password", l: "비밀번호" }, { k: "image", l: "사진" }].map(t => (
                 <button key={t.k} onClick={() => { setTab(t.k); setError(""); }} style={{
                   flex: 1, padding: "10px 0", background: "transparent", border: "none",
                   borderBottom: `2.5px solid ${tab === t.k ? C.primary : "transparent"}`,
@@ -383,6 +438,37 @@ function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
                 <textarea value={bio} onChange={e => setBio(e.target.value.slice(0, 100))} placeholder="나를 간단히 소개해주세요" rows={3}
                   style={{ ...inp, resize: "none", lineHeight: 1.6 }}
                   onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+              </div>
+            )}
+            {tab === "info" && (
+              <div style={{ marginBottom: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>학교</label>
+                    <input value={school} onChange={e => setSchool(e.target.value)} placeholder="예) 한양대학교" style={inp}
+                      onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>전공</label>
+                    <input value={major} onChange={e => setMajor(e.target.value)} placeholder="예) 컴퓨터공학과" style={inp}
+                      onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>관심 직무</label>
+                  <input value={position} onChange={e => setPosition(e.target.value)} placeholder="예) 백엔드 개발, 데이터 분석" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>목표 기업</label>
+                  <input value={targetCompany} onChange={e => setTargetCompany(e.target.value)} placeholder="예) 네이버, 카카오, IT 스타트업" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>기술 스택</label>
+                  <input value={techStack} onChange={e => setTechStack(e.target.value)} placeholder="예) Python, React, Java (쉼표로 구분)" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
               </div>
             )}
             {tab === "password" && (
@@ -439,19 +525,43 @@ export default function MenteeMyPage() {
   const [apiSessions, setApiSessions] = useState([]);
   const [latestReport, setLatestReport] = useState(null);
   const [reservations, setReservations] = useState([]);
+
+  const hasResume = (() => {
+    try {
+      const key = `scena_resume_draft:${user?.email || user?.id || "anonymous"}`;
+      const job = localStorage.getItem(`${key}:job`);
+      const items = localStorage.getItem(key);
+      if (job) { const p = JSON.parse(job); if (p?.requirements || p?.looking_for) return true; }
+      if (items) { const arr = JSON.parse(items); if (arr?.some(i => i.content?.trim())) return true; }
+    } catch {}
+    return false;
+  })();
   const [showEdit, setShowEdit]       = useState(false);
-  const [profileImage, setProfileImage] = useState(
-    () => localStorage.getItem(`profile_img_${user?.email}`)
-      || user?.profileData?.profile_image_url
-      || null
-  );
+  const [profileImage, setProfileImage] = useState(() => {
+    const stored = localStorage.getItem(`profile_img_${user?.email}`);
+    return stored?.startsWith("data:") ? stored : null;
+  });
 
   useEffect(() => {
     getMyProfile().then(p => {
       setProfile(p);
-      if (p?.profile_image_url) {
-        setProfileImage(p.profile_image_url);
-        localStorage.setItem(`profile_img_${user?.email}`, p.profile_image_url);
+      const stored = localStorage.getItem(`profile_img_${user?.email}`);
+      const hasBase64 = stored?.startsWith("data:");
+      if (!hasBase64 && p?.profile_image_url) {
+        // S3 URL → fetch → base64 변환 후 localStorage 저장
+        fetch(p.profile_image_url)
+          .then(r => r.ok ? r.blob() : null)
+          .then(blob => {
+            if (!blob) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+              const b64 = e.target.result;
+              try { localStorage.setItem(`profile_img_${user?.email}`, b64); } catch {}
+              setProfileImage(b64);
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => {});
       }
     }).catch(() => {});
 
@@ -587,7 +697,7 @@ export default function MenteeMyPage() {
             <div style={{ background: C.white, borderRadius: 20, padding: "24px 20px", boxShadow: C.shadow }}>
               <div style={{ textAlign: "center", marginBottom: 18 }}>
                 {profileImage
-                  ? <img src={profileImage} alt="profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px", display: "block", border: `2px solid ${C.border}` }} />
+                  ? <img src={profileImage} alt="profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px", display: "block", border: `2px solid ${C.border}` }} onError={e => { e.currentTarget.style.display = "none"; setProfileImage(null); }} />
                   : <JobAvatar jobStr={profile?.tags?.find(t => t.category === "관심직무")?.name || ""} size={72} style={{ margin: "0 auto 12px" }} />
                 }
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 2 }}>{displayName}</p>
@@ -632,12 +742,30 @@ export default function MenteeMyPage() {
                   </div>
                 ))}
               </div>
+
+              {/* 프로필 수정 버튼 — 프로필 카드 안에 배치 */}
+              <button onClick={() => setShowEdit(true)} style={{
+                marginTop: 14, width: "100%", padding: "10px",
+                borderRadius: 10, border: `1px solid ${C.border}`,
+                background: C.white, color: C.text,
+                fontSize: 13, fontWeight: 500, cursor: "pointer",
+                fontFamily: "inherit", transition: "all 0.15s",
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text; }}
+              >프로필 수정</button>
             </div>
 
-            {/* 면접 정보 등록 — 세션이 없는 신규 사용자에게만 표시 */}
-            {apiSessions.length === 0 && <div style={{ background: C.primaryGrad, borderRadius: 16, padding: "18px 18px", boxShadow: "0 6px 20px rgba(13,34,64,0.2)" }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 4 }}>면접 정보 등록</p>
-              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.6, marginBottom: 14 }}>채용공고와 자소서를 등록하면 AI가 맞춤 질문을 생성해요</p>
+            {/* 면접 정보 카드 — 미등록 시 등록 유도, 등록 시 수정 링크 */}
+            <div style={{ background: C.primaryGrad, borderRadius: 16, padding: "18px 18px", boxShadow: "0 6px 20px rgba(13,34,64,0.2)" }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 4 }}>
+                {hasResume ? "면접 정보 관리" : "면접 정보 등록"}
+              </p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.6, marginBottom: 14 }}>
+                {hasResume
+                  ? "등록한 채용공고·자소서를 수정할 수 있어요"
+                  : "채용공고와 자소서를 등록하면 AI가 맞춤 질문을 생성해요"}
+              </p>
               <Link to="/mentee/resume" style={{
                 display: "block", textAlign: "center",
                 padding: "9px", borderRadius: 8,
@@ -647,20 +775,14 @@ export default function MenteeMyPage() {
               }}
                 onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
                 onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-              >등록하러 가기 →</Link>
-            </div>}
-
-            {/* 프로필 수정 / 탈퇴 */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button onClick={() => setShowEdit(true)} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.white, color: C.text, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s", boxShadow: C.shadow }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text; }}
-              >프로필 수정</button>
-              <button onClick={handleWithdraw} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = C.danger; e.currentTarget.style.color = C.danger; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMuted; }}
-              >회원탈퇴</button>
+              >{hasResume ? "수정하러 가기 →" : "등록하러 가기 →"}</Link>
             </div>
+
+            {/* 회원탈퇴 */}
+            <button onClick={handleWithdraw} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = C.danger; e.currentTarget.style.color = C.danger; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMuted; }}
+            >회원탈퇴</button>
           </div>
 
           {/* ── 메인 콘텐츠 ── */}
@@ -716,6 +838,48 @@ export default function MenteeMyPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* 최종 리포트 바로가기 */}
+                {latestSession && (
+                  <div style={{ background: C.white, borderRadius: 16, padding: "18px 22px", boxShadow: C.shadow, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: C.successLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.success} strokeWidth="2" strokeLinecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                      </div>
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>
+                          {latestReport?.report_status === "final" ? "최종 리포트 완성" : "최신 세션 리포트"}
+                        </p>
+                        <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>
+                          {latestReport?.report_status === "final"
+                            ? "멘토 코멘트와 AI 분석이 모두 포함된 최종 리포트입니다"
+                            : latestReport ? "AI 리포트가 준비됐어요 · 멘토 최종 리포트 작성 대기 중" : "리포트 준비 중입니다"}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      {latestReport && (
+                        <button onClick={() => navigate(`/report/ai/${latestSession.id}`)} style={{
+                          padding: "9px 16px", borderRadius: 10, border: `1px solid ${C.primary}`, background: C.white,
+                          color: C.primary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.15s",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                        >AI 리포트</button>
+                      )}
+                      {latestSession && (
+                        <button onClick={() => navigate(`/report/final/${latestSession.id}`, { state: { sessionId: latestSession.id, role: "mentee" } })} style={{
+                          padding: "9px 16px", borderRadius: 10, border: "none", background: C.primaryGrad,
+                          color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                          boxShadow: "0 4px 12px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                        >최종 리포트 →</button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* 레이더 + Fit-Gap */}
                 <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -905,7 +1069,19 @@ export default function MenteeMyPage() {
         </div>
       </main>
 
-      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} userEmail={user?.email} onImageChange={img => setProfileImage(img)} initialBio={profile?.bio || ""} />}
+      {showEdit && <EditProfileModal
+        onClose={() => setShowEdit(false)}
+        userEmail={user?.email}
+        onImageChange={img => setProfileImage(img)}
+        initialBio={profile?.bio || ""}
+        profile={profile}
+        onNameSaved={(newName) => {
+          const cur = getAuthUser();
+          setAuthUser({ ...cur, name: newName });
+          setProfile(prev => prev ? { ...prev, name: newName } : prev);
+        }}
+        onProfileRefresh={() => getMyProfile().then(setProfile).catch(() => {})}
+      />}
     </>
   );
 }

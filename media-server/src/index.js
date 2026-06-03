@@ -95,6 +95,7 @@ io.on('connection', (socket) => {
       const existingProducers = room.getExistingProducers(peerId);
 
       callback({
+        peerId,
         rtpCapabilities: room.router.rtpCapabilities,
         existingProducers, // 이미 방에 있는 참여자의 producer 목록
         activeQuestion: room.activeQuestion,

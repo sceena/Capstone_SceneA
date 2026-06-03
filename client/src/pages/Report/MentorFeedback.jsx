@@ -170,6 +170,13 @@ function buildMenteesFromQuestionReports(
 ) {
   const groups = new Map();
   const { byAnswerId: evaluationsByAnswerId, byQuestionMentee: evaluationsByQuestionMentee } = buildEvaluationMap(answerEvaluations);
+  const reportMenteeIds = new Set(
+    questionReports
+      .map((report) => report?.mentee_id ?? report?.menteeId)
+      .filter((menteeId) => menteeId != null)
+      .map(String)
+  );
+  const isGroupReport = reportMenteeIds.size > 1;
   const feedbackByMentee = new Map();
   menteeReportFeedbacks.forEach((feedback) => {
     const menteeId = feedback?.mentee_id ?? feedback?.menteeId;
@@ -185,8 +192,8 @@ function buildMenteesFromQuestionReports(
         menteeId,
         menteeName,
         menteeTrack: menteeFeedback || reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
-        mentorFeedback: menteeFeedback?.mentor_feedback ?? menteeFeedback?.mentorFeedback ?? mentorFeedback,
-        mentorScore: menteeFeedback?.mentor_score ?? menteeFeedback?.mentorScore ?? reportMentorScore,
+        mentorFeedback: menteeFeedback?.mentor_feedback ?? menteeFeedback?.mentorFeedback ?? (isGroupReport ? "" : mentorFeedback),
+        mentorScore: menteeFeedback?.mentor_score ?? menteeFeedback?.mentorScore ?? (isGroupReport ? null : reportMentorScore),
         qnas: [],
       });
     }
@@ -312,21 +319,28 @@ export default function MentorFeedbackPage() {
 
   // Init per-mentee feedback state
   useEffect(() => {
-    const init = {};
-    menteeList.forEach(m => {
-      const fb = {};
-      m.qnas.forEach(q => {
-        fb[q.id] = {
-          score: q.mentorScore || q.aiScore,
-          reasoning: q.mentorReasoning || q.aiComment || "",
-          strengths: ((q.mentorStrengths || []).length ? q.mentorStrengths : (q.strengths || [])).join("\n"),
-          improvements: ((q.mentorImprovements || []).length ? q.mentorImprovements : (q.improvements || [])).join("\n"),
-          comment: "",
+    setAllFeedbacks(prev => {
+      const next = {};
+      menteeList.forEach(m => {
+        const existing = prev[m.menteeId];
+        const fb = {};
+        m.qnas.forEach(q => {
+          fb[q.id] = existing?.feedbacks?.[q.id] ?? {
+            score: q.mentorScore ?? q.aiScore,
+            reasoning: q.mentorReasoning || q.aiComment || "",
+            strengths: ((q.mentorStrengths || []).length ? q.mentorStrengths : (q.strengths || [])).join("\n"),
+            improvements: ((q.mentorImprovements || []).length ? q.mentorImprovements : (q.improvements || [])).join("\n"),
+            comment: "",
+          };
+        });
+        next[m.menteeId] = {
+          feedbacks: fb,
+          totalFeedback: existing?.totalFeedback ?? m.mentorFeedback ?? "",
+          mentorScore: existing?.mentorScore ?? m.mentorScore ?? 4.0,
         };
       });
-      init[m.menteeId] = { feedbacks: fb, totalFeedback: m.mentorFeedback || "", mentorScore: m.mentorScore || 4.0 };
+      return next;
     });
-    setAllFeedbacks(init);
   }, [menteeList]);
 
   // Countdown timer
@@ -671,7 +685,7 @@ export default function MentorFeedbackPage() {
               <span style={{ fontSize: 14, fontWeight: 700, color: GREEN }}>저장 완료</span>
             </div>
           )}
-          {currentSent && !allSent && (
+          {!allSent && (
             <button type="button" onClick={() => navigate("/dashboard/mentor")} style={{
               padding: "13px 22px", borderRadius: 11, border: `1px solid ${NAVY}`,
               background: "white", color: NAVY, fontSize: 14, fontWeight: 700,

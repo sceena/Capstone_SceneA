@@ -95,11 +95,40 @@ function getParticipantId(participant) {
 }
 
 function getParticipantName(participant) {
-  return participant?.name ?? participant?.nickname ?? participant?.username ?? "멘티";
+  return participant?.name
+    ?? participant?.nickname
+    ?? participant?.username
+    ?? participant?.member_name
+    ?? participant?.memberName
+    ?? participant?.email?.split("@")[0]
+    ?? "멘티";
+}
+
+function getSessionParticipants(sessionData) {
+  return Array.isArray(sessionData?.participants) ? sessionData.participants : [];
+}
+
+function getParticipantNameById(participants, participantId, fallback = "상대방") {
+  if (participantId == null) return fallback;
+  const target = participants.find(participant => Number(getParticipantId(participant)) === Number(participantId));
+  return target ? getParticipantName(target) : fallback;
+}
+
+function getUserDisplayName(user) {
+  return user?.name
+    ?? user?.nickname
+    ?? user?.username
+    ?? user?.email?.split("@")[0]
+    ?? "나";
+}
+
+function getInitialText(name) {
+  const value = String(name || "").trim();
+  return value ? value.slice(0, 1) : "?";
 }
 
 function getMenteeParticipants(sessionData) {
-  const participants = Array.isArray(sessionData?.participants) ? sessionData.participants : [];
+  const participants = getSessionParticipants(sessionData);
   const mentees = participants.filter(participant =>
     String(participant?.role ?? participant?.memberRole ?? "").toLowerCase() === "mentee"
   );
@@ -225,6 +254,25 @@ function getQuestionCurrentResponderId(question, mentees) {
 function getMenteeNameById(mentees, menteeId) {
   const target = mentees.find(mentee => Number(getParticipantId(mentee)) === Number(menteeId));
   return target ? getParticipantName(target) : "멘티";
+}
+
+function describeRecordingLock(activeRecorder, participants) {
+  if (!activeRecorder) return "다른 참여자가 말하는 중입니다.";
+  const targetName = getParticipantNameById(
+    participants,
+    activeRecorder.targetMenteeId ?? activeRecorder.peerId,
+    ""
+  );
+  const namePrefix = targetName ? `${targetName}님이` : "다른 멘티가";
+  const recordingType = String(activeRecorder.recordingType || "").toUpperCase();
+
+  if (recordingType === "ANSWER") {
+    return `${namePrefix} 답변 중입니다.`;
+  }
+  if (recordingType === "QUESTION") {
+    return "멘토가 질문 중입니다.";
+  }
+  return "다른 참여자가 말하는 중입니다.";
 }
 
 function RecordingWave({ level = 0 }) {
@@ -411,6 +459,7 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── 질문 목록 ── */
   const [sessionData, setSessionData] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const sessionParticipants = useMemo(() => getSessionParticipants(sessionData), [sessionData]);
   const menteeParticipants = useMemo(() => getMenteeParticipants(sessionData), [sessionData]);
   const groupMenteeIds = useMemo(
     () => menteeParticipants.map(getParticipantId).filter(id => id != null),
@@ -420,6 +469,11 @@ export default function InterviewSession({ role = "mentee" }) {
   const authUser = getAuthUser();
   const authMemberId = authUser?.id ?? getPeerIdFromToken(authUser?.accessToken || "");
   const currentMemberId = authMemberId == null || Number.isNaN(Number(authMemberId)) ? null : Number(authMemberId);
+  const localDisplayName = getUserDisplayName(authUser);
+  const getPeerDisplayName = useCallback(
+    (peerId) => getParticipantNameById(sessionParticipants, peerId, "상대방"),
+    [sessionParticipants]
+  );
 
   const buildQuestionTurnState = useCallback((question, overrides = {}) => {
     if (!question) return question;
@@ -623,7 +677,8 @@ export default function InterviewSession({ role = "mentee" }) {
         if (isCancelled) return;
         if (res.error) { console.error("join 실패:", res.error); setConnectionState("failed"); return; }
 
-        const { rtpCapabilities, existingProducers, activeQuestion: roomActiveQuestion, activeRecorder: roomActiveRecorder } = res;
+        const { peerId: joinedPeerId, rtpCapabilities, existingProducers, activeQuestion: roomActiveQuestion, activeRecorder: roomActiveRecorder } = res;
+        if (joinedPeerId != null) setLocalPeerId(String(joinedPeerId));
         setActiveRecorder(roomActiveRecorder || null);
         if (roomActiveQuestion) {
           const turnQuestion = buildQuestionTurnState(roomActiveQuestion);
@@ -965,7 +1020,7 @@ export default function InterviewSession({ role = "mentee" }) {
       window.clearTimeout(timer);
       if (res.error) {
         setActiveRecorder(res.activeRecorder || null);
-        alert("다른 참여자가 말하는 중입니다. 발화가 끝난 뒤 다시 시도해주세요.");
+        alert(`${describeRecordingLock(res.activeRecorder, sessionParticipants)} 발화가 끝난 뒤 다시 시도해주세요.`);
         resolve(false);
         return;
       }
@@ -1052,6 +1107,29 @@ export default function InterviewSession({ role = "mentee" }) {
   const activeQuestionProgressText = getQuestionType(activeQuestion) === "COMMON" && activeQuestionTargetIds.length > 1
     ? `${Math.min(activeQuestionAnsweredIds.length + 1, activeQuestionTargetIds.length)}/${activeQuestionTargetIds.length}`
     : null;
+  const activeQuestionKindLabel = !activeQuestion?.id
+    ? "질문"
+    : getQuestionType(activeQuestion) === "COMMON"
+      ? "공통 질문"
+      : "개인 질문";
+  const activeQuestionTargetNameText = activeQuestionTargetLabel === "전체"
+    ? "전체"
+    : `${activeQuestionTargetLabel}님`;
+  const recordingLockedByOther = Boolean(activeRecorder?.peerId && activeRecorder.peerId !== localPeerId);
+  const activeRecorderType = String(activeRecorder?.recordingType || "").toUpperCase();
+  const otherMenteeAnswering = recordingLockedByOther && activeRecorderType === "ANSWER";
+  const otherRecorderStatusText = describeRecordingLock(activeRecorder, sessionParticipants);
+  const activeQuestionMenteePrompt = activeQuestion
+    ? otherMenteeAnswering && !activeQuestionTargetsCurrentUser
+      ? otherRecorderStatusText
+      : activeQuestionTargetsCurrentUser
+      ? getQuestionType(activeQuestion) === "COMMON"
+        ? `내 답변 차례 · 공통 질문 · Q. ${activeQuestion.content}`
+        : `나에게 온 개인 질문 · Q. ${activeQuestion.content}`
+      : getQuestionType(activeQuestion) === "COMMON"
+        ? `${activeQuestionTargetNameText} 답변 차례 · 공통 질문`
+        : `${activeQuestionTargetNameText}에게 온 개인 질문 · 대기`
+    : "멘토 질문 대기 중...";
 
   /* ── 답변 상태 / 녹음 ── */
   const handleAnswerStatus = async (nextStatus) => {
@@ -1262,7 +1340,6 @@ export default function InterviewSession({ role = "mentee" }) {
   const SPEAK_THRESHOLD = 0.025;
   // 참가자가 1명이라도 있으면 발화자 메인 뷰 활성화
   const mainViewId = peerIds.length > 0 ? (activeSpeakerId || peerIds[0]) : null;
-  const recordingLockedByOther = Boolean(activeRecorder?.peerId && activeRecorder.peerId !== localPeerId);
   const staleQuestionLock = Boolean(activeQuestion?.id && activeRecorder?.recordingType === "QUESTION");
   const answerBlockedByRecorder = recordingLockedByOther && !staleQuestionLock;
   const answerBlockedByTarget = Boolean(activeQuestion?.id && !activeQuestionTargetsCurrentUser && answerStatus !== "answering");
@@ -1374,10 +1451,13 @@ export default function InterviewSession({ role = "mentee" }) {
 
           {/* 참가자 */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#202123", border: "2px solid #FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>나</div>
-            {peerIds.slice(0, 3).map((pid, i) => (
-              <div key={pid} style={{ width: 30, height: 30, borderRadius: "50%", background: ["#6B7280","#4B5563","#374151"][i], border: "2px solid #FFFFFF", marginLeft: -6, zIndex: 3-i, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{i+1}</div>
-            ))}
+            <div title={localDisplayName} style={{ width: 30, height: 30, borderRadius: "50%", background: "#202123", border: "2px solid #FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{getInitialText(localDisplayName)}</div>
+            {peerIds.slice(0, 3).map((pid, i) => {
+              const peerName = getPeerDisplayName(pid);
+              return (
+                <div key={pid} title={peerName} style={{ width: 30, height: 30, borderRadius: "50%", background: ["#6B7280","#4B5563","#374151"][i], border: "2px solid #FFFFFF", marginLeft: -6, zIndex: 3-i, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{getInitialText(peerName)}</div>
+              );
+            })}
             <span style={{ fontSize: 11, color: "#6B7280", marginLeft: 6 }}>참여자 {peerIds.length + 1}명</span>
           </div>
 
@@ -1395,7 +1475,7 @@ export default function InterviewSession({ role = "mentee" }) {
               {peerIds.length === 0 ? (
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", height: "100%", padding: 20 }}>
                   <div style={{ width: "min(640px, 100%)", height: "min(480px, 100%)" }}>
-                    <VideoTile stream={localMediaStream} label="나 (본인)" mirror={!isFaceMaskOn} muted
+                    <VideoTile stream={localMediaStream} label={`${localDisplayName} (본인)`} mirror={!isFaceMaskOn} muted
                       isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                   </div>
                 </div>
@@ -1403,18 +1483,18 @@ export default function InterviewSession({ role = "mentee" }) {
                 <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "14px 14px 8px" }}>
                   <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
                     {mainViewId === '__local' ? (
-                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror={!isFaceMaskOn} muted isSpeaking camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label={`${localDisplayName} (본인)`} mirror={!isFaceMaskOn} muted isSpeaking camOff={!camOn} micOff={!micOn} />
                     ) : (
-                      <VideoTile stream={peersRef.current[mainViewId]} label="상대방" isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
+                      <VideoTile stream={peersRef.current[mainViewId]} label={getPeerDisplayName(mainViewId)} isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
                     )}
                   </div>
                   <div style={{ height: 110, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
                     <div style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
-                      <VideoTile stream={localMediaStream} label="나" mirror={!isFaceMaskOn} muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label={localDisplayName} mirror={!isFaceMaskOn} muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                     </div>
                     {peerIds.map(peerId => (
                       <div key={peerId} style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
-                        <VideoTile stream={peersRef.current[peerId]} label="참여자" isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
+                        <VideoTile stream={peersRef.current[peerId]} label={getPeerDisplayName(peerId)} isSpeaking={(audioLevels[peerId] || 0) > SPEAK_THRESHOLD} />
                       </div>
                     ))}
                   </div>
@@ -1490,11 +1570,7 @@ export default function InterviewSession({ role = "mentee" }) {
                     color: activeQuestion ? "#067A5F" : "#6B7280",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
-                    {activeQuestion
-                      ? activeQuestionTargetsCurrentUser
-                        ? `Q. ${activeQuestion.content}`
-                        : `${activeQuestionTargetLabel} 답변 순서 · Q. ${activeQuestion.content}`
-                      : "멘토 질문 대기 중..."}
+                    {activeQuestionMenteePrompt}
                   </div>
                   {answerTimerStart && <RecordingTimerText time={formatTime(answerElapsed)} />}
                   <button
@@ -1509,7 +1585,7 @@ export default function InterviewSession({ role = "mentee" }) {
                       fontFamily: "inherit", transition: "all 0.18s", flexShrink: 0,
                     }}
                   >
-                    {answerStatus === "answering" ? "● 답변 완료" : activeQuestion && !activeQuestionTargetsCurrentUser ? "대기 중" : "답변 시작"}
+                    {answerStatus === "answering" ? "● 답변 완료" : activeQuestion && !activeQuestionTargetsCurrentUser ? "내 차례 대기" : "답변 시작"}
                   </button>
                 </div>
               )}
@@ -1660,14 +1736,18 @@ export default function InterviewSession({ role = "mentee" }) {
                   </div>
                   {(waitingForAnswer || recordingLockedByOther) && (
                     <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.6, marginTop: 8 }}>
-                      {waitingForAnswer ? "멘티 답변을 기다리는 중..." : "다른 참여자가 말하는 중..."}
+                      {otherMenteeAnswering
+                        ? otherRecorderStatusText
+                        : waitingForAnswer
+                          ? "멘티 답변을 기다리는 중..."
+                          : otherRecorderStatusText}
                     </p>
                   )}
                   {activeQuestion && (
                     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#ECFDF5", border: "1px solid rgba(16,163,127,0.24)" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
                         <p style={{ fontSize: 10, fontWeight: 800, color: "#067A5F" }}>
-                          현재 답변 대상 · {activeQuestionTargetLabel}
+                          {activeQuestionKindLabel} · 현재 답변 대상 · {activeQuestionTargetNameText}
                         </p>
                         {activeQuestionProgressText && (
                           <span style={{ fontSize: 10, fontWeight: 900, color: "#067A5F", fontFamily: "monospace" }}>

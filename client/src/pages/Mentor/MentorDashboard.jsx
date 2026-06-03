@@ -590,6 +590,11 @@ const getReservationSessionType = r => {
 };
 const toDateText        = v => v ? String(v).slice(5, 10).replace("-", ".") : "";
 const toTimeText        = v => v ? String(v).slice(11, 16) : "";
+const toScheduledTime   = s => {
+  const time = new Date(getScheduledAt(s)).getTime();
+  return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+};
+const compareByScheduledAtAsc = (a, b) => toScheduledTime(a) - toScheduledTime(b);
 
 /* ════════════════════════════════════════
    메인 컴포넌트
@@ -616,6 +621,7 @@ export default function MentorDashboard() {
   const rawSessions = allSessions;
   const sessions = rawSessions
     .filter(s => (normalizeStatus(s.status) === "scheduled" || normalizeStatus(s.status) === "in_progress") && s.kind !== "mentoring")
+    .sort(compareByScheduledAtAsc)
     .map(s => ({
       id: s.id,
       title: getSessionTitle(s),
@@ -658,6 +664,7 @@ export default function MentorDashboard() {
 
   const upcoming = rawSessions
     .filter(s => normalizeStatus(s.status) === "scheduled")
+    .sort(compareByScheduledAtAsc)
     .map(s => ({
       id: s.id,
       date: toDateText(getScheduledAt(s)),

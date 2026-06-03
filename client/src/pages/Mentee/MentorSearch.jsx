@@ -164,7 +164,7 @@ const MentorCard = ({ m, onClick }) => {
       {/* 상단: 아바타 + 이름 */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 16 }}>
         {m.profile_image_url && !imgFailed ? (
-          <img src={m.profile_image_url} alt={m.name}
+          <img src={m.profile_image_url.replace(/^http:\/\//i, "https://")} alt={m.name}
             style={{ width: 68, height: 68, borderRadius: "50%", objectFit: "cover", marginBottom: 12, border: `2px solid ${C.border}` }}
             onError={() => setImgFailed(true)} />
         ) : (

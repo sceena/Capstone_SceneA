@@ -187,7 +187,7 @@ export default function MentorMyPage() {
       const hasBase64 = stored?.startsWith("data:");
       if (!hasBase64 && p?.profile_image_url) {
         // S3 URL → fetch → base64 변환 후 localStorage 저장 (CORS 또는 private 이면 fallback)
-        fetch(p.profile_image_url)
+        fetch(p.profile_image_url.replace(/^http:\/\//i, "https://"))
           .then(r => r.ok ? r.blob() : null)
           .then(blob => {
             if (!blob) return;

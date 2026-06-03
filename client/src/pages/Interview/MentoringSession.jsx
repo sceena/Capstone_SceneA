@@ -401,6 +401,7 @@ export default function MentoringSessionPage() {
   const [localMediaStream, setLocalMediaStream] = useState(null);
   const [audioLevels, setAudioLevels]       = useState({});
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+  const [peerMuteStates, setPeerMuteStates] = useState({}); // peerId → true(음소거)
 
   /* ── 드로잉 ── */
   const [drawMode, setDrawMode]   = useState(false);
@@ -501,6 +502,9 @@ export default function MentoringSessionPage() {
               audioCtxRef.current.createMediaStreamSource(peersRef.current[peerId]).connect(analyser);
               peerAnalysersRef.current[peerId] = analyser;
             } catch {}
+            consumer.on('producerpause', () => setPeerMuteStates(prev => ({ ...prev, [peerId]: true })));
+            consumer.on('producerresume', () => setPeerMuteStates(prev => ({ ...prev, [peerId]: false })));
+            if (consumer.producerPaused) setPeerMuteStates(prev => ({ ...prev, [peerId]: true }));
           }
           socket.emit("resumeConsumer", { consumerId: consumer.id }, () => {});
         } catch {}
@@ -594,6 +598,7 @@ export default function MentoringSessionPage() {
         delete peersRef.current[peerId];
         delete peerAnalysersRef.current[peerId];
         setPeerIds(prev => prev.filter(p => p !== peerId));
+        setPeerMuteStates(prev => { const next = { ...prev }; delete next[peerId]; return next; });
       });
       socket.on("reportSync", ({ index }) => { if (!isCancelled) setCurrentMenteeIdx(index); });
     };
@@ -735,8 +740,17 @@ export default function MentoringSessionPage() {
   const currentMentee = menteeList[currentMenteeIdx] || null;
 
   const getPeerName = (peerId) => {
-    const found = menteeList.find(m => String(m.id) === String(peerId));
-    return found ? found.name : null;
+    // 멘티 목록에서 먼저 확인
+    const mentee = menteeList.find(m => String(m.user_id ?? m.userId ?? m.id ?? "") === String(peerId));
+    if (mentee) return mentee.name;
+    // 멘토 확인 (session.mentor 또는 participants)
+    const allParticipants = session?.participants ?? [];
+    const peer = allParticipants.find(p => String(p.user_id ?? p.userId ?? p.id ?? "") === String(peerId));
+    if (peer) {
+      const roleSuffix = (peer.role ?? "").toLowerCase() === "mentor" ? " (멘토)" : " (멘티)";
+      return `${peer.name}${roleSuffix}`;
+    }
+    return null;
   };
 
   return (
@@ -900,7 +914,7 @@ export default function MentoringSessionPage() {
             </div>
             {peerIds.map((pid, i) => (
               <div key={pid} style={{ height: 155, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
-                <VideoTile stream={peersRef.current[pid] ?? null} label={getPeerName(pid) || `참여자 ${i + 1}`} isSpeaking={(audioLevels[pid] || 0) > 0.025} />
+                <VideoTile stream={peersRef.current[pid] ?? null} label={getPeerName(pid) ?? `참여자 ${i + 1}`} isSpeaking={(audioLevels[pid] || 0) > 0.025} micOff={!!peerMuteStates[pid]} />
               </div>
             ))}
           </div>

@@ -349,6 +349,7 @@ export default function MentoringSessionPage() {
   const [localMediaStream, setLocalMediaStream] = useState(null);
   const [audioLevels, setAudioLevels]       = useState({});
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+  const [peerMuteStates, setPeerMuteStates] = useState({}); // peerId → true(음소거)
 
   /* ── 드로잉 ── */
   const [drawMode, setDrawMode]   = useState(false);
@@ -449,6 +450,9 @@ export default function MentoringSessionPage() {
               audioCtxRef.current.createMediaStreamSource(peersRef.current[peerId]).connect(analyser);
               peerAnalysersRef.current[peerId] = analyser;
             } catch {}
+            consumer.on('producerpause', () => setPeerMuteStates(prev => ({ ...prev, [peerId]: true })));
+            consumer.on('producerresume', () => setPeerMuteStates(prev => ({ ...prev, [peerId]: false })));
+            if (consumer.producerPaused) setPeerMuteStates(prev => ({ ...prev, [peerId]: true }));
           }
           socket.emit("resumeConsumer", { consumerId: consumer.id }, () => {});
         } catch {}
@@ -542,6 +546,7 @@ export default function MentoringSessionPage() {
         delete peersRef.current[peerId];
         delete peerAnalysersRef.current[peerId];
         setPeerIds(prev => prev.filter(p => p !== peerId));
+        setPeerMuteStates(prev => { const next = { ...prev }; delete next[peerId]; return next; });
       });
       socket.on("reportSync", ({ index }) => { if (!isCancelled) setCurrentMenteeIdx(index); });
     };
@@ -800,7 +805,7 @@ export default function MentoringSessionPage() {
             </div>
             {peerIds.map((pid, i) => (
               <div key={pid} style={{ height: 155, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
-                <VideoTile stream={peersRef.current[pid] ?? null} label={getPeerName(pid) ?? `참여자 ${i + 1}`} isSpeaking={(audioLevels[pid] || 0) > 0.025} />
+                <VideoTile stream={peersRef.current[pid] ?? null} label={getPeerName(pid) ?? `참여자 ${i + 1}`} isSpeaking={(audioLevels[pid] || 0) > 0.025} micOff={!!peerMuteStates[pid]} />
               </div>
             ))}
           </div>

@@ -143,6 +143,7 @@ const Dropdown = ({ label, options, value, onChange }) => {
 const MentorCard = ({ m, onClick }) => {
   const { user } = useAuthStore();
   const isMentor = user?.role === "mentor";
+  const [imgFailed, setImgFailed] = useState(false);
   const jobStr = m.tags?.find(t => t.category === "직무")?.name
     || m.tags?.find(t => t.category === "기술스택")?.name
     || m.job_title || "";
@@ -162,9 +163,10 @@ const MentorCard = ({ m, onClick }) => {
     >
       {/* 상단: 아바타 + 이름 */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 16 }}>
-        {m.profile_image_url ? (
+        {m.profile_image_url && !imgFailed ? (
           <img src={m.profile_image_url} alt={m.name}
-            style={{ width: 68, height: 68, borderRadius: "50%", objectFit: "cover", marginBottom: 12, border: `2px solid ${C.border}` }}/>
+            style={{ width: 68, height: 68, borderRadius: "50%", objectFit: "cover", marginBottom: 12, border: `2px solid ${C.border}` }}
+            onError={() => setImgFailed(true)} />
         ) : (
           <JobAvatar jobStr={jobStr} size={68} style={{ marginBottom: 12 }}/>
         )}

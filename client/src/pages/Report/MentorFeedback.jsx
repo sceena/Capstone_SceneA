@@ -447,6 +447,7 @@ export default function MentorFeedbackPage() {
     .filter(Boolean);
 
   const allSent = menteeList.length > 0 && menteeList.every(m => sentMentees.has(m.menteeId));
+  const currentSent = sentMentees.has(currentMentee?.menteeId);
 
   const avgQScore = Object.values(currentFbData.feedbacks).length > 0
     ? (Object.values(currentFbData.feedbacks).reduce((a, b) => a + b.score, 0) / Object.values(currentFbData.feedbacks).length).toFixed(1)
@@ -664,11 +665,20 @@ export default function MentorFeedbackPage() {
               질문별 평가, 별점, 총평을 저장한 뒤 멘티 마이페이지에 전달됩니다
             </p>
           </div>
-          {sentMentees.has(currentMentee?.menteeId) && (
+          {currentSent && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#E1F5EE", border: `1px solid ${GREEN}50`, borderRadius: 10, padding: "12px 24px" }}>
               <span style={{ color: GREEN, fontSize: 16 }}>✓</span>
               <span style={{ fontSize: 14, fontWeight: 700, color: GREEN }}>저장 완료</span>
             </div>
+          )}
+          {currentSent && !allSent && (
+            <button type="button" onClick={() => navigate("/dashboard/mentor")} style={{
+              padding: "13px 22px", borderRadius: 11, border: `1px solid ${NAVY}`,
+              background: "white", color: NAVY, fontSize: 14, fontWeight: 700,
+              cursor: "pointer", whiteSpace: "nowrap",
+            }}>
+              대시보드로 이동
+            </button>
           )}
           <button type="button" onClick={handleSendCurrent} disabled={isSending} style={{
             padding: "13px 28px", borderRadius: 11, border: "none",
@@ -679,7 +689,7 @@ export default function MentorFeedbackPage() {
           }}>
             {isSending
               ? "저장 중..."
-              : sentMentees.has(currentMentee?.menteeId)
+              : currentSent
               ? "수정본 다시 저장"
               : "수정본 저장 후 전송 →"}
           </button>

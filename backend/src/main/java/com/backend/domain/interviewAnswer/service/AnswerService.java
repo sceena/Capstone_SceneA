@@ -122,13 +122,13 @@ public class AnswerService {
         int completed = countByStatus(answers, SttStatus.COMPLETED);
         int pending = countByStatus(answers, SttStatus.PENDING);
         int processing = countByStatus(answers, SttStatus.PROCESSING);
-        int failed = countByStatus(answers, SttStatus.FAILED);
-        Set<InterviewQuestion> answeredQuestions = answers.stream()
-                .map(InterviewAnswer::getInterviewQuestion)
+        int failed = countByStatus(answers, SttStatus.FAILED) + countBlankCompletedAnswers(answers);
+        Set<InterviewQuestion> audioQuestions = questions.stream()
+                .filter(this::hasQuestionAudio)
                 .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
-        int questionPending = countQuestionByStatus(answeredQuestions, SttStatus.PENDING);
-        int questionProcessing = countQuestionByStatus(answeredQuestions, SttStatus.PROCESSING);
-        int questionFailed = countQuestionByStatus(answeredQuestions, SttStatus.FAILED);
+        int questionPending = countQuestionByStatus(audioQuestions, SttStatus.PENDING);
+        int questionProcessing = countQuestionByStatus(audioQuestions, SttStatus.PROCESSING);
+        int questionFailed = countQuestionByStatus(audioQuestions, SttStatus.FAILED) + countBlankCompletedQuestions(audioQuestions);
         boolean ready = !answers.isEmpty()
                 && pending == 0
                 && processing == 0
@@ -151,7 +151,7 @@ public class AnswerService {
                 answers.stream()
                         .map(SessionSttStatusResponse.AnswerSttStatus::from)
                         .toList(),
-                answeredQuestions.stream()
+                audioQuestions.stream()
                         .map(SessionSttStatusResponse.QuestionSttStatus::from)
                         .toList()
         );
@@ -274,16 +274,26 @@ public class AnswerService {
         answer.updateSttStatus(SttStatus.PROCESSING);
         try {
             AiSttResponse response = aiSttClient.transcribe(audio);
+            String normalizedText = sttTranscriptNormalizer.normalize(response.text());
+            if (normalizedText == null || normalizedText.isBlank()) {
+                throw new IllegalStateException("AI STT returned empty transcript");
+            }
             answer.completeStt(
-                    sttTranscriptNormalizer.normalize(response.text()),
+                    normalizedText,
                     response.model(),
                     response.durationSec(),
                     response.audioQualityStatus(),
                     response.audioQualityMessage()
             );
-            log.info("STT completed synchronously for answerId={}", answer.getId());
+            log.info(
+                    "STT completed synchronously for answerId={} textLength={} quality={} message={}",
+                    answer.getId(),
+                    normalizedText.length(),
+                    response.audioQualityStatus(),
+                    response.audioQualityMessage()
+            );
         } catch (RuntimeException e) {
-            answer.failStt("AI STT server request failed");
+            answer.failStt(e.getMessage() != null ? e.getMessage() : "AI STT server request failed");
             log.warn("Failed to transcribe answerId={}; sttStatus set to FAILED", answer.getId(), e);
         }
     }
@@ -298,6 +308,26 @@ public class AnswerService {
         return (int) questions.stream()
                 .filter(question -> question.getSttStatus() == status)
                 .count();
+    }
+
+    private int countBlankCompletedAnswers(List<InterviewAnswer> answers) {
+        return (int) answers.stream()
+                .filter(answer -> answer.getSttStatus() == SttStatus.COMPLETED)
+                .filter(answer -> answer.getSttText() == null || answer.getSttText().isBlank())
+                .count();
+    }
+
+    private int countBlankCompletedQuestions(Set<InterviewQuestion> questions) {
+        return (int) questions.stream()
+                .filter(question -> question.getSttStatus() == SttStatus.COMPLETED)
+                .filter(question -> question.getContent() == null
+                        || question.getContent().isBlank()
+                        || "질문 음성 변환 중입니다.".equals(question.getContent()))
+                .count();
+    }
+
+    private boolean hasQuestionAudio(InterviewQuestion question) {
+        return question.getAudioUrl() != null && !question.getAudioUrl().isBlank();
     }
 
     private InterviewSession findSession(Long sessionId) {

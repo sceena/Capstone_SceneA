@@ -287,8 +287,12 @@ export default function InterviewLobby({ role = "mentee" }) {
   const getQuestionCandidateId = (question) =>
     question?.candidate_id ?? question?.candidateId ?? null;
 
-  const getQuestionType = (question) =>
-    question?.question_type ?? question?.questionType ?? (getQuestionCandidateId(question) ? "PERSONAL" : null);
+  const getQuestionType = (question) => {
+    if (question?.section === "공통") return "COMMON";
+    const explicitType = question?.question_type ?? question?.questionType ?? null;
+    if (explicitType) return String(explicitType).toUpperCase();
+    return getQuestionCandidateId(question) ? "PERSONAL" : null;
+  };
 
   const isCommonQuestion = (question) => getQuestionType(question) === "COMMON";
 
@@ -305,16 +309,17 @@ export default function InterviewLobby({ role = "mentee" }) {
       selected: true,
     })) : [];
 
-    const personalItems = personalQuestions.flatMap(item =>
-      (item.questions ?? []).map((content, index) => ({
-        key: `personal-${item.candidate_id ?? item.candidateId}-${index}`,
-        section: "개인 질문",
+    const personalItems = personalQuestions.flatMap(item => {
+      const candidateId = item.candidate_id ?? item.candidateId ?? null;
+      return (item.questions ?? []).map((content, index) => ({
+        key: `personal-${candidateId ?? "single"}-${index}`,
+        section: isGroup && candidateId != null ? `지원자 ${candidateId}` : "개인 질문",
         questionType: "PERSONAL",
-        candidateId: item.candidate_id ?? item.candidateId,
+        candidateId,
         content,
         selected: true,
-      }))
-    );
+      }));
+    });
 
     return [...commonItems, ...personalItems];
   };
@@ -914,16 +919,17 @@ export default function InterviewLobby({ role = "mentee" }) {
                   {/* 오른쪽 열: AI 질문 */}
                   <div style={{ flex: 1, overflowY: "auto" }}>
                     {(() => {
-                      const shownRecommended = isGroup
-                        ? recommendedQuestions.filter(q =>
-                          selectedMenteeId != null && Number(getQuestionCandidateId(q)) === Number(selectedMenteeId)
-                        )
-                        : recommendedQuestions;
-                      const shownSaved = isGroup
-                        ? questions.filter(q =>
-                          (selectedMenteeId != null && Number(getQuestionCandidateId(q)) === Number(selectedMenteeId))
-                        )
-                        : questions;
+                      const isQuestionForSelectedMentee = (q) => {
+                        if (!isGroup) return true;
+                        if (isCommonQuestion(q)) return false;
+                        const candidateId = getQuestionCandidateId(q);
+                        if (candidateId != null && selectedMenteeId != null) {
+                          return Number(candidateId) === Number(selectedMenteeId);
+                        }
+                        return true;
+                      };
+                      const shownRecommended = recommendedQuestions.filter(isQuestionForSelectedMentee);
+                      const shownSaved = questions.filter(isQuestionForSelectedMentee);
                       const commonRecommended = isGroup ? recommendedQuestions.filter(isCommonQuestion) : [];
                       const commonSaved = isGroup ? questions.filter(isCommonQuestion) : [];
                       return (

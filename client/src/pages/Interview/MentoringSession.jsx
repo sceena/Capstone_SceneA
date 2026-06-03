@@ -86,7 +86,7 @@ const D = {
 };
 
 // ─── 공유 리포트 뷰 ──────────────────────────────────────────────
-function SharedReport({ report, isMentor = false, mentorComments = {}, onCommentChange, onPublish, isPublished = false }) {
+function SharedReport({ report, isMentor = false, mentorComments = {}, onCommentChange }) {
   if (!report?.ai_report) {
     return (
       <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
@@ -114,8 +114,6 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
   const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#C0392B";
 
   const commentedCount = questionReports.filter(qr => (mentorComments[qr.question_id] || "").trim().length > 0).length;
-  const allCommented  = questionReports.length > 0 && commentedCount === questionReports.length;
-
   return (
     <div style={{ background: D.bg, minHeight: "100%", padding: "22px 20px", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
       <div style={{ maxWidth: 700, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -224,7 +222,7 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
               <h3 style={{ fontSize: 15, fontWeight: 800, color: D.text, margin: 0 }}>전체 Q&A 답변 분석</h3>
             </div>
             {isMentor && questionReports.length > 0 && (
-              <span style={{ fontSize: 11, color: allCommented ? GREEN : D.muted, fontWeight: 700, background: allCommented ? "#F0FDF4" : D.card2, padding: "4px 12px", borderRadius: 99, border: `1px solid ${allCommented ? "rgba(29,158,117,0.3)" : D.border}` }}>
+              <span style={{ fontSize: 11, color: commentedCount === questionReports.length ? GREEN : D.muted, fontWeight: 700, background: commentedCount === questionReports.length ? "#F0FDF4" : D.card2, padding: "4px 12px", borderRadius: 99, border: `1px solid ${commentedCount === questionReports.length ? "rgba(29,158,117,0.3)" : D.border}` }}>
                 코멘트 {commentedCount}/{questionReports.length}
               </span>
             )}
@@ -305,34 +303,6 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
           </div>
         </div>
 
-        {/* ── 최종 리포트 발행 ── */}
-        {isMentor && (
-          <div style={{
-            background: isPublished ? "linear-gradient(135deg,#0CA678,#38D9A9)" : "linear-gradient(135deg,#0D2240,#1B4F7A)",
-            borderRadius: 16, padding: "22px 24px",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-            boxShadow: "0 4px 20px rgba(13,34,64,0.15)",
-          }}>
-            <div>
-              <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, margin: "0 0 4px" }}>
-                {isPublished ? "발행 완료" : allCommented ? "모든 문항 코멘트 완료 — 발행 준비됨" : `${commentedCount}/${questionReports.length}개 코멘트 작성됨`}
-              </p>
-              <p style={{ color: "#fff", fontSize: 16, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>
-                {isPublished ? "최종 리포트가 멘티에게 전달됩니다" : "코멘트 작성 후 최종 리포트를 발행하세요"}
-              </p>
-            </div>
-            <button onClick={onPublish} disabled={isPublished} style={{
-              flexShrink: 0, padding: "12px 24px", borderRadius: 10, border: "none",
-              background: isPublished ? "rgba(255,255,255,0.2)" : allCommented ? "linear-gradient(135deg,#0CA678,#38D9A9)" : "rgba(255,255,255,0.15)",
-              color: "#fff", fontSize: 13, fontWeight: 700, cursor: isPublished ? "default" : "pointer",
-              fontFamily: "inherit", boxShadow: allCommented && !isPublished ? "0 4px 12px rgba(12,166,120,0.4)" : "none",
-              transition: "all 0.2s", whiteSpace: "nowrap",
-            }}>
-              {isPublished ? "✓ 발행 완료" : "최종 리포트 발행 →"}
-            </button>
-          </div>
-        )}
-
       </div>
     </div>
   );
@@ -354,9 +324,8 @@ export default function MentoringSessionPage() {
   const [menteeList, setMenteeList]         = useState([]);
   const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
 
-  /* 멘토 코멘트 & 발행 상태 */
+  /* 멘토 코멘트 */
   const [mentorComments, setMentorComments] = useState({});
-  const [isPublished, setIsPublished]       = useState(false);
 
   const timerRef = useRef(null);
 
@@ -455,10 +424,6 @@ export default function MentoringSessionPage() {
   /* ── 코멘트 핸들러 ── */
   const handleCommentChange = useCallback((questionId, value) => {
     setMentorComments(prev => ({ ...prev, [questionId]: value }));
-  }, []);
-
-  const handlePublish = useCallback(async () => {
-    setIsPublished(true);
   }, []);
 
   /* ── 미디어 소비 ── */
@@ -660,7 +625,8 @@ export default function MentoringSessionPage() {
     }
   }, [navigate, session.sessionId, session.mentor?.name, sessionId, user?.role]);
 
-  const isMentor      = user?.role === "mentor";
+  const userRole = String(user?.role || "").toLowerCase();
+  const isMentor = userRole.includes("mentor");
   const currentMentee = menteeList[currentMenteeIdx] || null;
 
   const getPeerName = (peerId) => {
@@ -697,11 +663,6 @@ export default function MentoringSessionPage() {
           <Avatar name={session.mentor?.name || "멘토"} size={30} bg={NAVY} fontSize={10} />
           {menteeList.map((m, i) => <Avatar key={m.id} name={m.name} size={30} bg={i === currentMenteeIdx ? GREEN : "#3A6A5A"} fontSize={10} />)}
         </div>
-        {isPublished && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, background: "rgba(12,166,120,0.1)", border: "1px solid rgba(12,166,120,0.3)", borderRadius: 99, padding: "4px 12px" }}>
-            ✓ 리포트 발행 완료
-          </span>
-        )}
         <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#111", borderRadius: 8, padding: "6px 14px" }}>
           <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#E24B4A", animation: "blink 1.2s ease-in-out infinite" }} />
           <span style={{ color: "white", fontSize: 14, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatTime(elapsed)}</span>
@@ -740,8 +701,6 @@ export default function MentoringSessionPage() {
               isMentor={isMentor}
               mentorComments={mentorComments}
               onCommentChange={handleCommentChange}
-              onPublish={handlePublish}
-              isPublished={isPublished}
             />
           </div>
 

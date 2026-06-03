@@ -539,6 +539,7 @@ export default function MenteeMyPage() {
   const [profile, setProfile]         = useState(user?.profileData || null);
   const [apiSessions, setApiSessions] = useState([]);
   const [latestReport, setLatestReport] = useState(null);
+  const [recentReports, setRecentReports] = useState([]);
   const [mentorScoreTrend, setMentorScoreTrend] = useState([]);
   const [reservations, setReservations] = useState([]);
 
@@ -594,8 +595,17 @@ export default function MenteeMyPage() {
         .filter(s => (s.status ?? "").toLowerCase() === "completed")
         .sort((a, b) => new Date(b.scheduledAt ?? b.scheduled_at ?? 0) - new Date(a.scheduledAt ?? a.scheduled_at ?? 0));
       setApiSessions(completed);
-      const latestId = completed[0]?.id;
-      if (latestId) getSessionReport(latestId).then(setLatestReport).catch(() => {});
+
+      // 최근 3개 리포트 fetch (역량 종합 분석 평균용 + 최신 리포트)
+      const top3 = completed.slice(0, 3);
+      if (top3.length > 0) {
+        const reports = await Promise.all(
+          top3.map(s => getSessionReport(s.id).catch(() => null))
+        );
+        const validReports = reports.filter(Boolean);
+        if (validReports.length > 0) setLatestReport(validReports[0]);
+        setRecentReports(validReports);
+      }
 
       // 최종 리포트가 있는 세션들의 mentor_score로 추이 구성 (오래된 순)
       const finalSessions = [...completed]
@@ -642,15 +652,25 @@ export default function MenteeMyPage() {
   const qReports       = aiReport?.question_reports || [];
   const fitGapRaw      = aiReport?.fit_gap;
 
-  const radarData = deriveRadarFromReport(qReports) || [
-    { label: "STAR 구조화", value: 0 },
-    { label: "말하기 안정성", value: 0 },
-    { label: "논리적 답변", value: 0 },
-    { label: "문장 간결성", value: 0 },
-    { label: "직무 역량", value: 0 },
-    { label: "면접 전달력", value: 0 },
-  ];
-  const hasRadar = qReports.length > 0;
+  const radarDataList = recentReports
+    .map(r => deriveRadarFromReport(r?.ai_report?.question_reports || []))
+    .filter(Boolean);
+  const radarData = radarDataList.length > 0
+    ? radarDataList[0].map((item, i) => ({
+        label: item.label,
+        value: Math.round(
+          radarDataList.reduce((sum, d) => sum + (d[i]?.value ?? 0), 0) / radarDataList.length
+        ),
+      }))
+    : [
+        { label: "STAR 구조화", value: 0 },
+        { label: "말하기 안정성", value: 0 },
+        { label: "논리적 답변", value: 0 },
+        { label: "문장 간결성", value: 0 },
+        { label: "직무 역량", value: 0 },
+        { label: "면접 전달력", value: 0 },
+      ];
+  const hasRadar = radarDataList.length > 0;
 
   const recentQuestions = qReports.length > 0
     ? qReports.map(q => ({ question: q.question, score: q.score }))
@@ -666,9 +686,9 @@ export default function MenteeMyPage() {
 
   const latestSession  = historyAll[0];
 
-  const latestScore = historyAll[0]?.ai ?? "-";
-  const firstScore  = historyAll[historyAll.length - 1]?.ai ?? "-";
-  const latestWpm   = historyAll[0]?.wpm ?? "-";
+  const latestWpm       = historyAll[0]?.wpm ?? "-";
+  const latestMentorScore = mentorScoreTrend.length > 0 ? mentorScoreTrend[mentorScoreTrend.length - 1].ai : null;
+  const firstMentorScore  = mentorScoreTrend.length > 0 ? mentorScoreTrend[0].ai : null;
 
   const handleWithdraw = async () => {
     if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
@@ -768,7 +788,7 @@ export default function MenteeMyPage() {
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 0 }}>
                 {[
                   { l: "총 세션", v: `${historyAll.length}회` },
-                  { l: "멘토 평점", v: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-" },
+                  { l: "멘토 평점", v: latestMentorScore != null ? `${latestMentorScore}점` : "-" },
                   { l: "최근 WPM", v: latestWpm !== "-" ? `${latestWpm}` : "-" },
                   { l: "Fit 충족률", v: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-" },
                   { l: "신청 이력", v: `${reservations.length}건` },
@@ -861,7 +881,7 @@ export default function MenteeMyPage() {
                 <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
                   {[
                     { label: "총 면접 횟수", value: `${historyAll.length}회`, sub: historyAll.length > 0 ? "면접 완료" : "면접 미완료", icon: "📋" },
-                    { label: "멘토 평점", value: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${mentorScoreTrend[0].ai} → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}` : "최종 리포트 기준", accent: C.success },
+                    { label: "멘토 평점", value: latestMentorScore != null ? `${latestMentorScore}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${firstMentorScore}점 → ${latestMentorScore}점` : "최종 리포트 기준", accent: C.success },
                     { label: "최근 WPM", value: latestWpm !== "-" ? `${latestWpm}` : "-", sub: "최근 세션 기준", accent: C.primary },
                     { label: "Fit 충족률", value: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-", sub: hasFitGap ? `${fitGap.matched}/${fitGap.total} 충족` : "AI 리포트 기반", accent: C.warning },
                   ].map((s, i) => (
@@ -921,7 +941,7 @@ export default function MenteeMyPage() {
                 <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
 
                   <Card>
-                    <CardHeader label="CAPABILITY RADAR" title="역량 종합 분석" sub={hasRadar ? `AI 리포트 기반 · 최근 세션 (${qReports.length}문항)` : "AI 리포트 데이터 없음"} />
+                    <CardHeader label="CAPABILITY RADAR" title="역량 종합 분석" sub={hasRadar ? `최근 ${radarDataList.length}회 세션 평균` : "AI 리포트 데이터 없음"} />
                     {hasRadar ? (
                       <>
                         <div style={{ display: "flex", justifyContent: "center" }}>

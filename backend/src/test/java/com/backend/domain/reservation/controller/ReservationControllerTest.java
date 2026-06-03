@@ -75,7 +75,7 @@ class ReservationControllerTest {
     void 멘티_예약목록_조회_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(2L, "MENTEE");
         MenteeReservationResponse response = new MenteeReservationResponse(
-                1L, null, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.PENDING, LocalDateTime.now()
+                1L, null, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.PENDING, null, LocalDateTime.now()
         );
 
         given(reservationService.getMenteeReservations(any(), eq(null))).willReturn(List.of(response));
@@ -92,7 +92,7 @@ class ReservationControllerTest {
     void 멘티_예약목록_status_필터_조회_200() throws Exception {
         String token = jwtProvider.generateAccessToken(2L, "MENTEE");
         MenteeReservationResponse response = new MenteeReservationResponse(
-                1L, 5L, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.CONFIRMED, LocalDateTime.now()
+                1L, 5L, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.CONFIRMED, null, LocalDateTime.now()
         );
 
         given(reservationService.getMenteeReservations(any(), eq(ReservationStatus.CONFIRMED))).willReturn(List.of(response));

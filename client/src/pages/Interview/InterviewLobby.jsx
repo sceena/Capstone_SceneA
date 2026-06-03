@@ -769,8 +769,8 @@ export default function InterviewLobby({ role = "mentee" }) {
           ════════════════════════════════ */}
           <div style={{ display: step === 1 ? "contents" : "none" }}>
 
-            {/* 왼쪽: 세션 정보 + 내 프로필 (좁게 고정) */}
-            <div style={{ width: 270, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", paddingRight: 4 }}>
+            {/* 왼쪽: 세션 정보 + 내 프로필 */}
+            <div style={{ width: 320, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", paddingRight: 4 }}>
 
               {/* 세션 참여자 카드 */}
               <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "20px 22px", border: "1px solid #E5E5E5", boxShadow: "0 8px 24px rgba(16,24,40,0.06)" }}>
@@ -794,7 +794,7 @@ export default function InterviewLobby({ role = "mentee" }) {
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: "#202123" }}>{session.mentorName}</p>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: "#202123", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{session.mentorName}</p>
                         <span style={{ fontSize: 10, fontWeight: 700, color: "#067A5F", background: "#ECFDF5", padding: "2px 8px", borderRadius: 99 }}>멘토</span>
                         {isMentor && <span style={{ fontSize: 10, fontWeight: 600, color: "#6B7280", background: "#FFFFFF", padding: "2px 8px", borderRadius: 99, border: "1px solid #E5E5E5" }}>나</span>}
                       </div>
@@ -829,7 +829,7 @@ export default function InterviewLobby({ role = "mentee" }) {
                         }
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                            <p style={{ fontSize: 14, fontWeight: 700, color: "#202123" }}>{mentee.name}</p>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: "#202123", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{mentee.name}</p>
                             <span style={{ fontSize: 10, fontWeight: 700, color: "#202123", background: "#FFFFFF", padding: "2px 8px", borderRadius: 99, border: "1px solid #E5E5E5" }}>멘티</span>
                             {isMe && <span style={{ fontSize: 10, fontWeight: 600, color: "#6B7280", background: "#FFFFFF", padding: "2px 8px", borderRadius: 99, border: "1px solid #E5E5E5" }}>나</span>}
                             {isGroup && <span style={{ fontSize: 10, color: "#9CA3AF" }}>지원자 {i + 1}</span>}

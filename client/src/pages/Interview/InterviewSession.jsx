@@ -9,6 +9,7 @@ import {
   getStreamVideoDeviceId,
   openInterviewStream,
 } from "../../utils/mediaDevices";
+import { FaceMaskEffect, EMOJI_LIST } from "../../utils/faceMaskEffect";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || undefined;
 const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
@@ -327,6 +328,11 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── 컨트롤 상태 ── */
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(true);
+  const [isFaceMaskOn, setIsFaceMaskOn] = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState(EMOJI_LIST[0].emoji);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const faceMaskRef = useRef(null);
+  const originalTrackRef = useRef(null);
   const [ending, setEnding] = useState(false);
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
   const [activeQuestion, setActiveQuestion] = useState(null);
@@ -742,6 +748,54 @@ export default function InterviewSession({ role = "mentee" }) {
     else videoProducerRef.current?.pause();
   };
 
+  const handleFaceMaskToggle = useCallback(async () => {
+    if (!isFaceMaskOn) {
+      const stream = localStreamRef.current;
+      if (!stream || !stream.getVideoTracks().length) return;
+      try {
+        if (!faceMaskRef.current) faceMaskRef.current = new FaceMaskEffect();
+        faceMaskRef.current.emoji = selectedEmoji;
+        const maskedTrack = await faceMaskRef.current.start(stream);
+        if (!maskedTrack) return;
+        const previewTrack = faceMaskRef.current.getPreviewTrack() || maskedTrack;
+        originalTrackRef.current = stream.getVideoTracks()[0];
+        if (videoProducerRef.current) {
+          await videoProducerRef.current.replaceTrack({ track: maskedTrack });
+        }
+        const maskedStream = new MediaStream([previewTrack, ...stream.getAudioTracks()]);
+        setLocalMediaStream(maskedStream);
+        setIsFaceMaskOn(true);
+      } catch (e) {
+        console.error("얼굴 가리기 활성화 실패:", e);
+      }
+    } else {
+      const stream = localStreamRef.current;
+      const restoreTrack = faceMaskRef.current?.getSourceTrackClone() || originalTrackRef.current;
+      if (restoreTrack) restoreTrack.enabled = camOn;
+      if (restoreTrack && videoProducerRef.current) {
+        await videoProducerRef.current.replaceTrack({ track: restoreTrack });
+      }
+      faceMaskRef.current?.stop();
+      originalTrackRef.current = null;
+      if (stream && restoreTrack) {
+        const restoredStream = new MediaStream([restoreTrack, ...stream.getAudioTracks()]);
+        localStreamRef.current = restoredStream;
+        setLocalMediaStream(restoredStream);
+      } else if (stream) {
+        setLocalMediaStream(stream);
+      }
+      setIsFaceMaskOn(false);
+    }
+  }, [camOn, isFaceMaskOn, selectedEmoji]);
+
+  const handleEmojiChange = useCallback((emoji) => {
+    setSelectedEmoji(emoji);
+    if (faceMaskRef.current) {
+      faceMaskRef.current.emoji = emoji;
+    }
+    setShowEmojiPicker(false);
+  }, []);
+
   /* ── 통화 종료 ── */
   const handleEndCall = async () => {
     if (!isMentor) return;
@@ -1149,7 +1203,7 @@ export default function InterviewSession({ role = "mentee" }) {
               {peerIds.length === 0 ? (
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", height: "100%", padding: 20 }}>
                   <div style={{ width: "min(640px, 100%)", height: "min(480px, 100%)" }}>
-                    <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
+                    <VideoTile stream={localMediaStream} label="나 (본인)" mirror={!isFaceMaskOn} muted
                       isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                   </div>
                 </div>
@@ -1157,14 +1211,14 @@ export default function InterviewSession({ role = "mentee" }) {
                 <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "14px 14px 8px" }}>
                   <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
                     {mainViewId === '__local' ? (
-                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted isSpeaking camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror={!isFaceMaskOn} muted isSpeaking camOff={!camOn} micOff={!micOn} />
                     ) : (
                       <VideoTile stream={peersRef.current[mainViewId]} label="상대방" isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} />
                     )}
                   </div>
                   <div style={{ height: 110, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
                     <div style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
-                      <VideoTile stream={localMediaStream} label="나" mirror muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label="나" mirror={!isFaceMaskOn} muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                     </div>
                     {peerIds.map(peerId => (
                       <div key={peerId} style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
@@ -1200,6 +1254,37 @@ export default function InterviewSession({ role = "mentee" }) {
                     <span style={{ fontSize: 9, color: "#6B7280", letterSpacing: "0.02em" }}>{btn.label}</span>
                   </div>
                 ))}
+                {/* 얼굴 가리기 버튼 */}
+                <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                  <button onClick={handleFaceMaskToggle} style={{
+                    width: 44, height: 44, borderRadius: "50%",
+                    background: isFaceMaskOn ? "rgba(139,92,246,0.15)" : "#F1F1F3",
+                    border: `1.5px solid ${isFaceMaskOn ? "#8B5CF6" : "#E5E5E5"}`,
+                    color: isFaceMaskOn ? "#8B5CF6" : "#202123",
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s",
+                    fontSize: 20,
+                  }}>{selectedEmoji}</button>
+                  <span style={{ fontSize: 9, color: "#6B7280", letterSpacing: "0.02em" }}>{isFaceMaskOn ? "가리기 끔" : "얼굴 가리기"}</span>
+                  {isFaceMaskOn && (
+                    <button
+                      onClick={() => setShowEmojiPicker(v => !v)}
+                      title="스티커 변경"
+                      style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#8B5CF6", border: "1.5px solid #fff", color: "#fff", fontSize: 8, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }}
+                    >▼</button>
+                  )}
+                  {showEmojiPicker && (
+                    <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, background: "#fff", borderRadius: 12, padding: "8px 10px", display: "flex", flexWrap: "wrap", gap: 4, width: "max-content", maxWidth: "min(332px, calc(100vw - 32px))", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", border: "1px solid #E5E5E5", zIndex: 50 }}>
+                      {EMOJI_LIST.map(({ emoji, label }) => (
+                        <button
+                          key={emoji}
+                          title={label}
+                          onClick={() => handleEmojiChange(emoji)}
+                          style={{ width: 36, height: 36, borderRadius: 8, border: selectedEmoji === emoji ? "2px solid #8B5CF6" : "2px solid transparent", background: selectedEmoji === emoji ? "rgba(139,92,246,0.1)" : "transparent", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s", padding: 0 }}
+                        >{emoji}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 멘티 전용: 현재 질문 + 답변 버튼 */}

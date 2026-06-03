@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getAuthUser } from "../../store/authStore";
 import {
   createQuestions,
   deleteQuestion,
@@ -559,6 +560,12 @@ export default function InterviewLobby({ role = "mentee" }) {
 
   const isMentor = role === "mentor";
   const isGroup  = mentees.length > 1 || session.type?.includes("그룹");
+
+  const myProfileImg = (() => {
+    const u = getAuthUser();
+    const stored = localStorage.getItem(`profile_img_${u?.email}`);
+    return stored?.startsWith("data:") ? stored : null;
+  })();
   const sessionStatus = String(sessionData?.status ?? "").toUpperCase();
   const canModifyQuestions = !sessionStatus || sessionStatus === "SCHEDULED";
   const menteePreInterviewNote = findResumeSectionContent(resumeContent, [
@@ -779,9 +786,12 @@ export default function InterviewLobby({ role = "mentee" }) {
 
                   {/* 멘토 */}
                   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1px solid ${isMentor ? "#D1D5DB" : "#E5E5E5"}`, background: isMentor ? "#F1F1F3" : "#F7F7F8" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#202123", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                      {session.mentorName?.[0] ?? "M"}
-                    </div>
+                    {isMentor && myProfileImg
+                      ? <img src={myProfileImg} alt="me" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#202123", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                          {session.mentorName?.[0] ?? "M"}
+                        </div>
+                    }
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                         <p style={{ fontSize: 14, fontWeight: 700, color: "#202123" }}>{session.mentorName}</p>
@@ -811,9 +821,12 @@ export default function InterviewLobby({ role = "mentee" }) {
                         onMouseEnter={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "#F1F1F3"; e.currentTarget.style.borderColor = "#D1D5DB"; } }}
                         onMouseLeave={e => { if (isMentor && !isSelected) { e.currentTarget.style.background = "#F7F7F8"; e.currentTarget.style.borderColor = "#E5E5E5"; } }}
                       >
-                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: isSelected ? "#202123" : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0, transition: "background 0.18s" }}>
-                          {mentee.name?.[0] ?? "M"}
-                        </div>
+                        {isMe && myProfileImg
+                          ? <img src={myProfileImg} alt="me" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                          : <div style={{ width: 38, height: 38, borderRadius: "50%", background: isSelected ? "#202123" : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0, transition: "background 0.18s" }}>
+                              {mentee.name?.[0] ?? "M"}
+                            </div>
+                        }
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                             <p style={{ fontSize: 14, fontWeight: 700, color: "#202123" }}>{mentee.name}</p>

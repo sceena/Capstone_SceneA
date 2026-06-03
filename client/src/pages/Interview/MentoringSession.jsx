@@ -609,6 +609,8 @@ export default function MentoringSessionPage() {
     else videoProducerRef.current?.pause();
   };
 
+  const [menteeSessionDone, setMenteeSessionDone] = useState(false);
+
   const handleEndSession = useCallback(async () => {
     clearInterval(timerRef.current);
     const sid = session.sessionId || sessionId;
@@ -616,14 +618,9 @@ export default function MentoringSessionPage() {
     if (user?.role === "mentor") {
       navigate(`/mentor/feedback/${sid}`);
     } else {
-      navigate(`/report/mentor-review/${sid}`, {
-        state: {
-          mentorName: session.mentor?.name || "멘토",
-          nextPath: `/report/ai-stream/${sid}`,
-        },
-      });
+      setMenteeSessionDone(true);
     }
-  }, [navigate, session.sessionId, session.mentor?.name, sessionId, user?.role]);
+  }, [navigate, session.sessionId, sessionId, user?.role]);
 
   const userRole = String(user?.role || "").toLowerCase();
   const isMentor = userRole.includes("mentor");
@@ -649,6 +646,58 @@ export default function MentoringSessionPage() {
       ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
     `}</style>
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Noto Sans KR', sans-serif", overflow: "hidden" }}>
+
+      {/* ── 멘티 세션 종료 오버레이 ── */}
+      {menteeSessionDone && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(13,34,64,0.92)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: 24, padding: "48px 52px",
+            textAlign: "center", maxWidth: 440, width: "90%",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+          }}>
+            {/* 체크 아이콘 */}
+            <div style={{
+              width: 72, height: 72, borderRadius: "50%",
+              background: "#E6FCF5",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 24px",
+            }}>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M6 16l7 7 13-13" stroke={GREEN} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: NAVY, marginBottom: 12, letterSpacing: "-0.03em" }}>
+              멘토링 세션이 종료됐어요
+            </h2>
+            <p style={{ fontSize: 15, color: "#495057", lineHeight: 1.7, marginBottom: 8 }}>
+              멘토가 최종 리포트를 작성하고 있습니다.
+            </p>
+            <p style={{ fontSize: 13, color: "#868E96", marginBottom: 36 }}>
+              작성이 완료되면 마이페이지에서 확인할 수 있어요.
+            </p>
+            <button
+              onClick={() => navigate("/dashboard/mentee")}
+              style={{
+                width: "100%", padding: "14px",
+                background: `linear-gradient(135deg, ${NAVY} 0%, #1B4F7A 100%)`,
+                color: "#fff", border: "none", borderRadius: 12,
+                fontSize: 15, fontWeight: 700, cursor: "pointer",
+                fontFamily: "inherit", letterSpacing: "-0.01em",
+                boxShadow: "0 6px 16px rgba(13,34,64,0.28)",
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >
+              대시보드로 이동하기 →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── 헤더 ── */}
       <header style={{ background: "#fff", borderBottom: "1px solid #E8E0D0", padding: "0 28px", height: 64, display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>

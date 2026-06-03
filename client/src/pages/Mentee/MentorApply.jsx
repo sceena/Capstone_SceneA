@@ -235,9 +235,8 @@ export default function MentorApply() {
         job_posting_raw_text: jobPostingRawText.trim(),
         job_posting_company: "지원 기업",
         job_posting_job_category: jobStr || "지원 직무",
-        resume_content: requestNote.trim()
-          ? `${resumeContent}\n\n[멘토에게 전달할 내용]\n${requestNote.trim()}`
-          : resumeContent,
+        resume_content: resumeContent,
+        ...(requestNote.trim() && { request_note: requestNote.trim() }),
       });
     } catch (err) {
       alert(err?.message || "면접 신청에 실패했습니다.");

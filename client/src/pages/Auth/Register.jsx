@@ -551,8 +551,16 @@ export default function Register() {
   };
 
   const buildTags = () => {
+    const seen = new Set();
     const tags = [];
-    const add = (name, category) => { if (name?.trim()) tags.push({ name: name.trim(), category }); };
+    const add = (name, category) => {
+      const trimmed = name?.trim();
+      // 태그 name이 전역 unique라서 이름 중복 시 백엔드 500 발생 → 이름 기준 중복 제거
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        tags.push({ name: trimmed, category });
+      }
+    };
     const addList = (str, category) => {
       str?.split(",").forEach(v => add(v, category));
     };
@@ -584,7 +592,7 @@ export default function Register() {
           password: account.password,
           name: roleInfo.name,
           nickname: roleInfo.name,
-          bio: profile.bio || "",
+          bio: (profile.bio || "").slice(0, 100),
           role: roleInfo.role.toUpperCase(),
           tags: buildTags(),
         }),

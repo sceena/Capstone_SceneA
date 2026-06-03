@@ -36,7 +36,9 @@ const Header = ({ userName, accessToken }) => {
         method: "POST",
         headers: { "Authorization": `Bearer ${accessToken}` },
       });
-    } catch {}
+    } catch (err) {
+      console.error("[MenteeDashboard] 로그아웃 API 실패:", err);
+    }
     clearAuthUser();
     navigate("/");
   };
@@ -339,12 +341,22 @@ export default function MenteeDashboard() {
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState("");
   const [unreadFinals, setUnreadFinals] = useState([]);
 
   useEffect(() => {
+    setSessionsLoading(true);
     getMySessions()
-      .then(data => setSessions(Array.isArray(data) ? data : []))
-      .catch(() => setSessions([]));
+      .then(data => {
+        setSessions(Array.isArray(data) ? data : []);
+        setSessionsError("");
+      })
+      .catch(err => {
+        console.error("[MenteeDashboard] 세션 목록 조회 실패:", err);
+        setSessionsError(err?.message || "세션 목록을 불러오지 못했습니다.");
+      })
+      .finally(() => setSessionsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -606,7 +618,27 @@ export default function MenteeDashboard() {
             </svg>
           }
         >
-          {enterableCards.length > 0 ? (
+          {sessionsLoading ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontSize: 14 }}>
+              <div style={{
+                width: 36, height: 36,
+                border: `3px solid ${C.border}`,
+                borderTop: `3px solid ${C.primary}`,
+                borderRadius: "50%",
+                margin: "0 auto 12px",
+                animation: "spin 0.8s linear infinite",
+              }} />
+              불러오는 중...
+            </div>
+          ) : sessionsError ? (
+            <div style={{
+              background: "#FFF5F5", border: "1px solid #FCA5A5",
+              color: C.danger, borderRadius: 10,
+              padding: "12px 16px", fontSize: 13,
+            }}>
+              {sessionsError}
+            </div>
+          ) : enterableCards.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {enterableCards.map(s => (
                 <SessionCard

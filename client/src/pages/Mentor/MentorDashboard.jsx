@@ -38,7 +38,9 @@ const Header = ({ userName, accessToken }) => {
         method: "POST",
         headers: { "Authorization": `Bearer ${accessToken}` },
       });
-    } catch {}
+    } catch (err) {
+      console.error("[MentorDashboard] 로그아웃 API 실패:", err);
+    }
     clearAuthUser();
     navigate("/");
   };
@@ -259,12 +261,8 @@ const SessionCard = ({ title, date, mentor, type, time, onEnter }) => (
 const MenteeDetailModal = ({ request, onClose, onAccept, onDecline }) => {
   const raw = request.rawData || {};
 
-  // resume_content: 백엔드가 예약 응답에 포함시켜주면 자동 표시
-  const fullContent = raw.resume_content ?? raw.resumeContent ?? raw.content ?? "";
-  const MENTOR_MSG_DIVIDER = "[멘토에게 전달할 내용]";
-  const dividerIdx    = fullContent.indexOf(MENTOR_MSG_DIVIDER);
-  const resumeContent = dividerIdx >= 0 ? fullContent.slice(0, dividerIdx).trim() : fullContent.trim();
-  const mentorMessage = dividerIdx >= 0 ? fullContent.slice(dividerIdx + MENTOR_MSG_DIVIDER.length).trim() : "";
+  const resumeContent = (raw.resume_content ?? raw.resumeContent ?? raw.content ?? "").trim();
+  const mentorMessage = (raw.request_note ?? raw.requestNote ?? "").trim();
 
   const dateInfo = request.scheduledAt
     ? new Date(request.scheduledAt).toLocaleDateString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -347,7 +345,7 @@ const MenteeDetailModal = ({ request, onClose, onAccept, onDecline }) => {
                 <p style={{ fontSize: 13, color: C.text, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{mentorMessage}</p>
               </div>
             ) : (
-              <PendingBox label="백엔드 작업 완료 후 자동 표시됩니다" />
+              <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic" }}>작성된 내용이 없습니다.</p>
             )}
           </div>
         </div>
@@ -602,10 +600,16 @@ export default function MentorDashboard() {
   const userName = user?.name || user?.email?.split("@")[0] || "사용자";
 
   const [allSessions, setAllSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const loadSessions = useCallback(() => {
+    setSessionsLoading(true);
     getMySessions()
       .then(data => setAllSessions(Array.isArray(data) ? data : []))
-      .catch(() => setAllSessions([]));
+      .catch(err => {
+        console.error("[MentorDashboard] 세션 목록 조회 실패:", err);
+        setAllSessions([]);
+      })
+      .finally(() => setSessionsLoading(false));
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
@@ -829,6 +833,19 @@ export default function MentorDashboard() {
             </svg>
           }
         >
+          {sessionsLoading ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontSize: 14 }}>
+              <div style={{
+                width: 36, height: 36,
+                border: `3px solid ${C.border}`,
+                borderTop: `3px solid ${C.primary}`,
+                borderRadius: "50%",
+                margin: "0 auto 12px",
+                animation: "spin 0.8s linear infinite",
+              }} />
+              불러오는 중...
+            </div>
+          ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {sessions.map(s => (
               <SessionCard
@@ -861,6 +878,7 @@ export default function MentorDashboard() {
               </div>
             )}
           </div>
+          )}
         </DashCard>
 
         {/* ── 하단 2열 ── */}

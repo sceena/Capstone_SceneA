@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.MediaType;
@@ -82,8 +83,10 @@ public class QuestionController {
     @PostMapping("/recommendations")
     public ResponseEntity<AiSessionQuestionGenerationResponse> generateRecommendedQuestions(
             @AuthenticationPrincipal Long mentorId,
-            @PathVariable Long id) {
-        return ResponseEntity.ok(recommendedQuestionService.generateRecommendedQuestions(mentorId, id));
+            @PathVariable Long id,
+            @RequestParam(required = false) String scope,
+            @RequestParam(name = "candidate_id", required = false) Long candidateId) {
+        return ResponseEntity.ok(recommendedQuestionService.generateRecommendedQuestions(mentorId, id, scope, candidateId));
     }
 
     @Operation(summary = "세션 질문 목록 조회", description = "특정 세션의 전체 질문 목록을 조회한다.")

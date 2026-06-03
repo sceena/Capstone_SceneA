@@ -9,7 +9,7 @@ import MentorInfoRegister from './pages/Mentor/MentorRegister'
 import MentorSearch from './pages/Mentee/MentorSearch'
 import MentorApply from './pages/Mentee/MentorApply'
 import InterviewSession from './pages/Interview/InterviewSession'
-import InterviewRobby from './pages/Interview/InterviewLobby'
+import InterviewLobby from './pages/Interview/InterviewLobby'
 import MentoringSessionPage from './pages/Interview/MentoringSession'
 import AIReportPage from './pages/Report/AIReport'
 import ReportWaitingPage from './pages/Report/ReportWaiting'
@@ -46,7 +46,7 @@ export default function App() {
       <Route path="/dashboard/mentor"        element={<ProtectedRoute role="mentor" element={<MentorDashboard />} />} />
       <Route path="/mentor/register"         element={<ProtectedRoute role="mentor" element={<MentorInfoRegister />} />} />
       <Route path="/mentor/mypage"           element={<ProtectedRoute role="mentor" element={<MentorMyPage />} />} />
-      <Route path="/interview/ready-mentor/:id" element={<ProtectedRoute role="mentor" element={<InterviewRobby role="mentor" />} />} />
+      <Route path="/interview/ready-mentor/:id" element={<ProtectedRoute role="mentor" element={<InterviewLobby role="mentor" />} />} />
       <Route path="/interview/mentor/:id"    element={<ProtectedRoute role="mentor" element={<InterviewSession role="mentor" />} />} />
       <Route path="/mentoring/mentor/:sessionId" element={<ProtectedRoute role="mentor" element={<MentoringSessionPage />} />} />
       <Route path="/mentor/feedback/:sessionId" element={<ProtectedRoute role="mentor" element={<MentorFeedbackPage />} />} />
@@ -57,7 +57,7 @@ export default function App() {
       <Route path="/mentor/apply/:id"        element={<ProtectedRoute role="mentee" element={<MentorApply />} />} />
       <Route path="/mentee/mypage"           element={<ProtectedRoute role="mentee" element={<MenteeMyPage />} />} />
       <Route path="/mentee/resume"           element={<ProtectedRoute role="mentee" element={<ResumeManage />} />} />
-      <Route path="/interview/ready/:id"     element={<ProtectedRoute role="mentee" element={<InterviewRobby role="mentee" />} />} />
+      <Route path="/interview/ready/:id"     element={<ProtectedRoute role="mentee" element={<InterviewLobby role="mentee" />} />} />
       <Route path="/interview/mentee/:id"    element={<ProtectedRoute role="mentee" element={<InterviewSession role="mentee" />} />} />
       <Route path="/mentoring/mentee/:sessionId" element={<ProtectedRoute role="mentee" element={<MentoringSessionPage />} />} />
       <Route path="/report/generating/:sessionId" element={<ProtectedRoute element={<ReportGeneratingPage />} />} />
@@ -65,6 +65,7 @@ export default function App() {
       <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute element={<ReportWaitingPage />} />} />
       <Route path="/report/mentor-review/:sessionId" element={<ProtectedRoute element={<MentorReviewPage />} />} />
       <Route path="/report/final"            element={<ProtectedRoute element={<FinalReportPage />} />} />
+      <Route path="/report/final/:sessionId" element={<ProtectedRoute element={<FinalReportPage />} />} />
 
       {/* 로그인만 필요 (공통) */}
       <Route path="/mypage" element={<ProtectedRoute element={<MyPage />} />} />

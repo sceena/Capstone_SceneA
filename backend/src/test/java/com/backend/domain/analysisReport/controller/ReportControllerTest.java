@@ -57,7 +57,7 @@ class ReportControllerTest {
                 null, LocalDateTime.now(), LocalDateTime.now()
         );
 
-        given(reportService.getReport(any(), eq(42L), any())).willReturn(response);
+        given(reportService.getReport(any(), eq(42L))).willReturn(response);
 
         mockMvc.perform(get("/api/sessions/42/report")
                         .header("Authorization", "Bearer " + token))
@@ -81,7 +81,7 @@ class ReportControllerTest {
     void 리포트_조회_권한없음_403() throws Exception {
         String token = jwtProvider.generateAccessToken(99L, "MENTEE");
 
-        given(reportService.getReport(any(), eq(42L), any()))
+        given(reportService.getReport(any(), eq(42L)))
                 .willThrow(new CustomException(ErrorCode.ACCESS_DENIED));
 
         mockMvc.perform(get("/api/sessions/42/report")
@@ -93,7 +93,7 @@ class ReportControllerTest {
     void 리포트_조회_세션없음_404() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
 
-        given(reportService.getReport(any(), eq(999L), any()))
+        given(reportService.getReport(any(), eq(999L)))
                 .willThrow(new CustomException(ErrorCode.SESSION_NOT_FOUND));
 
         mockMvc.perform(get("/api/sessions/999/report")
@@ -105,7 +105,7 @@ class ReportControllerTest {
     void 리포트_조회_리포트없음_404() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
 
-        given(reportService.getReport(any(), eq(42L), any()))
+        given(reportService.getReport(any(), eq(42L)))
                 .willThrow(new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
         mockMvc.perform(get("/api/sessions/42/report")

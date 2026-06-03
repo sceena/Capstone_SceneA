@@ -39,6 +39,7 @@ public class FastApiAiSttJobClient implements AiSttJobClient {
             AiSttJobResponse response = restClient.post()
                     .uri("/api/stt/jobs")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .header("ngrok-skip-browser-warning", "true")
                     .body(request)
                     .retrieve()
                     .body(AiSttJobResponse.class);

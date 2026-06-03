@@ -63,6 +63,14 @@ public class FastApiAiSttClient implements AiSttClient {
             if (response == null) {
                 throw new CustomException(ErrorCode.AI_SERVER_ERROR);
             }
+            log.info(
+                    "AI STT /api/stt response textLength={} model={} durationSec={} quality={} message={}",
+                    response.text() == null ? 0 : response.text().length(),
+                    response.model(),
+                    response.durationSec(),
+                    response.audioQualityStatus(),
+                    response.audioQualityMessage()
+            );
             return response;
         } catch (RestClientResponseException e) {
             log.warn("AI STT server returned {}: {}", e.getStatusCode(), e.getResponseBodyAsString());

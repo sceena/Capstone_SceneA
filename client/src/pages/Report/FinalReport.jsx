@@ -128,6 +128,12 @@ function toFivePointMentorScore(score) {
   return Math.max(1, Math.min(5, fivePoint));
 }
 
+function formatPoint(score) {
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return "-";
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
+}
+
 function hasItems(items) {
   return Array.isArray(items) && items.length > 0;
 }
@@ -673,8 +679,13 @@ export default function FinalReportPage() {
           const fb = feedbacks[qna.id] || {};
           const isBad = qna.aiScore <= 2.5;
           const mentorScoreValue = fb.score ?? qna.mentorScore;
-          const hasMentorScoreRevision = qna.hasMentorRevision && Number.isFinite(Number(mentorScoreValue));
-          const displayScore = hasMentorScoreRevision ? Number(mentorScoreValue) : qna.aiScore;
+          const aiScoreValue = Number(qna.aiScore);
+          const normalizedMentorScore = toFivePointMentorScore(mentorScoreValue);
+          const hasMentorScoreRevision = qna.hasMentorRevision
+            && Number.isFinite(aiScoreValue)
+            && Number.isFinite(Number(normalizedMentorScore))
+            && Math.abs(Number(normalizedMentorScore) - aiScoreValue) >= 0.05;
+          const displayScore = hasMentorScoreRevision ? normalizedMentorScore : qna.aiScore;
           const hasDifferentAiReasoning = qna.hasMentorRevision
             && qna.aiReasoning
             && qna.aiReasoning !== qna.reasoning;
@@ -735,19 +746,17 @@ export default function FinalReportPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   {hasMentorScoreRevision ? (
                     <>
-                      <div>
-                        <p style={{ fontSize: 10, color: "#aaa", marginBottom: 3 }}>AI 초안 점수</p>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <Stars score={qna.aiScore} color="#D1D5DB" />
-                          <span style={{ fontSize: 12, color: "#aaa", textDecoration: "line-through" }}>{Number(qna.aiScore).toFixed(1)}</span>
-                        </div>
-                      </div>
-                      <span style={{ color: "#999", fontSize: 16 }}>→</span>
-                      <div>
-                        <p style={{ fontSize: 10, color: "#888", marginBottom: 3, fontWeight: 700 }}>멘토 수정 점수</p>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <Stars score={displayScore} color="#F59E0B" />
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#333" }}>{Number(displayScore).toFixed(1)}</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        <p style={{ fontSize: 10, color: "#888", margin: 0, fontWeight: 800 }}>멘토 점수 수정</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 13, color: "#9CA3AF", textDecoration: "line-through", fontWeight: 700 }}>
+                            AI {formatPoint(qna.aiScore)}점
+                          </span>
+                          <span style={{ color: "#9CA3AF", fontSize: 14 }}>→</span>
+                          <span style={{ fontSize: 13, color: GREEN, fontWeight: 900 }}>
+                            멘토 {formatPoint(normalizedMentorScore)}점
+                          </span>
+                          <Stars score={normalizedMentorScore} color="#F59E0B" />
                         </div>
                       </div>
                     </>

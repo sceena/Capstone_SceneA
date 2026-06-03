@@ -1,15 +1,18 @@
 const MP_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/face_detection";
 const FACE_DETECTION_SCRIPT = `${MP_CDN}/face_detection.js`;
+const SEGMENTATION_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation";
+const SEGMENTATION_SCRIPT = `${SEGMENTATION_CDN}/selfie_segmentation.js`;
 const DEFAULT_WIDTH = 640;
 const DEFAULT_HEIGHT = 480;
 
 let mediaPipeLoadPromise = null;
+let segmentationLoadPromise = null;
 
-function loadScript(src) {
+function loadScript(src, globalName) {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector(`script[src="${src}"]`);
     if (existing) {
-      if (window.FaceDetection) resolve();
+      if (window[globalName]) resolve();
       else existing.addEventListener("load", resolve, { once: true });
       return;
     }
@@ -26,11 +29,22 @@ function loadScript(src) {
 async function ensureMediaPipe() {
   if (window.FaceDetection) return;
   if (!mediaPipeLoadPromise) {
-    mediaPipeLoadPromise = loadScript(FACE_DETECTION_SCRIPT);
+    mediaPipeLoadPromise = loadScript(FACE_DETECTION_SCRIPT, "FaceDetection");
   }
   await mediaPipeLoadPromise;
   if (!window.FaceDetection) {
     throw new Error("MediaPipe FaceDetection failed to load");
+  }
+}
+
+async function ensureSelfieSegmentation() {
+  if (window.SelfieSegmentation) return;
+  if (!segmentationLoadPromise) {
+    segmentationLoadPromise = loadScript(SEGMENTATION_SCRIPT, "SelfieSegmentation");
+  }
+  await segmentationLoadPromise;
+  if (!window.SelfieSegmentation) {
+    throw new Error("MediaPipe SelfieSegmentation failed to load");
   }
 }
 
@@ -56,29 +70,38 @@ function getSourceVideoTrack(sourceStream) {
 }
 
 export const EMOJI_LIST = [
-  { emoji: "🐻", label: "bear" },
-  { emoji: "🐱", label: "cat" },
-  { emoji: "🐰", label: "rabbit" },
-  { emoji: "🐸", label: "frog" },
-  { emoji: "🐹", label: "hamster" },
-  { emoji: "🕶️", label: "sunglasses" },
-  { emoji: "⭐", label: "star" },
+  { emoji: "◐", label: "블러", type: "blur" },
+  { emoji: "▣", label: "배경 블러", type: "backgroundBlur" },
+  { emoji: "🐻", label: "곰" },
+  { emoji: "🐱", label: "고양이" },
+  { emoji: "🐰", label: "토끼" },
+  { emoji: "🐸", label: "개구리" },
+  { emoji: "🐹", label: "햄스터" },
 ];
 
 export class FaceMaskEffect {
   constructor() {
     this._running = false;
     this._emoji = EMOJI_LIST[0].emoji;
+    this._displayName = "";
     this._canvas = null;
     this._ctx = null;
     this._previewCanvas = null;
     this._previewCtx = null;
+    this._scratchCanvas = null;
+    this._scratchCtx = null;
+    this._composeCanvas = null;
+    this._composeCtx = null;
     this._video = null;
     this._detector = null;
+    this._segmenter = null;
+    this._segmenterInitPromise = null;
     this._animId = null;
     this._canvasStream = null;
     this._previewStream = null;
     this._processing = false;
+    this._segmenting = false;
+    this._segmentationMask = null;
     this._latestDetections = [];
     this._sourceTrack = null;
   }
@@ -89,6 +112,14 @@ export class FaceMaskEffect {
 
   set emoji(value) {
     this._emoji = value || EMOJI_LIST[0].emoji;
+  }
+
+  set displayName(value) {
+    this._displayName = String(value || "").trim();
+  }
+
+  get _maskOption() {
+    return EMOJI_LIST.find((option) => option.emoji === this._emoji) || EMOJI_LIST[0];
   }
 
   async start(sourceStream) {
@@ -119,6 +150,10 @@ export class FaceMaskEffect {
     canvas.height = height;
     this._canvas = canvas;
     this._ctx = canvas.getContext("2d", { alpha: false });
+    this._scratchCanvas = document.createElement("canvas");
+    this._scratchCtx = this._scratchCanvas.getContext("2d", { alpha: false });
+    this._composeCanvas = document.createElement("canvas");
+    this._composeCtx = this._composeCanvas.getContext("2d");
 
     const previewCanvas = document.createElement("canvas");
     previewCanvas.width = width;
@@ -172,6 +207,24 @@ export class FaceMaskEffect {
       this._processing = false;
     });
     this._detector = detector;
+  }
+
+  async _initSegmenter() {
+    await ensureSelfieSegmentation();
+    if (!this._running || !this._video) return;
+
+    const segmenter = new window.SelfieSegmentation({
+      locateFile: (file) => `${SEGMENTATION_CDN}/${file}`,
+    });
+    segmenter.setOptions({
+      modelSelection: 1,
+      selfieMode: false,
+    });
+    segmenter.onResults((results) => {
+      this._segmentationMask = results?.segmentationMask || null;
+      this._segmenting = false;
+    });
+    this._segmenter = segmenter;
   }
 
   _resizeCanvasToVideo() {
@@ -255,16 +308,176 @@ export class FaceMaskEffect {
     return { cx, cy, fw, fh };
   }
 
-  _drawEmojiMasks() {
+  _getMaskBounds({ cx, cy, fw, fh }, padding = 0.28) {
+    const canvas = this._canvas;
+    if (!canvas) return null;
+
+    const width = Math.max(32, fw * (1 + padding));
+    const height = Math.max(32, fh * (1 + padding));
+    const x = Math.max(0, Math.round(cx - width / 2));
+    const y = Math.max(0, Math.round(cy - height / 2));
+    const w = Math.min(canvas.width - x, Math.round(width));
+    const h = Math.min(canvas.height - y, Math.round(height));
+
+    if (w <= 0 || h <= 0) return null;
+    return { x, y, w, h };
+  }
+
+  _applyBlurMask(parsed) {
+    const ctx = this._ctx;
+    const canvas = this._canvas;
+    const scratch = this._scratchCanvas;
+    const scratchCtx = this._scratchCtx;
+    if (!ctx || !canvas || !scratch || !scratchCtx) return;
+
+    const bounds = this._getMaskBounds(parsed, 0.5);
+    if (!bounds) return;
+
+    const { x, y, w, h } = bounds;
+    scratch.width = w;
+    scratch.height = h;
+    scratchCtx.clearRect(0, 0, w, h);
+    scratchCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(parsed.cx, parsed.cy - parsed.fh * 0.04, w * 0.46, h * 0.48, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.filter = "blur(16px)";
+    ctx.drawImage(scratch, 0, 0, w, h, x, y, w, h);
+    ctx.filter = "none";
+    ctx.fillStyle = "rgba(15, 23, 42, 0.12)";
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
+
+    this._drawBlurLabel(parsed, w);
+  }
+
+  _drawBlurLabel(parsed, maskWidth) {
+    const ctx = this._ctx;
+    const label = this._displayName;
+    if (!ctx || !label) return;
+
+    const maxText = label.length > 10 ? `${label.slice(0, 10)}...` : label;
+    const fontSize = Math.max(13, Math.min(22, Math.round(maskWidth * 0.13)));
+    const y = parsed.cy - parsed.fh * 0.02;
+
+    ctx.save();
+    ctx.font = `700 ${fontSize}px "Noto Sans KR", "Apple SD Gothic Neo", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+    ctx.fillText(maxText, parsed.cx, y);
+    ctx.restore();
+  }
+
+  _drawSilhouetteMask(parsed) {
     const ctx = this._ctx;
     if (!ctx) return;
+
+    const radius = Math.max(28, Math.max(parsed.fw, parsed.fh) * 0.52);
+    const centerY = parsed.cy - parsed.fh * 0.04;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(17, 24, 39, 0.92)";
+    ctx.beginPath();
+    ctx.ellipse(parsed.cx, centerY, radius * 0.78, radius * 0.92, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.beginPath();
+    ctx.arc(parsed.cx, centerY - radius * 0.16, radius * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(parsed.cx, centerY + radius * 0.28, radius * 0.42, radius * 0.22, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  _drawCoverMask(parsed) {
+    const ctx = this._ctx;
+    if (!ctx) return;
+
+    const bounds = this._getMaskBounds(parsed, 0.18);
+    if (!bounds) return;
+
+    const { x, y, w, h } = bounds;
+    const radius = Math.min(18, w * 0.16, h * 0.16);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(31, 41, 55, 0.94)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, radius);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
+    ctx.lineWidth = Math.max(2, Math.round(w * 0.018));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _drawBackgroundBlur() {
+    const ctx = this._ctx;
+    const canvas = this._canvas;
+    const scratch = this._scratchCanvas;
+    const scratchCtx = this._scratchCtx;
+    const compose = this._composeCanvas;
+    const composeCtx = this._composeCtx;
+    const mask = this._segmentationMask;
+    if (!ctx || !canvas || !scratch || !scratchCtx || !compose || !composeCtx || !mask) return;
+
+    const { width, height } = canvas;
+    if (scratch.width !== width || scratch.height !== height) {
+      scratch.width = width;
+      scratch.height = height;
+    }
+    if (compose.width !== width || compose.height !== height) {
+      compose.width = width;
+      compose.height = height;
+    }
+
+    scratchCtx.clearRect(0, 0, width, height);
+    scratchCtx.drawImage(canvas, 0, 0, width, height);
+
+    composeCtx.save();
+    composeCtx.clearRect(0, 0, width, height);
+    composeCtx.filter = "blur(18px)";
+    composeCtx.drawImage(scratch, 0, 0, width, height);
+    composeCtx.filter = "none";
+    composeCtx.globalCompositeOperation = "destination-out";
+    composeCtx.drawImage(mask, 0, 0, width, height);
+    composeCtx.restore();
+
+    ctx.drawImage(compose, 0, 0, width, height);
+  }
+
+  _drawFaceMasks() {
+    const ctx = this._ctx;
+    if (!ctx) return;
+
+    const option = this._maskOption;
+    if (option.type === "backgroundBlur") return;
 
     for (const det of this._latestDetections) {
       const parsed = this._parseBoundingBox(det);
       if (!parsed) continue;
 
+      if (option.type === "blur") {
+        this._applyBlurMask(parsed);
+        continue;
+      }
+
+      if (option.type === "silhouette") {
+        this._drawSilhouetteMask(parsed);
+        continue;
+      }
+
+      if (option.type === "cover") {
+        this._drawCoverMask(parsed);
+        continue;
+      }
+
       const { cx, cy, fw, fh } = parsed;
-      const size = Math.max(32, Math.round(Math.max(fw, fh) * 1.15));
+    const size = Math.max(38, Math.round(Math.max(fw, fh) * 1.36));
       const y = cy - fh * 0.08;
 
       ctx.save();
@@ -299,13 +512,37 @@ export class FaceMaskEffect {
     });
   }
 
+  _requestSegmentation() {
+    if (this._maskOption.type !== "backgroundBlur" || !this._video) return;
+    if (!this._segmenter) {
+      if (!this._segmenterInitPromise) {
+        this._segmenterInitPromise = this._initSegmenter().catch((error) => {
+          console.warn("[FaceMask] Background blur disabled; segmentation failed to load.", error);
+          this._segmenting = false;
+        });
+      }
+      return;
+    }
+    if (this._segmenting || this._video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+
+    this._segmenting = true;
+    this._segmenter.send({ image: this._video }).catch((error) => {
+      console.warn("[FaceMask] Segmentation frame failed.", error);
+      this._segmenting = false;
+    });
+  }
+
   _loop() {
     if (!this._running) return;
 
     const drewFrame = this._drawPassthroughFrame();
     if (drewFrame) {
-      this._drawEmojiMasks();
+      if (this._maskOption.type === "backgroundBlur") {
+        this._drawBackgroundBlur();
+      }
+      this._drawFaceMasks();
       this._drawMirroredPreviewFrame();
+      this._requestSegmentation();
       this._requestDetection();
     }
 
@@ -330,13 +567,24 @@ export class FaceMaskEffect {
     try {
       this._detector?.close();
     } catch {}
+    try {
+      this._segmenter?.close();
+    } catch {}
     this._detector = null;
+    this._segmenter = null;
+    this._segmenterInitPromise = null;
     this._canvas = null;
     this._ctx = null;
     this._previewCanvas = null;
     this._previewCtx = null;
+    this._scratchCanvas = null;
+    this._scratchCtx = null;
+    this._composeCanvas = null;
+    this._composeCtx = null;
     this._latestDetections = [];
+    this._segmentationMask = null;
     this._processing = false;
+    this._segmenting = false;
     this._sourceTrack?.stop();
     this._sourceTrack = null;
   }

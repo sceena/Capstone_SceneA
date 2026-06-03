@@ -748,6 +748,12 @@ export default function InterviewSession({ role = "mentee" }) {
     else videoProducerRef.current?.pause();
   };
 
+  const getFaceMaskDisplayName = useCallback(() => {
+    const authUser = getAuthUser();
+    const baseName = authUser?.nickname || authUser?.name || authUser?.username || authUser?.email?.split("@")[0] || "나";
+    return `${baseName} ${isMentor ? "멘토" : "멘티"}`;
+  }, [isMentor]);
+
   const handleFaceMaskToggle = useCallback(async () => {
     if (!isFaceMaskOn) {
       const stream = localStreamRef.current;
@@ -755,6 +761,7 @@ export default function InterviewSession({ role = "mentee" }) {
       try {
         if (!faceMaskRef.current) faceMaskRef.current = new FaceMaskEffect();
         faceMaskRef.current.emoji = selectedEmoji;
+        faceMaskRef.current.displayName = getFaceMaskDisplayName();
         const maskedTrack = await faceMaskRef.current.start(stream);
         if (!maskedTrack) return;
         const previewTrack = faceMaskRef.current.getPreviewTrack() || maskedTrack;
@@ -786,7 +793,7 @@ export default function InterviewSession({ role = "mentee" }) {
       }
       setIsFaceMaskOn(false);
     }
-  }, [camOn, isFaceMaskOn, selectedEmoji]);
+  }, [camOn, getFaceMaskDisplayName, isFaceMaskOn, selectedEmoji]);
 
   const handleEmojiChange = useCallback((emoji) => {
     setSelectedEmoji(emoji);

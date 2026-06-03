@@ -615,6 +615,12 @@ export default function MentoringSessionPage() {
     else videoProducerRef.current?.pause();
   };
 
+  const getFaceMaskDisplayName = useCallback(() => {
+    const baseName = user?.nickname || user?.name || user?.username || user?.email?.split("@")[0] || "나";
+    const roleLabel = String(user?.role || "").toLowerCase().includes("mentor") ? "멘토" : "멘티";
+    return `${baseName} ${roleLabel}`;
+  }, [user?.email, user?.name, user?.nickname, user?.role, user?.username]);
+
   const handleFaceMaskToggle = useCallback(async () => {
     if (!isFaceMaskOn) {
       // 활성화
@@ -623,6 +629,7 @@ export default function MentoringSessionPage() {
       try {
         if (!faceMaskRef.current) faceMaskRef.current = new FaceMaskEffect();
         faceMaskRef.current.emoji = selectedEmoji;
+        faceMaskRef.current.displayName = getFaceMaskDisplayName();
         const maskedTrack = await faceMaskRef.current.start(stream);
         if (!maskedTrack) return;
         const previewTrack = faceMaskRef.current.getPreviewTrack() || maskedTrack;
@@ -656,7 +663,7 @@ export default function MentoringSessionPage() {
       }
       setIsFaceMaskOn(false);
     }
-  }, [isCamOn, isFaceMaskOn, selectedEmoji]);
+  }, [getFaceMaskDisplayName, isCamOn, isFaceMaskOn, selectedEmoji]);
 
   const handleEmojiChange = useCallback((emoji) => {
     setSelectedEmoji(emoji);

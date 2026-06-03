@@ -773,7 +773,11 @@ export default function MentorDashboard() {
 
         {/* ── 미완료 피드백 알림 배너 ── */}
         {(() => {
-          const pf = rawSessions.filter(s => normalizeStatus(s.status) === "completed" && !s.feedbackSubmitted);
+          // "first" = AI 리포트 있음 + 멘토 피드백 미완료 / "final" = 이미 전송완료
+          const pf = rawSessions.filter(s =>
+            normalizeStatus(s.status) === "completed" &&
+            (s.reportStatus ?? s.report_status) === "first"
+          );
           if (pf.length === 0) return null;
           return (
             <div style={{

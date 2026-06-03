@@ -399,7 +399,9 @@ export default function MentoringSessionPage() {
 
   const [session, setSession]   = useState({ mentor: { name: "" }, title: "", date: "", time: "" });
   const [reportData, setReportData] = useState(null);
-  const [menteeReports, setMenteeReports] = useState({}); // { [userId]: reportData }
+  // 멘티별 리포트 캐시 { [userId]: reportData }
+  const [menteeReports, setMenteeReports] = useState({});
+  const menteeReportsRef = useRef({});
   const [elapsed, setElapsed]   = useState(0);
   const [isMicOn, setIsMicOn]   = useState(true);
   const [isCamOn, setIsCamOn]   = useState(true);
@@ -494,7 +496,6 @@ export default function MentoringSessionPage() {
         setSession(prev => ({ ...prev, ...data, mentor: data.mentor || prev.mentor }));
       })
       .catch(() => {});
-    // 멘티는 자신의 리포트만 로드
     getSessionReport(sessionId)
       .then(data => {
         if (data?.ai_report) setReportData(data);
@@ -502,36 +503,38 @@ export default function MentoringSessionPage() {
       .catch(() => {});
   }, [sessionId]);
 
-  /* ── 멘토: 특정 멘티 리포트 로드 ── */
-  const loadMenteeReport = useCallback((mentee) => {
-    const userId = mentee?.user_id ?? mentee?.userId ?? mentee?.id;
+  /* ── 멘티별 리포트 로드 (그룹 공유용) ── */
+  const loadReportForUser = useCallback((userId) => {
     if (!userId || !sessionId) return;
-    if (menteeReports[String(userId)]) return; // 이미 로드됨
+    if (menteeReportsRef.current[String(userId)]) return; // 이미 로드됨
     getSessionReport(sessionId, userId)
       .then(data => {
-        if (data) setMenteeReports(prev => ({ ...prev, [String(userId)]: data }));
+        if (data) {
+          menteeReportsRef.current[String(userId)] = data;
+          setMenteeReports(prev => ({ ...prev, [String(userId)]: data }));
+        }
       })
       .catch(() => {});
-  }, [sessionId, menteeReports]);
+  }, [sessionId]);
 
-  /* ── 멘티 네비게이션 — 멘토가 전환 시 전체 참여자에게 sync ── */
+  /* ── 멘티 네비게이션: 멘토가 전환 시 전원에게 sync ── */
   const handleMenteeNav = useCallback((newIdx) => {
     const clamped = Math.max(0, Math.min(newIdx, menteeList.length - 1));
     setCurrentMenteeIdx(clamped);
-    const targetMentee = menteeList[clamped];
-    const targetUserId = targetMentee?.user_id ?? targetMentee?.userId ?? targetMentee?.id;
-    // 리포트 로드 + 전체 sync (menteeUserId 포함)
-    loadMenteeReport(targetMentee);
-    if (isMentor) {
-      socketRef.current?.emit("reportSync", { index: clamped, menteeUserId: targetUserId });
-    }
-  }, [menteeList, isMentor, loadMenteeReport]);
+    const target = menteeList[clamped];
+    const targetUserId = target?.user_id ?? target?.userId ?? target?.id;
+    if (targetUserId) loadReportForUser(targetUserId);
+    socketRef.current?.emit("reportSync", { index: clamped, menteeUserId: targetUserId });
+  }, [menteeList, loadReportForUser]);
 
-  /* ── 멘토: 멘티 목록 로드 완료 시 모든 멘티 리포트 순차 로드 ── */
+  /* ── 멘티 목록 확정 시 모든 멘티 리포트 프리로드 ── */
   useEffect(() => {
-    if (!isMentor || menteeList.length === 0) return;
-    menteeList.forEach(m => loadMenteeReport(m));
-  }, [isMentor, menteeList.length]); // eslint-disable-line
+    if (menteeList.length === 0) return;
+    menteeList.forEach(m => {
+      const uid = m.user_id ?? m.userId ?? m.id;
+      if (uid) loadReportForUser(uid);
+    });
+  }, [menteeList.length]); // eslint-disable-line
 
   /* ── 코멘트 핸들러 ── */
   const handleCommentChange = useCallback((questionId, value) => {
@@ -662,14 +665,7 @@ export default function MentoringSessionPage() {
       socket.on("reportSync", ({ index, menteeUserId }) => {
         if (isCancelled) return;
         setCurrentMenteeIdx(index);
-        // menteeUserId가 있으면 해당 멘티 리포트 로드 (세션 내 공유)
-        if (menteeUserId) {
-          getSessionReport(sessionId, menteeUserId)
-            .then(data => {
-              if (data) setMenteeReports(prev => ({ ...prev, [String(menteeUserId)]: data }));
-            })
-            .catch(() => {});
-        }
+        if (menteeUserId) loadReportForUser(menteeUserId);
       });
     };
 
@@ -809,12 +805,12 @@ export default function MentoringSessionPage() {
   const isMentor = userRole.includes("mentor");
   const currentMentee = menteeList[currentMenteeIdx] || null;
 
-  // 멘토: 현재 선택된 멘티의 개별 리포트 / 멘티: 자신의 리포트
-  const currentUserId = currentMentee
+  // 현재 보여줄 리포트: 멘티별 캐시 우선, 없으면 전체 리포트
+  const currentMenteeUserId = currentMentee
     ? String(currentMentee.user_id ?? currentMentee.userId ?? currentMentee.id ?? "")
     : null;
-  const activeReportData = isMentor
-    ? (currentUserId ? menteeReports[currentUserId] : null) ?? null
+  const activeReport = (currentMenteeUserId && menteeReports[currentMenteeUserId])
+    ? menteeReports[currentMenteeUserId]
     : reportData;
 
   const getPeerName = (peerId) => {
@@ -957,12 +953,12 @@ export default function MentoringSessionPage() {
           {/* 리포트 스크롤 영역 */}
           <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto" }}>
             <SharedReport
-              report={activeReportData}
+              report={activeReport}
               isMentor={isMentor}
               currentMentee={currentMentee}
               mentorComments={mentorComments}
               onCommentChange={handleCommentChange}
-              answerEvaluations={activeReportData?.answer_evaluations || []}
+              answerEvaluations={activeReport?.answer_evaluations || []}
             />
           </div>
 

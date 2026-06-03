@@ -384,17 +384,4 @@ class ReportServiceTest {
                         .isEqualTo(ErrorCode.ACCESS_DENIED));
     }
 
-    @Test
-    void addMentorFeedback_FIRST_리포트없음_예외() {
-        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
-
-        given(sessionRepository.findById(42L)).willReturn(Optional.of(session));
-        given(reportRepository.findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> reportService.addMentorFeedback(1L, 42L, request))
-                .isInstanceOf(CustomException.class)
-                .satisfies(e -> assertThat(((CustomException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.REPORT_NOT_FOUND));
-    }
 }

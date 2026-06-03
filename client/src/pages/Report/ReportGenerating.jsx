@@ -451,7 +451,7 @@ export default function ReportGeneratingPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>면도리</span>
-            <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
+            <img src="/mascot_exact_embedded.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.success, animation: "pulse 1.2s ease-in-out infinite" }} />

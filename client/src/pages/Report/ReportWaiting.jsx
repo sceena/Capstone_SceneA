@@ -74,7 +74,7 @@ export default function ReportWaitingPage() {
             <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>
               면도리
             </span>
-            <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
+            <img src="/mascot_exact_embedded.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
           </div>
           <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 99, background: "#FFF3BF", color: "#E67700" }}>
             최종 리포트 준비 중

@@ -44,7 +44,7 @@ const Header = ({ userName, accessToken }) => {
           <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>
             면도리
           </span>
-          <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
+          <img src="/mascot_exact_embedded.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
         </div>
         {/* 우측: 네비게이션 + 로그아웃 */}
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>

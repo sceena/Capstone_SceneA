@@ -60,7 +60,7 @@ const EyeIcon = ({ open }) => (
 /* ── 브랜드 이미지 ── */
 const BrandMark = ({ size = 34 }) => (
   <img
-    src="/meondori-logo.svg"
+    src="/mascot_exact_embedded.svg"
     alt=""
     aria-hidden="true"
     style={{ width: size, height: size, objectFit: "contain", flexShrink: 0 }}

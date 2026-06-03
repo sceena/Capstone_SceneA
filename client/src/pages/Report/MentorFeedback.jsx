@@ -619,7 +619,7 @@ export default function MentorFeedbackPage() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>면도리</span>
-          <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
+          <img src="/mascot_exact_embedded.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
           <span style={{ color: "#E9ECEF", fontSize: 18 }}>|</span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: GREEN }} />

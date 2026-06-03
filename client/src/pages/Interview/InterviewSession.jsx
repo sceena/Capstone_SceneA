@@ -1452,7 +1452,7 @@ export default function InterviewSession({ role = "mentee" }) {
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: "#202123", letterSpacing: "-0.03em" }}>면도리</span>
-              <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 30, height: 30, objectFit: "contain", flexShrink: 0 }} />
+              <img src="/mascot_exact_embedded.svg" alt="" aria-hidden="true" style={{ width: 30, height: 30, objectFit: "contain", flexShrink: 0 }} />
             </div>
             {isMentor && (
               <>

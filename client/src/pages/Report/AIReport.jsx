@@ -498,7 +498,7 @@ function LoadingScreen({ onDone }) {
       {/* Animated logo */}
       <div style={{ marginBottom: 40 }}>
         <div style={{ width: 82, height: 82, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", animation: "pulse 1.5s ease-in-out infinite" }}>
-          <img src="/meondori-logo.svg" alt="면도리" style={{ width: 82, height: 82, objectFit: "contain" }} />
+          <img src="/mascot_exact_embedded.svg" alt="면도리" style={{ width: 82, height: 82, objectFit: "contain" }} />
         </div>
         <h2 style={{ textAlign: "center", color: NAVY, fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>AI 면접 분석 리포트</h2>
         <p style={{ textAlign: "center", color: "#868E96", fontSize: 14, margin: "8px 0 0" }}>면접 데이터를 정밀 분석하고 있습니다</p>
@@ -525,7 +525,7 @@ function Header({ onExportWord, role }) {
           <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>
             면도리
           </span>
-          <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
+          <img src="/mascot_exact_embedded.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: "#868E96", marginLeft: 4 }}>/ AI 면접 분석 리포트</span>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: role === "mentor" ? "#E8EEF6" : "#E6FCF5", color: role === "mentor" ? NAVY : GREEN, marginLeft: 4 }}>
             {role === "mentor" ? "멘토 보기" : "멘티 보기"}

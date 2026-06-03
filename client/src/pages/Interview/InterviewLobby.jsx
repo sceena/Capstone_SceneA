@@ -719,7 +719,7 @@ export default function InterviewLobby({ role = "mentee" }) {
           {/* 로고 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 16, fontWeight: 800, color: "#202123", letterSpacing: "-0.03em" }}>면도리</span>
-            <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
+            <img src="/mascot_exact_embedded.svg" alt="" aria-hidden="true" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
           </div>
 
           {/* 스텝 인디케이터 */}

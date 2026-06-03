@@ -187,8 +187,7 @@ const WPM_COLOR = {
   "매우 빠름": { bg: "#FFF5F5", color: "#E03131" },
 };
 
-const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, date, type, isGroup, id, navigate }) => {
-  const wc = WPM_COLOR[wpmLevel] || { bg: C.bg, color: C.textSub };
+const HistoryItem = ({ num, title, ai, mentor, date, isGroup, id, navigate }) => {
   return (
     <div style={{ padding: "18px 0", borderBottom: `1px solid ${C.border}` }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
@@ -203,8 +202,7 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
             <p style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</p>
             <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: C.successLight, color: C.success, fontWeight: 600 }}>완료</span>
           </div>
-          {/* 멘토 · 날짜 · 세션 유형 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
             {mentor && (
               <span style={{ fontSize: 12, color: C.textSub, display: "flex", alignItems: "center", gap: 3 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -217,12 +215,11 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
               background: isGroup ? "#FFF3BF" : C.primaryLight,
               color: isGroup ? "#E67700" : C.primary,
             }}>{isGroup ? "그룹" : "1:1"}</span>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-            <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: wc.bg, color: wc.color, fontWeight: 600 }}>WPM {wpm} · {wpmLevel}</span>
-            {star !== "-" && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.bg, color: C.textSub }}>STAR {star}</span>}
-            <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.primaryLight, color: C.primary, fontWeight: 600 }}>AI {ai}점</span>
-            {silence > 0 && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.dangerLight, color: C.danger }}>침묵 {silence}회</span>}
+            {ai > 0 && (
+              <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.primaryLight, color: C.primary, fontWeight: 600 }}>
+                AI {ai}점
+              </span>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => id && navigate(`/report/ai/${id}`)} style={{
@@ -598,17 +595,13 @@ export default function MenteeMyPage() {
     const title     = jobCat ? `${jobCat} 모의 면접` : "모의 면접";
     const dateStr   = (s.scheduledAt ?? s.scheduled_at ?? s.startedAt ?? s.started_at ?? "").slice(0, 10).replace(/-/g, ".");
     return {
-      id:       s.id,
-      num:      arr.length - i,
+      id:      s.id,
+      num:     arr.length - i,
       title,
-      wpm:      s.wpm ?? 0,
-      wpmLevel: s.wpmLevel ?? "양호",
-      star:     s.star ?? "-",
-      ai:       s.aiScore ?? 0,
-      silence:  s.silence ?? null,
-      mentor:   mentorName,
-      date:     dateStr,
-      type:     sessionType,
+      ai:      s.aiScore ?? 0,
+      mentor:  mentorName,
+      date:    dateStr,
+      type:    sessionType,
       isGroup,
     };
   });

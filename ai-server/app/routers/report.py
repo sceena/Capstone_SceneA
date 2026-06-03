@@ -1,4 +1,5 @@
 import os
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -24,6 +25,7 @@ from app.services.report_generator import ReportGenerator
 from app.services.stt_service import SttService, SttServiceUnavailable
 
 router = APIRouter(tags=["report"])
+logger = logging.getLogger(__name__)
 report_generator = ReportGenerator()
 fit_gap_composer = FitGapComposer()
 stt_service = SttService()
@@ -52,10 +54,13 @@ def generate_fit_gap(request: FitGapRequest) -> FitGapAnalysisResponse:
             interview_session=request.interview_session,
             resume_summary=request.resume_summary,
         )
-    except FitGapComposerUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail=f"Fit-Gap model returned invalid JSON: {exc}") from exc
+    except (FitGapComposerUnavailable, ValueError) as exc:
+        logger.warning("Fit-Gap Gemini unavailable; using fallback fit-gap endpoint. reason=%s", exc)
+        return fit_gap_composer.generate_fallback(
+            job_description=request.job_description,
+            interview_session=request.interview_session,
+            resume_summary=request.resume_summary,
+        )
 
 
 @router.post("/api/stt", response_model=SttResponse)

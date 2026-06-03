@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { getAnswerAudio, getAnswerAudioByAnswerId, getFitGapAnalysis, getQuestionAnswers } from "../../api/sessions";
+import { getAnswerAudio, getAnswerAudioByAnswerId, getFitGapAnalysis, getQuestionAnswers, getQuestions } from "../../api/sessions";
 import { getAuthUser } from "../../store/authStore";
 
 const NAVY = "#0D2240";
@@ -217,6 +217,94 @@ function parseFitGapItem(item) {
   return { requirement, detail };
 }
 
+function normalizeQuestionItems(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.questions)) return data.questions;
+  if (Array.isArray(data?.content)) return data.content;
+  return [];
+}
+
+function getReportQuestionId(item) {
+  return item?.question_id ?? item?.questionId ?? item?.id ?? null;
+}
+
+function getReportMenteeId(item) {
+  return item?.mentee_id ?? item?.menteeId ?? item?.candidate_id ?? item?.candidateId ?? null;
+}
+
+function getQuestionTypeValue(item) {
+  return String(item?.question_type ?? item?.questionType ?? item?.type ?? "").toUpperCase();
+}
+
+function getQuestionCandidateId(item) {
+  const value = item?.candidate_id ?? item?.candidateId ?? item?.target_mentee_id ?? item?.targetMenteeId ?? null;
+  return value == null ? null : Number(value);
+}
+
+function buildQuestionMetaMap(questions = []) {
+  const map = new Map();
+  normalizeQuestionItems(questions).forEach((question) => {
+    const questionId = getReportQuestionId(question);
+    if (questionId != null) map.set(String(questionId), question);
+  });
+  return map;
+}
+
+function useQuestionMetaMap(sessionId) {
+  const [questionMetaMap, setQuestionMetaMap] = useState(() => new Map());
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    getQuestions(sessionId)
+      .then((questions) => {
+        if (!cancelled) setQuestionMetaMap(buildQuestionMetaMap(questions));
+      })
+      .catch(() => {
+        if (!cancelled) setQuestionMetaMap(new Map());
+      });
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+  return questionMetaMap;
+}
+
+function buildMenteeNameMap(questionReports = []) {
+  const map = new Map();
+  questionReports.forEach((report) => {
+    const menteeId = getReportMenteeId(report);
+    const menteeName = report?.mentee_name ?? report?.menteeName;
+    if (menteeId != null && menteeName) map.set(String(menteeId), menteeName);
+  });
+  return map;
+}
+
+function getQuestionMetaForReport(report, questionMetaMap) {
+  const questionId = getReportQuestionId(report);
+  return questionId == null ? null : questionMetaMap.get(String(questionId));
+}
+
+function getQuestionKindLabel(report, questionMetaMap, menteeNameMap = new Map()) {
+  const meta = getQuestionMetaForReport(report, questionMetaMap);
+  const type = getQuestionTypeValue(report) || getQuestionTypeValue(meta);
+  const candidateId = getQuestionCandidateId(report) ?? getQuestionCandidateId(meta);
+  if (type === "COMMON") return "공통 질문";
+  if (type === "PERSONAL" || candidateId != null) {
+    const targetName = candidateId != null ? menteeNameMap.get(String(candidateId)) : "";
+    return targetName ? `${targetName} 대상 개인 질문` : "개인 질문";
+  }
+  return "질문";
+}
+
+function getAnswererLabel(report) {
+  const name = report?.mentee_name ?? report?.menteeName;
+  return name ? `답변자 ${name}` : "";
+}
+
+function makeQnaKey(qna, index) {
+  return qna?.answerId ?? qna?.answer_id ?? qna?.id ?? `${qna?.questionId ?? qna?.question_id ?? "q"}-${qna?.menteeId ?? qna?.mentee_id ?? "m"}-${index}`;
+}
+
 function FitGapList({ title, items = [], tone }) {
   const isMatched = tone === "matched";
   const accent = isMatched ? GREEN : "#E24B4A";
@@ -273,6 +361,7 @@ export default function FinalReportPage() {
 
   const sessionId = reportData?.sessionId || routeSessionId;
   const role = reportData?.role || "mentee";
+  const questionMetaMap = useQuestionMetaMap(sessionId);
 
   // 리다이렉트: state와 route param이 모두 없으면 대시보드로
   useEffect(() => {
@@ -328,6 +417,7 @@ export default function FinalReportPage() {
   // ── 데이터 통합 ──────────────────────────────────────────────
   const aiReport = aiData?.ai_report;
   const questionReports = aiReport?.question_reports || [];
+  const menteeNameMap = buildMenteeNameMap(questionReports);
   const answerEvaluations = aiData?.answer_evaluations || [];
   const evaluationMaps = buildEvaluationMaps(answerEvaluations);
   const { byAnswerId, byQuestionId, byQuestionMentee } = evaluationMaps;
@@ -424,9 +514,11 @@ export default function FinalReportPage() {
         const aiStrengths = evaluation?.ai_strengths ?? evaluation?.aiStrengths ?? qr.strengths;
         const aiImprovements = evaluation?.ai_improvements ?? evaluation?.aiImprovements ?? qr.improvements;
         return {
-          id: qr.question_id,
+          id: qr.answer_id ?? `${qr.question_id}-${qr.mentee_id ?? qr.menteeId ?? "session"}`,
+          questionId: qr.question_id,
           answerId: qr.answer_id,
           menteeId: qr.mentee_id ?? qr.menteeId,
+          menteeName: qr.mentee_name ?? qr.menteeName ?? "",
           question: qr.question,
           transcript: qr.answer || "",
           aiScore: toFivePointScore(aiScore),
@@ -448,10 +540,12 @@ export default function FinalReportPage() {
       }));
 
   const enrichedQnas = baseQnas.map((qna) => {
-    const aiQ = questionReports.find((r) =>
-      (qna.answerId != null && String(r.answer_id) === String(qna.answerId))
-      || String(r.question_id) === String(qna.id)
-    );
+    const aiQ = questionReports.find((r) => qna.answerId != null && String(r.answer_id) === String(qna.answerId))
+      || questionReports.find((r) => {
+        const questionMatches = String(r.question_id) === String(qna.questionId ?? qna.question_id ?? qna.id);
+        const menteeMatches = qna.menteeId == null || String(r.mentee_id ?? r.menteeId ?? "") === String(qna.menteeId);
+        return questionMatches && menteeMatches;
+      });
     const answerId = qna.answerId ?? aiQ?.answer_id;
     const questionId = qna.questionId ?? qna.question_id ?? aiQ?.question_id ?? qna.id;
     const menteeId = qna.menteeId ?? qna.mentee_id ?? aiQ?.mentee_id ?? aiQ?.menteeId;
@@ -471,6 +565,8 @@ export default function FinalReportPage() {
       question: evaluation?.question_text || evaluation?.questionText || qna.question || aiQ?.question || "",
       transcript: evaluation?.answer_text || evaluation?.answerText || qna.transcript || aiQ?.answer || "",
       audioUrl: evaluation?.audio_url ?? evaluation?.audioUrl ?? qna.audioUrl ?? aiQ?.replay?.audio_url ?? aiQ?.replay?.audioUrl ?? null,
+      questionKind: getQuestionKindLabel(aiQ || qna, questionMetaMap, menteeNameMap),
+      answererLabel: getAnswererLabel(aiQ || qna),
       strengths: hasItems(mentorStrengths) ? mentorStrengths : (qna.aiStrengths || aiQ?.strengths || []),
       improvements: hasItems(mentorImprovements) ? mentorImprovements : (qna.aiImprovements || aiQ?.improvements || []),
       reasoning: mentorReasoning || aiQ?.reasoning || "",
@@ -490,13 +586,6 @@ export default function FinalReportPage() {
   const worstFinalQna = findFinalQna(worst?.question_id, enrichedQnas.length - 1);
   const bestTranscript = bestFinalQna?.transcript || bestReport?.answer || baseQnas[0]?.transcript || "";
   const worstTranscript = worstFinalQna?.transcript || worstReport?.answer || baseQnas[baseQnas.length - 1]?.transcript || "";
-
-  const STAR_COLORS = {
-    S: { bg: "#DBEAFE", text: "#1E40AF" },
-    T: { bg: "#D1FAE5", text: "#065F46" },
-    A: { bg: "#FEF3C7", text: "#92400E" },
-    R: { bg: "#FCE7F3", text: "#9D174D" },
-  };
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", paddingBottom: 80 }}>
@@ -667,13 +756,6 @@ export default function FinalReportPage() {
 
         {/* ── Q&A 스크립트 ── */}
         <p style={{ fontSize: 11, fontWeight: 700, color: "#888", letterSpacing: 1, marginBottom: 12 }}>전체 Q&amp;A 스크립트</p>
-        <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-          {Object.entries(STAR_COLORS).map(([k, v]) => (
-            <span key={k} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: v.bg, color: v.text, fontWeight: 700 }}>
-              {k} {k === "S" ? "상황" : k === "T" ? "과제" : k === "A" ? "행동" : "결과"}
-            </span>
-          ))}
-        </div>
 
         {enrichedQnas.map((qna, idx) => {
           const fb = feedbacks[qna.id] || {};
@@ -690,9 +772,23 @@ export default function FinalReportPage() {
             && qna.aiReasoning
             && qna.aiReasoning !== qna.reasoning;
           return (
-            <div key={qna.id ?? idx} style={{ background: "white", border: `1px solid ${isBad ? "#FED7D7" : "#E0DDD8"}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
+            <div key={makeQnaKey(qna, idx)} style={{ background: "white", border: `1px solid ${isBad ? "#FED7D7" : "#E0DDD8"}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, margin: 0, lineHeight: 1.6 }}>Q{idx + 1} · {qna.question}</p>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, margin: "0 0 7px", lineHeight: 1.6 }}>Q{idx + 1} · {qna.question}</p>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {qna.questionKind && (
+                      <span style={{ fontSize: 11, color: NAVY, background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 99, padding: "3px 9px", fontWeight: 800 }}>
+                        {qna.questionKind}
+                      </span>
+                    )}
+                    {qna.answererLabel && (
+                      <span style={{ fontSize: 11, color: "#495057", background: "#F8F7F4", border: "1px solid #E8E5DF", borderRadius: 99, padding: "3px 9px", fontWeight: 700 }}>
+                        {qna.answererLabel}
+                      </span>
+                    )}
+                  </div>
+                </div>
                 {qna.hasMentorRevision && (
                   <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, color: GREEN, background: "#E1F5EE", border: "1px solid #BBF7D0", borderRadius: 99, padding: "3px 8px" }}>
                     멘토 수정됨

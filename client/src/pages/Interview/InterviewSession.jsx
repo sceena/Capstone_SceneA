@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Device } from "mediasoup-client";
@@ -9,6 +9,7 @@ import {
   getStreamVideoDeviceId,
   openInterviewStream,
 } from "../../utils/mediaDevices";
+import { FaceMaskEffect, EMOJI_LIST } from "../../utils/faceMaskEffect";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || undefined;
 const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
@@ -94,11 +95,40 @@ function getParticipantId(participant) {
 }
 
 function getParticipantName(participant) {
-  return participant?.name ?? participant?.nickname ?? participant?.username ?? "멘티";
+  return participant?.name
+    ?? participant?.nickname
+    ?? participant?.username
+    ?? participant?.member_name
+    ?? participant?.memberName
+    ?? participant?.email?.split("@")[0]
+    ?? "멘티";
+}
+
+function getSessionParticipants(sessionData) {
+  return Array.isArray(sessionData?.participants) ? sessionData.participants : [];
+}
+
+function getParticipantNameById(participants, participantId, fallback = "상대방") {
+  if (participantId == null) return fallback;
+  const target = participants.find(participant => Number(getParticipantId(participant)) === Number(participantId));
+  return target ? getParticipantName(target) : fallback;
+}
+
+function getUserDisplayName(user) {
+  return user?.name
+    ?? user?.nickname
+    ?? user?.username
+    ?? user?.email?.split("@")[0]
+    ?? "나";
+}
+
+function getInitialText(name) {
+  const value = String(name || "").trim();
+  return value ? value.slice(0, 1) : "?";
 }
 
 function getMenteeParticipants(sessionData) {
-  const participants = Array.isArray(sessionData?.participants) ? sessionData.participants : [];
+  const participants = getSessionParticipants(sessionData);
   const mentees = participants.filter(participant =>
     String(participant?.role ?? participant?.memberRole ?? "").toLowerCase() === "mentee"
   );
@@ -172,6 +202,77 @@ function hasAnswerItems(data) {
   if (Array.isArray(data?.answers)) return data.answers.length > 0;
   if (Array.isArray(data?.content)) return data.content.length > 0;
   return false;
+}
+
+function normalizeAnswerItems(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.answers)) return data.answers;
+  if (Array.isArray(data?.content)) return data.content;
+  return [];
+}
+
+function getAnswerMenteeId(answer) {
+  const value = answer?.mentee_id ?? answer?.menteeId ?? answer?.member_id ?? answer?.memberId ?? null;
+  return value == null ? null : Number(value);
+}
+
+function getQuestionResponseTargetIds(question, mentees) {
+  const explicit = question?.responseTargetIds ?? question?.response_target_ids;
+  if (Array.isArray(explicit)) {
+    return explicit.map(Number).filter(Number.isFinite);
+  }
+
+  const candidateId = getQuestionCandidateId(question);
+  if (candidateId != null) return [candidateId];
+
+  if (getQuestionType(question) === "COMMON") {
+    return mentees.map(getParticipantId).filter(id => id != null);
+  }
+
+  return [];
+}
+
+function getQuestionAnsweredMenteeIds(question) {
+  const explicit = question?.answeredMenteeIds ?? question?.answered_mentee_ids;
+  return Array.isArray(explicit) ? explicit.map(Number).filter(Number.isFinite) : [];
+}
+
+function getQuestionCurrentResponderId(question, mentees) {
+  const explicit = question?.currentResponderId ?? question?.current_responder_id ?? question?.targetMenteeId ?? question?.target_mentee_id;
+  if (explicit != null) return Number(explicit);
+
+  const candidateId = getQuestionCandidateId(question);
+  if (candidateId != null) return candidateId;
+
+  const targetIds = getQuestionResponseTargetIds(question, mentees);
+  if (targetIds.length === 0) return null;
+
+  const answered = new Set(getQuestionAnsweredMenteeIds(question).map(String));
+  return targetIds.find(id => !answered.has(String(id))) ?? null;
+}
+
+function getMenteeNameById(mentees, menteeId) {
+  const target = mentees.find(mentee => Number(getParticipantId(mentee)) === Number(menteeId));
+  return target ? getParticipantName(target) : "멘티";
+}
+
+function describeRecordingLock(activeRecorder, participants) {
+  if (!activeRecorder) return "다른 참여자가 말하는 중입니다.";
+  const targetName = getParticipantNameById(
+    participants,
+    activeRecorder.targetMenteeId ?? activeRecorder.peerId,
+    ""
+  );
+  const namePrefix = targetName ? `${targetName}님이` : "다른 멘티가";
+  const recordingType = String(activeRecorder.recordingType || "").toUpperCase();
+
+  if (recordingType === "ANSWER") {
+    return `${namePrefix} 답변 중입니다.`;
+  }
+  if (recordingType === "QUESTION") {
+    return "멘토가 질문 중입니다.";
+  }
+  return "다른 참여자가 말하는 중입니다.";
 }
 
 function RecordingWave({ level = 0 }) {
@@ -327,9 +428,16 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── 컨트롤 상태 ── */
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(true);
+  const [isFaceMaskOn, setIsFaceMaskOn] = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState(EMOJI_LIST[0].emoji);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const faceMaskRef = useRef(null);
+  const originalTrackRef = useRef(null);
   const [ending, setEnding] = useState(false);
   const [questionRecordStatus, setQuestionRecordStatus] = useState("idle");
   const [activeQuestion, setActiveQuestion] = useState(null);
+  const [questionTargetMode, setQuestionTargetMode] = useState("COMMON");
+  const [selectedTargetMenteeId, setSelectedTargetMenteeId] = useState(null);
   const [recommendationGroupOpen, setRecommendationGroupOpen] = useState({});
   const [spokenQuestions, setSpokenQuestions] = useState([]);
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState([]);
@@ -337,6 +445,7 @@ export default function InterviewSession({ role = "mentee" }) {
   const questionAudioChunksRef = useRef([]);
   const questionCancelRef = useRef(false);
   const questionStartRef = useRef(null);
+  const questionTargetOptionsRef = useRef({});
 
   /* ── 멘티 전용: 답변 상태 + 오디오 녹음 ── */
   const [answerStatus, setAnswerStatus] = useState("idle");
@@ -350,6 +459,64 @@ export default function InterviewSession({ role = "mentee" }) {
   /* ── 질문 목록 ── */
   const [sessionData, setSessionData] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const sessionParticipants = useMemo(() => getSessionParticipants(sessionData), [sessionData]);
+  const menteeParticipants = useMemo(() => getMenteeParticipants(sessionData), [sessionData]);
+  const groupMenteeIds = useMemo(
+    () => menteeParticipants.map(getParticipantId).filter(id => id != null),
+    [menteeParticipants]
+  );
+  const isGroupSession = groupMenteeIds.length > 1;
+  const authUser = getAuthUser();
+  const authMemberId = authUser?.id ?? getPeerIdFromToken(authUser?.accessToken || "");
+  const currentMemberId = authMemberId == null || Number.isNaN(Number(authMemberId)) ? null : Number(authMemberId);
+  const localDisplayName = getUserDisplayName(authUser);
+  const getPeerDisplayName = useCallback(
+    (peerId) => getParticipantNameById(sessionParticipants, peerId, "상대방"),
+    [sessionParticipants]
+  );
+
+  const buildQuestionTurnState = useCallback((question, overrides = {}) => {
+    if (!question) return question;
+
+    const questionType = overrides.questionType ?? getQuestionType(question);
+    const candidateId = overrides.candidateId ?? getQuestionCandidateId(question);
+    if (!isGroupSession && !questionType && candidateId == null) {
+      return question;
+    }
+
+    const responseTargetIds = questionType === "COMMON"
+      ? groupMenteeIds
+      : candidateId != null
+        ? [Number(candidateId)]
+        : getQuestionResponseTargetIds(question, menteeParticipants);
+    const answeredMenteeIds = overrides.answeredMenteeIds ?? getQuestionAnsweredMenteeIds(question);
+    const answered = new Set(answeredMenteeIds.map(String));
+    const currentResponderId = overrides.currentResponderId
+      ?? (questionType === "COMMON"
+        ? responseTargetIds.find(menteeId => !answered.has(String(menteeId))) ?? null
+        : responseTargetIds[0] ?? null);
+
+    return {
+      ...question,
+      question_type: questionType ?? question.question_type,
+      questionType: questionType ?? question.questionType,
+      candidate_id: candidateId ?? question.candidate_id,
+      candidateId: candidateId ?? question.candidateId,
+      responseTargetIds,
+      answeredMenteeIds,
+      currentResponderId,
+    };
+  }, [groupMenteeIds, isGroupSession, menteeParticipants]);
+
+  useEffect(() => {
+    if (groupMenteeIds.length === 0) return;
+    setSelectedTargetMenteeId(prev => (
+      prev != null && groupMenteeIds.some(id => Number(id) === Number(prev))
+        ? prev
+        : groupMenteeIds[0]
+    ));
+  }, [groupMenteeIds.join("|")]);
+
   useEffect(() => {
     if (!id || !/^\d+$/.test(id)) return;
     let cancelled = false;
@@ -379,7 +546,7 @@ export default function InterviewSession({ role = "mentee" }) {
         if (!isMentor) {
           const nextQuestion = findNextSpokenQuestion(spoken, answeredQuestionIds);
           setActiveQuestion(prev => (
-            prev?.id === nextQuestion?.id ? prev : nextQuestion
+            prev?.id === nextQuestion?.id ? prev : buildQuestionTurnState(nextQuestion)
           ));
         }
       } catch {}
@@ -391,7 +558,7 @@ export default function InterviewSession({ role = "mentee" }) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [id, isMentor, answeredQuestionIds]);
+  }, [id, isMentor, answeredQuestionIds, buildQuestionTurnState]);
 
   /* ── WebRTC refs ── */
   const localStreamRef = useRef(null);
@@ -532,11 +699,13 @@ export default function InterviewSession({ role = "mentee" }) {
         if (isCancelled) return;
         if (res.error) { console.error("join 실패:", res.error); setConnectionState("failed"); return; }
 
-        const { rtpCapabilities, existingProducers, activeQuestion: roomActiveQuestion, activeRecorder: roomActiveRecorder } = res;
+        const { peerId: joinedPeerId, rtpCapabilities, existingProducers, activeQuestion: roomActiveQuestion, activeRecorder: roomActiveRecorder } = res;
+        if (joinedPeerId != null) setLocalPeerId(String(joinedPeerId));
         setActiveRecorder(roomActiveRecorder || null);
         if (roomActiveQuestion) {
-          setActiveQuestion(roomActiveQuestion);
-          setSpokenQuestions(prev => prev.some(q => q.id === roomActiveQuestion.id) ? prev : [...prev, roomActiveQuestion]);
+          const turnQuestion = buildQuestionTurnState(roomActiveQuestion);
+          setActiveQuestion(turnQuestion);
+          setSpokenQuestions(prev => prev.some(q => q.id === turnQuestion.id) ? prev : [...prev, turnQuestion]);
         }
 
         /* Device 초기화 */
@@ -694,9 +863,10 @@ export default function InterviewSession({ role = "mentee" }) {
       });
 
       socket.on("activeQuestion", ({ question }) => {
-        setActiveQuestion(question || null);
+        const turnQuestion = buildQuestionTurnState(question);
+        setActiveQuestion(turnQuestion || null);
         if (question) {
-          setSpokenQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);
+          setSpokenQuestions(prev => prev.some(q => q.id === turnQuestion.id) ? prev : [...prev, turnQuestion]);
         }
       });
 
@@ -725,7 +895,7 @@ export default function InterviewSession({ role = "mentee" }) {
       audioCtxRef.current = null;
       socket?.disconnect();
     };
-  }, [id, consumeProducer]);
+  }, [id, consumeProducer, buildQuestionTurnState]);
 
   /* ── 오디오 레벨 폴링 (활성 발화자 감지) ── */
   useEffect(() => {
@@ -765,6 +935,61 @@ export default function InterviewSession({ role = "mentee" }) {
     else videoProducerRef.current?.pause();
   };
 
+  const getFaceMaskDisplayName = useCallback(() => {
+    const authUser = getAuthUser();
+    const baseName = authUser?.nickname || authUser?.name || authUser?.username || authUser?.email?.split("@")[0] || "나";
+    return `${baseName} ${isMentor ? "멘토" : "멘티"}`;
+  }, [isMentor]);
+
+  const handleFaceMaskToggle = useCallback(async () => {
+    if (!isFaceMaskOn) {
+      const stream = localStreamRef.current;
+      if (!stream || !stream.getVideoTracks().length) return;
+      try {
+        if (!faceMaskRef.current) faceMaskRef.current = new FaceMaskEffect();
+        faceMaskRef.current.emoji = selectedEmoji;
+        faceMaskRef.current.displayName = getFaceMaskDisplayName();
+        const maskedTrack = await faceMaskRef.current.start(stream);
+        if (!maskedTrack) return;
+        const previewTrack = faceMaskRef.current.getPreviewTrack() || maskedTrack;
+        originalTrackRef.current = stream.getVideoTracks()[0];
+        if (videoProducerRef.current) {
+          await videoProducerRef.current.replaceTrack({ track: maskedTrack });
+        }
+        const maskedStream = new MediaStream([previewTrack, ...stream.getAudioTracks()]);
+        setLocalMediaStream(maskedStream);
+        setIsFaceMaskOn(true);
+      } catch (e) {
+        console.error("얼굴 가리기 활성화 실패:", e);
+      }
+    } else {
+      const stream = localStreamRef.current;
+      const restoreTrack = faceMaskRef.current?.getSourceTrackClone() || originalTrackRef.current;
+      if (restoreTrack) restoreTrack.enabled = camOn;
+      if (restoreTrack && videoProducerRef.current) {
+        await videoProducerRef.current.replaceTrack({ track: restoreTrack });
+      }
+      faceMaskRef.current?.stop();
+      originalTrackRef.current = null;
+      if (stream && restoreTrack) {
+        const restoredStream = new MediaStream([restoreTrack, ...stream.getAudioTracks()]);
+        localStreamRef.current = restoredStream;
+        setLocalMediaStream(restoredStream);
+      } else if (stream) {
+        setLocalMediaStream(stream);
+      }
+      setIsFaceMaskOn(false);
+    }
+  }, [camOn, getFaceMaskDisplayName, isFaceMaskOn, selectedEmoji]);
+
+  const handleEmojiChange = useCallback((emoji) => {
+    setSelectedEmoji(emoji);
+    if (faceMaskRef.current) {
+      faceMaskRef.current.emoji = emoji;
+    }
+    setShowEmojiPicker(false);
+  }, []);
+
   /* ── 통화 종료 ── */
   const handleEndCall = async () => {
     if (!isMentor) return;
@@ -799,7 +1024,7 @@ export default function InterviewSession({ role = "mentee" }) {
     };
   }, [id, isMentor, navigate]);
 
-  const requestRecordingLock = (recordingType) => new Promise((resolve) => {
+  const requestRecordingLock = (recordingType, targetMenteeId = null) => new Promise((resolve) => {
     const socket = socketRef.current;
     if (!socket?.connected) {
       resolve(true);
@@ -812,13 +1037,13 @@ export default function InterviewSession({ role = "mentee" }) {
       console.warn("recordingStart 응답 지연: 로컬 녹음을 우선 시작합니다.");
       resolve(true);
     }, 1500);
-    socket.emit("recordingStart", { recordingType }, (res = {}) => {
+    socket.emit("recordingStart", { recordingType, targetMenteeId }, (res = {}) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
       if (res.error) {
         setActiveRecorder(res.activeRecorder || null);
-        alert("다른 참여자가 말하는 중입니다. 발화가 끝난 뒤 다시 시도해주세요.");
+        alert(`${describeRecordingLock(res.activeRecorder, sessionParticipants)} 발화가 끝난 뒤 다시 시도해주세요.`);
         resolve(false);
         return;
       }
@@ -854,9 +1079,33 @@ export default function InterviewSession({ role = "mentee" }) {
       try {
         const data = await getQuestionAnswers(id, activeQuestion.id);
         if (cancelled || !hasAnswerItems(data)) return;
+        const answers = normalizeAnswerItems(data);
+        const answeredMenteeIds = answers.map(getAnswerMenteeId).filter(id => id != null);
+        const targetIds = getQuestionResponseTargetIds(activeQuestion, menteeParticipants);
+        const answered = new Set(answeredMenteeIds.map(String));
+        const nextResponderId = getQuestionType(activeQuestion) === "COMMON" && targetIds.length > 1
+          ? targetIds.find(menteeId => !answered.has(String(menteeId)))
+          : null;
         const key = String(activeQuestion.id);
+        if (nextResponderId != null) {
+          const currentResponderId = getQuestionCurrentResponderId(activeQuestion, menteeParticipants);
+          const currentAnsweredKey = getQuestionAnsweredMenteeIds(activeQuestion).map(String).sort().join("|");
+          const nextAnsweredKey = answeredMenteeIds.map(String).sort().join("|");
+          if (Number(currentResponderId) === Number(nextResponderId) && currentAnsweredKey === nextAnsweredKey) {
+            return;
+          }
+          const nextQuestion = buildQuestionTurnState(activeQuestion, {
+            answeredMenteeIds,
+            currentResponderId: nextResponderId,
+          });
+          setActiveQuestion(nextQuestion);
+          socketRef.current?.emit("activeQuestion", { question: nextQuestion });
+          return;
+        }
+
         setAnsweredQuestionIds(prev => prev.includes(key) ? prev : [...prev, key]);
         setActiveQuestion(null);
+        socketRef.current?.emit("activeQuestion", { question: null });
       } catch {}
     };
     const interval = window.setInterval(checkAnswerSaved, 3000);
@@ -865,7 +1114,45 @@ export default function InterviewSession({ role = "mentee" }) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [activeQuestion?.id, id, isMentor]);
+  }, [activeQuestion, buildQuestionTurnState, id, isMentor, menteeParticipants]);
+
+  const activeQuestionTargetIds = getQuestionResponseTargetIds(activeQuestion, menteeParticipants);
+  const activeQuestionAnsweredIds = getQuestionAnsweredMenteeIds(activeQuestion);
+  const activeQuestionCurrentResponderId = getQuestionCurrentResponderId(activeQuestion, menteeParticipants);
+  const activeQuestionTargetsCurrentUser = !activeQuestion?.id
+    ? false
+    : activeQuestionCurrentResponderId == null
+      ? true
+      : currentMemberId != null && Number(activeQuestionCurrentResponderId) === Number(currentMemberId);
+  const activeQuestionTargetLabel = activeQuestionCurrentResponderId != null
+    ? getMenteeNameById(menteeParticipants, activeQuestionCurrentResponderId)
+    : "전체";
+  const activeQuestionProgressText = getQuestionType(activeQuestion) === "COMMON" && activeQuestionTargetIds.length > 1
+    ? `${Math.min(activeQuestionAnsweredIds.length + 1, activeQuestionTargetIds.length)}/${activeQuestionTargetIds.length}`
+    : null;
+  const activeQuestionKindLabel = !activeQuestion?.id
+    ? "질문"
+    : getQuestionType(activeQuestion) === "COMMON"
+      ? "공통 질문"
+      : "개인 질문";
+  const activeQuestionTargetNameText = activeQuestionTargetLabel === "전체"
+    ? "전체"
+    : `${activeQuestionTargetLabel}님`;
+  const recordingLockedByOther = Boolean(activeRecorder?.peerId && activeRecorder.peerId !== localPeerId);
+  const activeRecorderType = String(activeRecorder?.recordingType || "").toUpperCase();
+  const otherMenteeAnswering = recordingLockedByOther && activeRecorderType === "ANSWER";
+  const otherRecorderStatusText = describeRecordingLock(activeRecorder, sessionParticipants);
+  const activeQuestionMenteePrompt = activeQuestion
+    ? otherMenteeAnswering && !activeQuestionTargetsCurrentUser
+      ? otherRecorderStatusText
+      : activeQuestionTargetsCurrentUser
+      ? getQuestionType(activeQuestion) === "COMMON"
+        ? `내 답변 차례 · 공통 질문 · Q. ${activeQuestion.content}`
+        : `나에게 온 개인 질문 · Q. ${activeQuestion.content}`
+      : getQuestionType(activeQuestion) === "COMMON"
+        ? `${activeQuestionTargetNameText} 답변 차례 · 공통 질문`
+        : `${activeQuestionTargetNameText}에게 온 개인 질문 · 대기`
+    : "멘토 질문 대기 중...";
 
   /* ── 답변 상태 / 녹음 ── */
   const handleAnswerStatus = async (nextStatus) => {
@@ -875,7 +1162,12 @@ export default function InterviewSession({ role = "mentee" }) {
     }
 
     if (nextStatus === "answering") {
-      const locked = await requestRecordingLock("ANSWER");
+      if (!activeQuestionTargetsCurrentUser) {
+        alert(`${activeQuestionTargetLabel} 답변 순서입니다.`);
+        return;
+      }
+
+      const locked = await requestRecordingLock("ANSWER", currentMemberId);
       if (!locked) return;
       setAnswerStatus(nextStatus);
       setMicOn(true);
@@ -942,6 +1234,17 @@ export default function InterviewSession({ role = "mentee" }) {
     }
   };
 
+  const getPendingQuestionTargetOptions = () => {
+    if (!isGroupSession) return {};
+    if (questionTargetMode === "PERSONAL") {
+      if (selectedTargetMenteeId == null) {
+        return { error: "질문할 멘티를 선택해주세요." };
+      }
+      return { questionType: "PERSONAL", candidateId: Number(selectedTargetMenteeId) };
+    }
+    return { questionType: "COMMON", candidateId: null };
+  };
+
   const handleQuestionRecordToggle = async () => {
     if (questionRecordStatus === "recording") {
       setQuestionRecordStatus("uploading");
@@ -955,6 +1258,7 @@ export default function InterviewSession({ role = "mentee" }) {
           questionAudioChunksRef.current = [];
           questionCancelRef.current = false;
           questionStartRef.current = null;
+          questionTargetOptionsRef.current = {};
           releaseRecordingLock();
           setQuestionRecordStatus("idle");
           return;
@@ -963,13 +1267,19 @@ export default function InterviewSession({ role = "mentee" }) {
           const blob = createAudioBlob(questionAudioChunksRef.current);
           if (!blob.size) throw new Error("녹음된 질문 오디오가 없습니다. 질문 시작 후 1초 이상 말한 뒤 완료해주세요.");
           let question;
+          const targetOptions = questionTargetOptionsRef.current || {};
           try {
-            question = await uploadQuestionAudio(id, blob);
+            question = await uploadQuestionAudio(id, blob, targetOptions);
           } catch (uploadErr) {
-            const fallback = await createQuestions(id, ["(음성 변환 실패)"]);
+            const fallback = await createQuestions(id, [{
+              content: "(음성 변환 실패)",
+              questionType: targetOptions.questionType,
+              candidateId: targetOptions.candidateId,
+            }]);
             question = Array.isArray(fallback) ? fallback[0] : fallback?.questions?.[0];
           }
           if (!question?.id) throw new Error("질문을 생성하지 못했습니다.");
+          question = buildQuestionTurnState(question, targetOptions);
           setSpokenQuestions(prev => prev.some(q => q.id === question.id) ? prev : [...prev, question]);
           setActiveQuestion(question);
           socketRef.current?.emit("activeQuestion", { question });
@@ -978,6 +1288,7 @@ export default function InterviewSession({ role = "mentee" }) {
         } finally {
           questionCancelRef.current = false;
           questionStartRef.current = null;
+          questionTargetOptionsRef.current = {};
           releaseRecordingLock();
           setQuestionRecordStatus("idle");
         }
@@ -987,8 +1298,17 @@ export default function InterviewSession({ role = "mentee" }) {
     }
 
     try {
-      const locked = await requestRecordingLock("QUESTION");
-      if (!locked) return;
+      const targetOptions = getPendingQuestionTargetOptions();
+      if (targetOptions.error) {
+        alert(targetOptions.error);
+        return;
+      }
+      questionTargetOptionsRef.current = targetOptions;
+      const locked = await requestRecordingLock("QUESTION", targetOptions.candidateId);
+      if (!locked) {
+        questionTargetOptionsRef.current = {};
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: SPEECH_AUDIO_CONSTRAINTS });
       questionCancelRef.current = false;
       questionStartRef.current = new Date().toISOString();
@@ -1005,6 +1325,7 @@ export default function InterviewSession({ role = "mentee" }) {
       releaseRecordingLock();
       setQuestionRecordStatus("idle");
       questionStartRef.current = null;
+      questionTargetOptionsRef.current = {};
       alert(describeRecordingError(error));
     }
   };
@@ -1024,6 +1345,7 @@ export default function InterviewSession({ role = "mentee" }) {
       questionCancelRef.current = false;
       questionStartRef.current = null;
       questionRecorderRef.current = null;
+      questionTargetOptionsRef.current = {};
       releaseRecordingLock();
       setQuestionRecordStatus("idle");
     };
@@ -1041,12 +1363,13 @@ export default function InterviewSession({ role = "mentee" }) {
   const SPEAK_THRESHOLD = 0.025;
   // 참가자가 1명이라도 있으면 발화자 메인 뷰 활성화
   const mainViewId = peerIds.length > 0 ? (activeSpeakerId || peerIds[0]) : null;
-  const recordingLockedByOther = Boolean(activeRecorder?.peerId && activeRecorder.peerId !== localPeerId);
   const staleQuestionLock = Boolean(activeQuestion?.id && activeRecorder?.recordingType === "QUESTION");
   const answerBlockedByRecorder = recordingLockedByOther && !staleQuestionLock;
+  const answerBlockedByTarget = Boolean(activeQuestion?.id && !activeQuestionTargetsCurrentUser && answerStatus !== "answering");
   const waitingForAnswer = isMentor && Boolean(activeQuestion?.id) && questionRecordStatus !== "recording";
-  const answerButtonDisabled = (!activeQuestion && answerStatus !== "answering") || (answerBlockedByRecorder && answerStatus !== "answering");
+  const answerButtonDisabled = (!activeQuestion && answerStatus !== "answering") || answerBlockedByTarget || (answerBlockedByRecorder && answerStatus !== "answering");
   const questionButtonDisabled = questionRecordStatus === "uploading" || waitingForAnswer || (recordingLockedByOther && questionRecordStatus !== "recording");
+  const questionTargetControlsDisabled = questionRecordStatus !== "idle" || waitingForAnswer;
   const questionTimerStart = isMentor && questionRecordStatus === "recording"
     ? (activeRecorder?.recordingType === "QUESTION" ? activeRecorder.startedAt : questionStartRef.current)
     : null;
@@ -1151,10 +1474,13 @@ export default function InterviewSession({ role = "mentee" }) {
 
           {/* 참가자 */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#202123", border: "2px solid #FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>나</div>
-            {peerIds.slice(0, 3).map((pid, i) => (
-              <div key={pid} style={{ width: 30, height: 30, borderRadius: "50%", background: ["#6B7280","#4B5563","#374151"][i], border: "2px solid #FFFFFF", marginLeft: -6, zIndex: 3-i, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{i+1}</div>
-            ))}
+            <div title={localDisplayName} style={{ width: 30, height: 30, borderRadius: "50%", background: "#202123", border: "2px solid #FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{getInitialText(localDisplayName)}</div>
+            {peerIds.slice(0, 3).map((pid, i) => {
+              const peerName = getPeerDisplayName(pid);
+              return (
+                <div key={pid} title={peerName} style={{ width: 30, height: 30, borderRadius: "50%", background: ["#6B7280","#4B5563","#374151"][i], border: "2px solid #FFFFFF", marginLeft: -6, zIndex: 3-i, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{getInitialText(peerName)}</div>
+              );
+            })}
             <span style={{ fontSize: 11, color: "#6B7280", marginLeft: 6 }}>참여자 {peerIds.length + 1}명</span>
           </div>
 
@@ -1172,7 +1498,7 @@ export default function InterviewSession({ role = "mentee" }) {
               {peerIds.length === 0 ? (
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", height: "100%", padding: 20 }}>
                   <div style={{ width: "min(640px, 100%)", height: "min(480px, 100%)" }}>
-                    <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted
+                    <VideoTile stream={localMediaStream} label={`${localDisplayName} (본인)`} mirror={!isFaceMaskOn} muted
                       isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                   </div>
                 </div>
@@ -1180,14 +1506,14 @@ export default function InterviewSession({ role = "mentee" }) {
                 <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", padding: "14px 14px 8px" }}>
                   <div style={{ flex: 1, minHeight: 0, marginBottom: 8 }}>
                     {mainViewId === '__local' ? (
-                      <VideoTile stream={localMediaStream} label="나 (본인)" mirror muted isSpeaking camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label={`${localDisplayName} (본인)`} mirror={!isFaceMaskOn} muted isSpeaking camOff={!camOn} micOff={!micOn} />
                     ) : (
                       <VideoTile stream={peersRef.current[mainViewId]} label={getPeerLabel(mainViewId)} isSpeaking={(audioLevels[mainViewId] || 0) > SPEAK_THRESHOLD} micOff={!!peerMuteStates[mainViewId]} />
                     )}
                   </div>
                   <div style={{ height: 110, display: "flex", gap: 8, overflowX: "auto", flexShrink: 0 }}>
                     <div style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
-                      <VideoTile stream={localMediaStream} label="나" mirror muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
+                      <VideoTile stream={localMediaStream} label={localDisplayName} mirror={!isFaceMaskOn} muted isSpeaking={(audioLevels['__local'] || 0) > SPEAK_THRESHOLD} camOff={!camOn} micOff={!micOn} />
                     </div>
                     {peerIds.map(peerId => (
                       <div key={peerId} style={{ width: 150, flexShrink: 0, height: "100%", position: "relative" }}>
@@ -1223,6 +1549,37 @@ export default function InterviewSession({ role = "mentee" }) {
                     <span style={{ fontSize: 9, color: "#6B7280", letterSpacing: "0.02em" }}>{btn.label}</span>
                   </div>
                 ))}
+                {/* 얼굴 가리기 버튼 */}
+                <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                  <button onClick={handleFaceMaskToggle} style={{
+                    width: 44, height: 44, borderRadius: "50%",
+                    background: isFaceMaskOn ? "rgba(139,92,246,0.15)" : "#F1F1F3",
+                    border: `1.5px solid ${isFaceMaskOn ? "#8B5CF6" : "#E5E5E5"}`,
+                    color: isFaceMaskOn ? "#8B5CF6" : "#202123",
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s",
+                    fontSize: 20,
+                  }}>{selectedEmoji}</button>
+                  <span style={{ fontSize: 9, color: "#6B7280", letterSpacing: "0.02em" }}>{isFaceMaskOn ? "가리기 끔" : "얼굴 가리기"}</span>
+                  {isFaceMaskOn && (
+                    <button
+                      onClick={() => setShowEmojiPicker(v => !v)}
+                      title="스티커 변경"
+                      style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#8B5CF6", border: "1.5px solid #fff", color: "#fff", fontSize: 8, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }}
+                    >▼</button>
+                  )}
+                  {showEmojiPicker && (
+                    <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, background: "#fff", borderRadius: 12, padding: "8px 10px", display: "flex", flexWrap: "wrap", gap: 4, width: "max-content", maxWidth: "min(332px, calc(100vw - 32px))", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", border: "1px solid #E5E5E5", zIndex: 50 }}>
+                      {EMOJI_LIST.map(({ emoji, label }) => (
+                        <button
+                          key={emoji}
+                          title={label}
+                          onClick={() => handleEmojiChange(emoji)}
+                          style={{ width: 36, height: 36, borderRadius: 8, border: selectedEmoji === emoji ? "2px solid #8B5CF6" : "2px solid transparent", background: selectedEmoji === emoji ? "rgba(139,92,246,0.1)" : "transparent", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s", padding: 0 }}
+                        >{emoji}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 멘티 전용: 현재 질문 + 답변 버튼 */}
@@ -1236,7 +1593,7 @@ export default function InterviewSession({ role = "mentee" }) {
                     color: activeQuestion ? "#067A5F" : "#6B7280",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
-                    {activeQuestion ? `Q. ${activeQuestion.content}` : "멘토 질문 대기 중..."}
+                    {activeQuestionMenteePrompt}
                   </div>
                   {answerTimerStart && <RecordingTimerText time={formatTime(answerElapsed)} />}
                   <button
@@ -1251,7 +1608,7 @@ export default function InterviewSession({ role = "mentee" }) {
                       fontFamily: "inherit", transition: "all 0.18s", flexShrink: 0,
                     }}
                   >
-                    {answerStatus === "answering" ? "● 답변 완료" : "답변 시작"}
+                    {answerStatus === "answering" ? "● 답변 완료" : activeQuestion && !activeQuestionTargetsCurrentUser ? "내 차례 대기" : "답변 시작"}
                   </button>
                 </div>
               )}
@@ -1298,6 +1655,55 @@ export default function InterviewSession({ role = "mentee" }) {
                 {/* 질문 진행 */}
                 <div style={{ padding: 14, borderRadius: 16, background: "#F7F7F8", border: "1px solid #E5E5E5" }}>
                   <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "#6B7280", textTransform: "uppercase", marginBottom: 12 }}>질문 진행</p>
+                  {isGroupSession && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: "#202123" }}>질문 대상</span>
+                        <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 700 }}>
+                          {questionTargetMode === "COMMON" ? "순서대로 답변" : "지목 답변"}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        <button type="button" disabled={questionTargetControlsDisabled} onClick={() => setQuestionTargetMode("COMMON")} style={{
+                          padding: "7px 10px",
+                          borderRadius: 999,
+                          border: `1px solid ${questionTargetMode === "COMMON" ? "#202123" : "#D1D5DB"}`,
+                          background: questionTargetMode === "COMMON" ? "#202123" : "#FFFFFF",
+                          color: questionTargetMode === "COMMON" ? "#FFFFFF" : "#202123",
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: questionTargetControlsDisabled ? "not-allowed" : "pointer",
+                          opacity: questionTargetControlsDisabled ? 0.58 : 1,
+                          fontFamily: "inherit",
+                        }}>
+                          전체
+                        </button>
+                        {menteeParticipants.map((mentee, index) => {
+                          const menteeId = getParticipantId(mentee);
+                          const selected = questionTargetMode === "PERSONAL" && Number(selectedTargetMenteeId) === Number(menteeId);
+                          return (
+                            <button key={menteeId ?? index} type="button" disabled={questionTargetControlsDisabled} onClick={() => {
+                              setQuestionTargetMode("PERSONAL");
+                              setSelectedTargetMenteeId(menteeId);
+                            }} style={{
+                              padding: "7px 10px",
+                              borderRadius: 999,
+                              border: `1px solid ${selected ? "#202123" : "#D1D5DB"}`,
+                              background: selected ? "#202123" : "#FFFFFF",
+                              color: selected ? "#FFFFFF" : "#202123",
+                              fontSize: 11,
+                              fontWeight: 800,
+                              cursor: questionTargetControlsDisabled ? "not-allowed" : "pointer",
+                              opacity: questionTargetControlsDisabled ? 0.58 : 1,
+                              fontFamily: "inherit",
+                            }}>
+                              {getParticipantName(mentee)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <button type="button" onClick={handleQuestionRecordToggle} disabled={questionButtonDisabled} aria-label={questionRecordStatus === "recording" ? "질문 완료" : "질문 시작"} style={{
                       width: 72, height: 72, borderRadius: "50%", border: "none",
@@ -1353,12 +1759,25 @@ export default function InterviewSession({ role = "mentee" }) {
                   </div>
                   {(waitingForAnswer || recordingLockedByOther) && (
                     <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.6, marginTop: 8 }}>
-                      {waitingForAnswer ? "멘티 답변을 기다리는 중..." : "다른 참여자가 말하는 중..."}
+                      {otherMenteeAnswering
+                        ? otherRecorderStatusText
+                        : waitingForAnswer
+                          ? "멘티 답변을 기다리는 중..."
+                          : otherRecorderStatusText}
                     </p>
                   )}
                   {activeQuestion && (
                     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#ECFDF5", border: "1px solid rgba(16,163,127,0.24)" }}>
-                      <p style={{ fontSize: 10, fontWeight: 800, color: "#067A5F", marginBottom: 4 }}>현재 답변 대상</p>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                        <p style={{ fontSize: 10, fontWeight: 800, color: "#067A5F" }}>
+                          {activeQuestionKindLabel} · 현재 답변 대상 · {activeQuestionTargetNameText}
+                        </p>
+                        {activeQuestionProgressText && (
+                          <span style={{ fontSize: 10, fontWeight: 900, color: "#067A5F", fontFamily: "monospace" }}>
+                            {activeQuestionProgressText}
+                          </span>
+                        )}
+                      </div>
                       <p style={{ fontSize: 12, color: "#202123", lineHeight: 1.6 }}>{activeQuestion.content}</p>
                     </div>
                   )}

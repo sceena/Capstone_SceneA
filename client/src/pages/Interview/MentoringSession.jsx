@@ -9,6 +9,7 @@ import {
   getStreamVideoDeviceId,
   openInterviewStream,
 } from "../../utils/mediaDevices";
+import { FaceMaskEffect, EMOJI_LIST } from "../../utils/faceMaskEffect";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
@@ -28,6 +29,44 @@ function toFivePointScore(score) {
   const numeric = Number(score);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(1, Math.min(5, numeric > 5 ? numeric / 2 : numeric));
+}
+
+function getReportMenteeId(report) {
+  return report?.mentee_id ?? report?.menteeId ?? null;
+}
+
+function getReportAnswerId(report) {
+  return report?.answer_id ?? report?.answerId ?? null;
+}
+
+function getReportQuestionId(report) {
+  return report?.question_id ?? report?.questionId ?? null;
+}
+
+function getReportCommentKey(report, index = 0) {
+  const answerId = getReportAnswerId(report);
+  if (answerId != null) return `answer-${answerId}`;
+  return `question-${getReportQuestionId(report) ?? "unknown"}-mentee-${getReportMenteeId(report) ?? "session"}-${index}`;
+}
+
+function filterReportsForMentee(questionReports = [], currentMentee) {
+  const menteeId = currentMentee?.id ?? currentMentee?.menteeId ?? currentMentee?.memberId;
+  if (menteeId == null) return questionReports;
+  const filtered = questionReports.filter((report) => String(getReportMenteeId(report) ?? "") === String(menteeId));
+  return filtered.length > 0 ? filtered : questionReports;
+}
+
+function pickReportExtremes(reports = []) {
+  if (reports.length === 0) return { bestReport: null, worstReport: null };
+  return reports.reduce((acc, report) => {
+    const score = toFivePointScore(report?.score);
+    const bestScore = acc.bestReport ? toFivePointScore(acc.bestReport.score) : -Infinity;
+    const worstScore = acc.worstReport ? toFivePointScore(acc.worstReport.score) : Infinity;
+    return {
+      bestReport: score > bestScore ? report : acc.bestReport,
+      worstReport: score < worstScore ? report : acc.worstReport,
+    };
+  }, { bestReport: null, worstReport: null });
 }
 
 // ─── 아바타 ─────────────────────────────────────────────────────
@@ -86,7 +125,7 @@ const D = {
 };
 
 // ─── 공유 리포트 뷰 ──────────────────────────────────────────────
-function SharedReport({ report, isMentor = false, mentorComments = {}, onCommentChange }) {
+function SharedReport({ report, isMentor = false, currentMentee = null, mentorComments = {}, onCommentChange }) {
   if (!report?.ai_report) {
     return (
       <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
@@ -104,16 +143,20 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
 
   const aiReport = report.ai_report;
   const questionReports = aiReport?.question_reports || [];
+  const visibleQuestionReports = filterReportsForMentee(questionReports, currentMentee);
   const topSummary = aiReport?.top_summary;
-  const best = topSummary?.best_question;
-  const worst = topSummary?.worst_question;
-  const bestReport  = questionReports.find(item => item.question_id === best?.question_id);
-  const worstReport = questionReports.find(item => item.question_id === worst?.question_id);
+  const { bestReport, worstReport } = pickReportExtremes(visibleQuestionReports);
+  const best = bestReport
+    ? { question_id: bestReport.question_id, question: bestReport.question, reason: bestReport.reasoning }
+    : topSummary?.best_question;
+  const worst = worstReport
+    ? { question_id: worstReport.question_id, question: worstReport.question, reason: worstReport.reasoning }
+    : topSummary?.worst_question;
   const fitGap = aiReport?.fit_gap;
   const overallScore = toFivePointScore(aiReport?.overall_score ?? report?.total_score ?? 0);
   const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#C0392B";
 
-  const commentedCount = questionReports.filter(qr => (mentorComments[qr.question_id] || "").trim().length > 0).length;
+  const commentedCount = visibleQuestionReports.filter((qr, index) => (mentorComments[getReportCommentKey(qr, index)] || "").trim().length > 0).length;
   return (
     <div style={{ background: D.bg, minHeight: "100%", padding: "22px 20px", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
       <div style={{ maxWidth: 700, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -221,20 +264,23 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
               <p style={{ fontSize: 10, fontWeight: 800, color: D.dim, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 4px" }}>QUESTION REPORTS</p>
               <h3 style={{ fontSize: 15, fontWeight: 800, color: D.text, margin: 0 }}>전체 Q&A 답변 분석</h3>
             </div>
-            {isMentor && questionReports.length > 0 && (
-              <span style={{ fontSize: 11, color: commentedCount === questionReports.length ? GREEN : D.muted, fontWeight: 700, background: commentedCount === questionReports.length ? "#F0FDF4" : D.card2, padding: "4px 12px", borderRadius: 99, border: `1px solid ${commentedCount === questionReports.length ? "rgba(29,158,117,0.3)" : D.border}` }}>
-                코멘트 {commentedCount}/{questionReports.length}
+            {isMentor && visibleQuestionReports.length > 0 && (
+              <span style={{ fontSize: 11, color: commentedCount === visibleQuestionReports.length ? GREEN : D.muted, fontWeight: 700, background: commentedCount === visibleQuestionReports.length ? "#F0FDF4" : D.card2, padding: "4px 12px", borderRadius: 99, border: `1px solid ${commentedCount === visibleQuestionReports.length ? "rgba(29,158,117,0.3)" : D.border}` }}>
+                코멘트 {commentedCount}/{visibleQuestionReports.length}
               </span>
             )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {questionReports.map((qr, i) => {
-              const isBad = qr.question_id === worst?.question_id;
+            {visibleQuestionReports.map((qr, i) => {
+              const commentKey = getReportCommentKey(qr, i);
+              const worstIndex = worstReport ? visibleQuestionReports.indexOf(worstReport) : -1;
+              const worstKey = worstReport ? getReportCommentKey(worstReport, worstIndex) : null;
+              const isBad = commentKey === worstKey;
               const score = toFivePointScore(qr.score);
               const scColor = score >= 4 ? GREEN : score >= 3 ? "#F59E0B" : "#E53E3E";
-              const hasComment = (mentorComments[qr.question_id] || "").trim().length > 0;
+              const hasComment = (mentorComments[commentKey] || "").trim().length > 0;
               return (
-                <div key={qr.question_id ?? i} style={{ background: D.card2, border: `1px solid ${D.border}`, borderLeft: `3px solid ${isBad ? "#E53E3E" : GREEN}`, borderRadius: 12, padding: 16 }}>
+                <div key={commentKey} style={{ background: D.card2, border: `1px solid ${D.border}`, borderLeft: `3px solid ${isBad ? "#E53E3E" : GREEN}`, borderRadius: 12, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
                     <div>
                       <p style={{ fontSize: 13, fontWeight: 700, color: D.text, lineHeight: 1.55, margin: "0 0 4px" }}>Q{i + 1} · {qr.question}</p>
@@ -280,8 +326,8 @@ function SharedReport({ report, isMentor = false, mentorComments = {}, onComment
                         멘토 코멘트 {hasComment ? "✓" : ""}
                       </p>
                       <textarea
-                        value={mentorComments[qr.question_id] || ""}
-                        onChange={e => onCommentChange(qr.question_id, e.target.value)}
+                        value={mentorComments[commentKey] || ""}
+                        onChange={e => onCommentChange(commentKey, e.target.value)}
                         placeholder="이 답변에 대한 코멘트를 입력해주세요..."
                         style={{
                           width: "100%", minHeight: 68, borderRadius: 8,
@@ -319,7 +365,13 @@ export default function MentoringSessionPage() {
   const [elapsed, setElapsed]   = useState(0);
   const [isMicOn, setIsMicOn]   = useState(true);
   const [isCamOn, setIsCamOn]   = useState(true);
+  const [isFaceMaskOn, setIsFaceMaskOn] = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState(EMOJI_LIST[0].emoji);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const faceMaskRef = useRef(null);
+  const originalTrackRef = useRef(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [menteeSessionDone, setMenteeSessionDone] = useState(false);
 
   const [menteeList, setMenteeList]         = useState([]);
   const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
@@ -614,7 +666,63 @@ export default function MentoringSessionPage() {
     else videoProducerRef.current?.pause();
   };
 
-  const [menteeSessionDone, setMenteeSessionDone] = useState(false);
+  const getFaceMaskDisplayName = useCallback(() => {
+    const baseName = user?.nickname || user?.name || user?.username || user?.email?.split("@")[0] || "나";
+    const roleLabel = String(user?.role || "").toLowerCase().includes("mentor") ? "멘토" : "멘티";
+    return `${baseName} ${roleLabel}`;
+  }, [user?.email, user?.name, user?.nickname, user?.role, user?.username]);
+
+  const handleFaceMaskToggle = useCallback(async () => {
+    if (!isFaceMaskOn) {
+      // 활성화
+      const stream = localStreamRef.current;
+      if (!stream || !stream.getVideoTracks().length) return;
+      try {
+        if (!faceMaskRef.current) faceMaskRef.current = new FaceMaskEffect();
+        faceMaskRef.current.emoji = selectedEmoji;
+        faceMaskRef.current.displayName = getFaceMaskDisplayName();
+        const maskedTrack = await faceMaskRef.current.start(stream);
+        if (!maskedTrack) return;
+        const previewTrack = faceMaskRef.current.getPreviewTrack() || maskedTrack;
+        originalTrackRef.current = stream.getVideoTracks()[0];
+        if (videoProducerRef.current) {
+          await videoProducerRef.current.replaceTrack({ track: maskedTrack });
+        }
+        // 로컬 프리뷰용 스트림도 교체
+        const maskedStream = new MediaStream([previewTrack, ...stream.getAudioTracks()]);
+        setLocalMediaStream(maskedStream);
+        setIsFaceMaskOn(true);
+      } catch (e) {
+        console.error("얼굴 가리기 활성화 실패:", e);
+      }
+    } else {
+      // 비활성화
+      const stream = localStreamRef.current;
+      const restoreTrack = faceMaskRef.current?.getSourceTrackClone() || originalTrackRef.current;
+      if (restoreTrack) restoreTrack.enabled = isCamOn;
+      if (restoreTrack && videoProducerRef.current) {
+        await videoProducerRef.current.replaceTrack({ track: restoreTrack });
+      }
+      faceMaskRef.current?.stop();
+      originalTrackRef.current = null;
+      if (stream && restoreTrack) {
+        const restoredStream = new MediaStream([restoreTrack, ...stream.getAudioTracks()]);
+        localStreamRef.current = restoredStream;
+        setLocalMediaStream(restoredStream);
+      } else if (stream) {
+        setLocalMediaStream(stream);
+      }
+      setIsFaceMaskOn(false);
+    }
+  }, [getFaceMaskDisplayName, isCamOn, isFaceMaskOn, selectedEmoji]);
+
+  const handleEmojiChange = useCallback((emoji) => {
+    setSelectedEmoji(emoji);
+    if (faceMaskRef.current) {
+      faceMaskRef.current.emoji = emoji;
+    }
+    setShowEmojiPicker(false);
+  }, []);
 
   const handleEndSession = useCallback(async () => {
     clearInterval(timerRef.current);
@@ -762,6 +870,7 @@ export default function MentoringSessionPage() {
             <SharedReport
               report={reportData}
               isMentor={isMentor}
+              currentMentee={currentMentee}
               mentorComments={mentorComments}
               onCommentChange={handleCommentChange}
             />
@@ -801,7 +910,7 @@ export default function MentoringSessionPage() {
           {/* 비디오 */}
           <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "45vh" }}>
             <div style={{ height: 155, flexShrink: 0, display: "flex" }}>
-              <VideoTile stream={localMediaStream} label={`나 (${isMentor ? "멘토" : "멘티"})`} mirror muted isSpeaking={(audioLevels["__local"] || 0) > 0.025} camOff={!isCamOn} />
+              <VideoTile stream={localMediaStream} label={`나 (${isMentor ? "멘토" : "멘티"})`} mirror={!isFaceMaskOn} muted isSpeaking={(audioLevels["__local"] || 0) > 0.025} camOff={!isCamOn} />
             </div>
             {peerIds.map((pid, i) => (
               <div key={pid} style={{ height: 155, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
@@ -884,6 +993,34 @@ export default function MentoringSessionPage() {
           <ControlButton active={drawMode} onClick={() => setDrawMode(v => !v)} label={drawMode ? "그리기 끄기" : "펜"} activeColor="#F59E0B">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           </ControlButton>
+          <div style={{ position: "relative" }}>
+            <ControlButton active={isFaceMaskOn} onClick={handleFaceMaskToggle} label={isFaceMaskOn ? "가리기 끔" : "얼굴 가리기"} activeColor="#8B5CF6">
+              <span style={{ fontSize: 15, lineHeight: 1 }}>{selectedEmoji}</span>
+            </ControlButton>
+            {isFaceMaskOn && (
+              <button
+                onClick={() => setShowEmojiPicker(v => !v)}
+                title="스티커 변경"
+                style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#8B5CF6", border: "2px solid #0D2240", color: "#fff", fontSize: 10, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+              >
+                ▼
+              </button>
+            )}
+            {showEmojiPicker && (
+              <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, background: "#1a1a2e", borderRadius: 12, padding: "8px 10px", display: "flex", flexWrap: "wrap", gap: 4, width: "max-content", maxWidth: "min(332px, calc(100vw - 32px))", boxShadow: "0 8px 32px rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.12)", zIndex: 50 }}>
+                {EMOJI_LIST.map(({ emoji, label }) => (
+                  <button
+                    key={emoji}
+                    title={label}
+                    onClick={() => handleEmojiChange(emoji)}
+                    style={{ width: 36, height: 36, borderRadius: 8, border: selectedEmoji === emoji ? "2px solid #8B5CF6" : "2px solid transparent", background: selectedEmoji === emoji ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.06)", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s", padding: 0 }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 11 }}>{session.title} · {currentMentee?.name} ({currentMenteeIdx + 1}/{menteeList.length})</p>

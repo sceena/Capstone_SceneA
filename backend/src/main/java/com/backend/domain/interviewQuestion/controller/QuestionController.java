@@ -68,9 +68,11 @@ public class QuestionController {
     public ResponseEntity<QuestionCreateResponse> uploadQuestionAudio(
             @AuthenticationPrincipal Long mentorId,
             @PathVariable Long id,
-            @RequestPart("audio") MultipartFile audio) {
+            @RequestPart("audio") MultipartFile audio,
+            @RequestParam(name = "question_type", required = false) String questionType,
+            @RequestParam(name = "candidate_id", required = false) Long candidateId) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(questionService.uploadQuestionAudio(mentorId, id, audio));
+                .body(questionService.uploadQuestionAudio(mentorId, id, audio, questionType, candidateId));
     }
 
     @Operation(summary = "AI 추천 질문 생성", description = "지원자 제출 서류를 기반으로 공통 질문과 지원자별 개인 질문을 생성한다.")

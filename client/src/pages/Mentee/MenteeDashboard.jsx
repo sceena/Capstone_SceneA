@@ -411,8 +411,12 @@ export default function MenteeDashboard() {
     isFinal: s.report_status === "final" || s.tag === "최종 리포트",
   }));
 
-  const avgScore = completedSessions.length > 0
-    ? Math.round(completedSessions.reduce((a, s) => a + (Number(s.aiScore) || 0), 0) / completedSessions.length)
+  const finalSessions = completedSessions.filter(
+    s => (s.report_status ?? s.reportStatus) === "final"
+  );
+  const finalWithScore = finalSessions.filter(s => Number.isFinite(Number(s.ai_score ?? s.aiScore)));
+  const avgScore = finalWithScore.length > 0
+    ? (finalWithScore.reduce((a, s) => a + Number(s.ai_score ?? s.aiScore), 0) / finalWithScore.length).toFixed(1)
     : null;
 
   const now = new Date();
@@ -470,9 +474,9 @@ export default function MenteeDashboard() {
             }
           />
           <StatCard
-            label="평균 AI 점수"
+            label="멘토 평균 평점"
             value={avgScore !== null ? `${avgScore}점` : "-"}
-            sub={avgScore !== null ? `${completedSessions.length}회 면접 기준` : "면접 완료 후 표시"}
+            sub={avgScore !== null ? `${finalWithScore.length}회 최종 리포트 기준` : "최종 리포트 완성 후 표시"}
             gradient={C.warningGrad}
             shadowColor="rgba(247,103,7,0.28)"
             icon={

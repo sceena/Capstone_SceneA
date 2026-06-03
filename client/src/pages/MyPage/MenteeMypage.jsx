@@ -686,9 +686,9 @@ export default function MenteeMyPage() {
 
   const latestSession  = historyAll[0];
 
-  const latestScore = historyAll[0]?.ai ?? "-";
-  const firstScore  = historyAll[historyAll.length - 1]?.ai ?? "-";
-  const latestWpm   = historyAll[0]?.wpm ?? "-";
+  const latestWpm       = historyAll[0]?.wpm ?? "-";
+  const latestMentorScore = mentorScoreTrend.length > 0 ? mentorScoreTrend[mentorScoreTrend.length - 1].ai : null;
+  const firstMentorScore  = mentorScoreTrend.length > 0 ? mentorScoreTrend[0].ai : null;
 
   const handleWithdraw = async () => {
     if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
@@ -788,7 +788,7 @@ export default function MenteeMyPage() {
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 0 }}>
                 {[
                   { l: "총 세션", v: `${historyAll.length}회` },
-                  { l: "멘토 평점", v: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-" },
+                  { l: "멘토 평점", v: latestMentorScore != null ? `${latestMentorScore}점` : "-" },
                   { l: "최근 WPM", v: latestWpm !== "-" ? `${latestWpm}` : "-" },
                   { l: "Fit 충족률", v: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-" },
                   { l: "신청 이력", v: `${reservations.length}건` },
@@ -881,7 +881,7 @@ export default function MenteeMyPage() {
                 <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
                   {[
                     { label: "총 면접 횟수", value: `${historyAll.length}회`, sub: historyAll.length > 0 ? "면접 완료" : "면접 미완료", icon: "📋" },
-                    { label: "멘토 평점", value: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${mentorScoreTrend[0].ai} → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}` : "최종 리포트 기준", accent: C.success },
+                    { label: "멘토 평점", value: latestMentorScore != null ? `${latestMentorScore}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${firstMentorScore}점 → ${latestMentorScore}점` : "최종 리포트 기준", accent: C.success },
                     { label: "최근 WPM", value: latestWpm !== "-" ? `${latestWpm}` : "-", sub: "최근 세션 기준", accent: C.primary },
                     { label: "Fit 충족률", value: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-", sub: hasFitGap ? `${fitGap.matched}/${fitGap.total} 충족` : "AI 리포트 기반", accent: C.warning },
                   ].map((s, i) => (

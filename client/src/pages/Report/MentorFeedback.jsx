@@ -183,9 +183,17 @@ function buildMenteesFromQuestionReports(
     if (menteeId != null) feedbackByMentee.set(String(menteeId), feedback);
   });
 
+  // answer_evaluations에서 menteeId → menteeName 역방향 맵 구성
+  const menteeNameFromEval = new Map();
+  answerEvaluations.forEach(ev => {
+    const eid = ev?.mentee_id ?? ev?.menteeId;
+    const ename = ev?.mentee_name ?? ev?.menteeName;
+    if (eid != null && ename) menteeNameFromEval.set(String(eid), ename);
+  });
+
   questionReports.forEach((report, index) => {
     const menteeId = report.mentee_id || `session-${sessionId}`;
-    const menteeName = report.mentee_name || "면접 참여자";
+    const menteeName = report.mentee_name || menteeNameFromEval.get(String(menteeId)) || `멘티 ${menteeId !== `session-${sessionId}` ? menteeId : index + 1}`;
     const menteeFeedback = feedbackByMentee.get(String(menteeId));
     if (!groups.has(menteeId)) {
       groups.set(menteeId, {
@@ -317,7 +325,7 @@ export default function MentorFeedbackPage() {
     return () => { cancelled = true; };
   }, [sessionId]);
 
-  // Init per-mentee feedback state
+  // Init per-mentee feedback state + 이미 final인 멘티는 sentMentees에 추가
   useEffect(() => {
     setAllFeedbacks(prev => {
       const next = {};
@@ -339,6 +347,16 @@ export default function MentorFeedbackPage() {
           mentorScore: existing?.mentorScore ?? m.mentorScore ?? 4.0,
         };
       });
+      return next;
+    });
+    // 이미 최종 리포트가 전송된 멘티는 자동으로 sent 처리
+    setSentMentees(prev => {
+      const alreadyFinal = menteeList
+        .filter(m => m.menteeTrack === "최종 리포트")
+        .map(m => m.menteeId);
+      if (alreadyFinal.length === 0) return prev;
+      const next = new Set(prev);
+      alreadyFinal.forEach(id => next.add(id));
       return next;
     });
   }, [menteeList]);
@@ -599,8 +617,19 @@ export default function MentorFeedbackPage() {
           )}
         </div>
 
+        {/* 전송 완료 잠금 배너 */}
+        {currentSent && (
+          <div style={{ background: "#E1F5EE", border: `1px solid ${GREEN}60`, borderRadius: 12, padding: "14px 20px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 18, color: GREEN }}>✓</span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, color: GREEN, margin: 0 }}>이미 전송된 최종 리포트입니다</p>
+              <p style={{ fontSize: 12, color: "#444", marginTop: 2 }}>멘티에게 전달이 완료되어 수정할 수 없습니다.</p>
+            </div>
+          </div>
+        )}
+
         {/* Section 1: Per-question feedback */}
-        <div style={{ marginBottom: 8 }}>
+        <div style={{ marginBottom: 8, opacity: currentSent ? 0.55 : 1, pointerEvents: currentSent ? "none" : "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>1</div>
             <div>
@@ -618,7 +647,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Section 2: Overall score */}
-        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 16 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 16, opacity: currentSent ? 0.55 : 1, pointerEvents: currentSent ? "none" : "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>2</div>
             <div>
@@ -630,7 +659,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Section 3: Total feedback */}
-        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 28 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 28, opacity: currentSent ? 0.55 : 1, pointerEvents: currentSent ? "none" : "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>3</div>
             <div>
@@ -694,18 +723,15 @@ export default function MentorFeedbackPage() {
               대시보드로 이동
             </button>
           )}
-          <button type="button" onClick={handleSendCurrent} disabled={isSending} style={{
+          <button type="button" onClick={handleSendCurrent} disabled={isSending || currentSent} style={{
             padding: "13px 28px", borderRadius: 11, border: "none",
-            background: isSending ? "#aaa" : NAVY, color: "white",
+            background: currentSent ? "#0CA678" : isSending ? "#aaa" : NAVY, color: "white",
             fontSize: 14, fontWeight: 700,
-            cursor: isSending ? "not-allowed" : "pointer",
+            cursor: (isSending || currentSent) ? "not-allowed" : "pointer",
             transition: "background 0.2s", whiteSpace: "nowrap",
+            opacity: currentSent ? 0.75 : 1,
           }}>
-            {isSending
-              ? "저장 중..."
-              : currentSent
-              ? "수정본 다시 저장"
-              : "수정본 저장 후 전송 →"}
+            {isSending ? "저장 중..." : currentSent ? "✓ 전송 완료" : "수정본 저장 후 전송 →"}
           </button>
         </div>
 

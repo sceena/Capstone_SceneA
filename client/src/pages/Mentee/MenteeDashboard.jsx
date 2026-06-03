@@ -484,7 +484,18 @@ export default function MenteeDashboard() {
         </div>
 
         {/* ── 미확인 최종 리포트 배너 ── */}
-        {unreadFinals.map(s => (
+        {unreadFinals.map(s => {
+          const markViewed = (id) => {
+            try {
+              const viewed = JSON.parse(localStorage.getItem("scena_viewed_finals") || "[]");
+              const sid = String(id);
+              if (!viewed.includes(sid)) {
+                localStorage.setItem("scena_viewed_finals", JSON.stringify([...viewed, sid]));
+              }
+            } catch {}
+            setUnreadFinals(prev => prev.filter(u => u.id !== id));
+          };
+          return (
           <div key={s.id} style={{
             background: C.primaryGrad,
             borderRadius: 16, padding: "20px 28px",
@@ -493,6 +504,14 @@ export default function MenteeDashboard() {
             boxShadow: C.shadowLg, position: "relative", overflow: "hidden",
           }}>
             <div style={{ position: "absolute", right: -20, top: -20, width: 120, height: 120, borderRadius: "50%", background: "rgba(12,166,120,0.15)", pointerEvents: "none" }} />
+            {/* X 닫기 버튼 */}
+            <button onClick={() => markViewed(s.id)} style={{
+              position: "absolute", top: 12, right: 12, zIndex: 2,
+              background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%",
+              width: 28, height: 28, cursor: "pointer", color: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: 700,
+            }}>✕</button>
             <div style={{ display: "flex", alignItems: "center", gap: 16, zIndex: 1 }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 14,
@@ -517,7 +536,7 @@ export default function MenteeDashboard() {
               </div>
             </div>
             <button
-              onClick={() => navigate("/report/final", { state: { sessionId: s.id, role: "mentee" } })}
+              onClick={() => { markViewed(s.id); navigate(`/report/final/${s.id}`, { state: { sessionId: s.id, role: "mentee" } }); }}
               style={{
                 padding: "12px 24px", borderRadius: 10,
                 border: "none", background: C.success,
@@ -533,7 +552,8 @@ export default function MenteeDashboard() {
               지금 확인하기 →
             </button>
           </div>
-        ))}
+          );
+        })}
 
         {/* ── 자소서 배너: 미등록이면 등록 유도, 등록했으면 표시 안 함 ── */}
         {!hasResume && (

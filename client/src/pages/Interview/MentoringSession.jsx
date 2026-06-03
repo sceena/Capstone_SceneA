@@ -50,10 +50,15 @@ function getReportCommentKey(report, index = 0) {
 }
 
 function filterReportsForMentee(questionReports = [], currentMentee) {
-  const menteeId = currentMentee?.id ?? currentMentee?.menteeId ?? currentMentee?.memberId;
+  // ParticipantInfo.user_id = member's actual ID (matches question_report.mentee_id)
+  const menteeId = currentMentee?.user_id ?? currentMentee?.userId
+    ?? currentMentee?.id ?? currentMentee?.menteeId ?? currentMentee?.memberId;
   if (menteeId == null) return questionReports;
-  const filtered = questionReports.filter((report) => String(getReportMenteeId(report) ?? "") === String(menteeId));
-  return filtered.length > 0 ? filtered : questionReports;
+  const filtered = questionReports.filter(
+    (report) => String(getReportMenteeId(report) ?? "") === String(menteeId)
+  );
+  // 그룹 세션에 mentee_id가 있으면 해당 멘티 것만, 없으면(1:1) 전체 반환
+  return filtered.length > 0 ? filtered : (questionReports.every(r => !getReportMenteeId(r)) ? questionReports : []);
 }
 
 function pickReportExtremes(reports = []) {
@@ -144,6 +149,18 @@ function SharedReport({ report, isMentor = false, currentMentee = null, mentorCo
   const aiReport = report.ai_report;
   const questionReports = aiReport?.question_reports || [];
   const visibleQuestionReports = filterReportsForMentee(questionReports, currentMentee);
+
+  if (currentMentee && visibleQuestionReports.length === 0 && questionReports.length > 0) {
+    return (
+      <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ color: D.muted, fontSize: 14, marginBottom: 6 }}>{currentMentee.name} 멘티의 답변 데이터를 찾을 수 없어요</p>
+          <p style={{ color: D.dim, fontSize: 12 }}>AI 리포트가 처리 중이거나 데이터가 없습니다</p>
+        </div>
+      </div>
+    );
+  }
+
   const topSummary = aiReport?.top_summary;
   const { bestReport, worstReport } = pickReportExtremes(visibleQuestionReports);
   const best = bestReport
@@ -846,21 +863,32 @@ export default function MentoringSessionPage() {
         {/* 좌측: 리포트 + 드로잉 레이어 */}
         <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
-          {/* 멘티 전환 네비게이터 */}
-          <div style={{ background: "#fff", borderBottom: "1px solid #E8E0D0", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
+          {/* 멘티 전환 네비게이터 — 그룹이면 스텝 강조 */}
+          <div style={{ background: menteeList.length > 1 ? "#F0F4FF" : "#fff", borderBottom: "1px solid #E8E0D0", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
             <button onClick={() => handleMenteeNav(currentMenteeIdx - 1)} disabled={currentMenteeIdx === 0 || !isMentor}
-              style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: currentMenteeIdx === 0 || !isMentor ? "#F3F4F6" : "#fff", color: currentMenteeIdx === 0 || !isMentor ? "#9CA3AF" : NAVY, fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx === 0 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
+              style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${currentMenteeIdx === 0 || !isMentor ? "#D1D5DB" : NAVY}`, background: currentMenteeIdx === 0 || !isMentor ? "#F3F4F6" : NAVY, color: currentMenteeIdx === 0 || !isMentor ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx === 0 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
               ← 이전
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {menteeList.length > 1 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", background: "#E0E7FF", borderRadius: 99, padding: "2px 10px" }}>
+                  그룹 면접 · {currentMenteeIdx + 1}/{menteeList.length}명
+                </span>
+              )}
               {menteeList.map((m, i) => (
-                <button key={m.id} onClick={() => isMentor && handleMenteeNav(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: `2px solid ${i === currentMenteeIdx ? NAVY : "#D1D5DB"}`, background: i === currentMenteeIdx ? NAVY : "#fff", color: i === currentMenteeIdx ? "#fff" : "#555", fontSize: 12, fontWeight: 700, cursor: isMentor ? "pointer" : "default", fontFamily: "inherit", transition: "all 0.15s" }}>{i + 1}</button>
+                <button key={m.user_id ?? m.id ?? i} onClick={() => isMentor && handleMenteeNav(i)} title={m.name}
+                  style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${i === currentMenteeIdx ? NAVY : "#D1D5DB"}`, background: i === currentMenteeIdx ? NAVY : "#fff", color: i === currentMenteeIdx ? "#fff" : "#555", fontSize: 12, fontWeight: 700, cursor: isMentor ? "pointer" : "default", fontFamily: "inherit", transition: "all 0.15s" }}>
+                  {i + 1}
+                </button>
               ))}
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#111", marginLeft: 4 }}>{currentMentee?.name} 멘티</span>
+              <div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{currentMentee?.name}</span>
+                <span style={{ fontSize: 12, color: "#6B7280", marginLeft: 4 }}>멘티 리포트</span>
+              </div>
               {!isMentor && <span style={{ fontSize: 11, color: GREEN, fontWeight: 600 }}>· 멘토가 화면을 제어합니다</span>}
             </div>
             <button onClick={() => handleMenteeNav(currentMenteeIdx + 1)} disabled={currentMenteeIdx >= menteeList.length - 1 || !isMentor}
-              style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#F3F4F6" : "#fff", color: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#9CA3AF" : NAVY, fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
+              style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#D1D5DB" : NAVY}`, background: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#F3F4F6" : NAVY, color: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
               다음 →
             </button>
           </div>

@@ -172,8 +172,7 @@ export default function MentorMyPage() {
   const [showEdit, setShowEdit]   = useState(false);
   const [profileImage, setProfileImage] = useState(() => {
     const stored = localStorage.getItem(`profile_img_${user?.email}`);
-    // base64만 사용 (S3 URL은 img 태그에서 직접 로드 시 실패 가능)
-    return stored?.startsWith("data:") ? stored : null;
+    return (stored?.startsWith("data:") || stored?.startsWith("https://")) ? stored : null;
   });
   const [requests, setRequests]   = useState([]);
   const [confirmed, setConfirmed] = useState([]);
@@ -184,13 +183,13 @@ export default function MentorMyPage() {
     getMyProfile().then(p => {
       setProfile(p);
       const stored = localStorage.getItem(`profile_img_${user?.email}`);
-      const hasBase64 = stored?.startsWith("data:");
-      if (!hasBase64 && p?.profile_image_url) {
-        // S3 URL → fetch → base64 변환 후 localStorage 저장 (CORS 또는 private 이면 fallback)
-        fetch(p.profile_image_url.replace(/^http:\/\//i, "https://"))
+      const hasCached = stored?.startsWith("data:") || stored?.startsWith("https://");
+      if (!hasCached && p?.profile_image_url) {
+        const url = p.profile_image_url.replace(/^http:\/\//i, "https://");
+        fetch(url)
           .then(r => r.ok ? r.blob() : null)
           .then(blob => {
-            if (!blob) return;
+            if (!blob) throw new Error("no blob");
             const reader = new FileReader();
             reader.onload = e => {
               const b64 = e.target.result;
@@ -199,7 +198,10 @@ export default function MentorMyPage() {
             };
             reader.readAsDataURL(blob);
           })
-          .catch(() => {});
+          .catch(() => {
+            try { localStorage.setItem(`profile_img_${user?.email}`, url); } catch {}
+            setProfileImage(url);
+          });
       }
     }).catch(() => {});
 
@@ -219,7 +221,9 @@ export default function MentorMyPage() {
       setRequests(pending);
       setConfirmed(conf);
       setCompletedSessions(completed);
-      setPendingFeedbackSessions(completed.filter(s => s.reportStatus !== "final"));
+      // "first" = AI 리포트 생성됨, 멘토 피드백 미작성 상태만 표시
+      // null = AI 리포트 미생성 (500 오류 등), "final" = 이미 완료
+      setPendingFeedbackSessions(completed.filter(s => s.reportStatus === "first"));
     }).catch(() => {});
   }, []);
 

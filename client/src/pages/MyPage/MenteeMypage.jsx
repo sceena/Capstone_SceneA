@@ -539,20 +539,22 @@ export default function MenteeMyPage() {
   const [showEdit, setShowEdit]       = useState(false);
   const [profileImage, setProfileImage] = useState(() => {
     const stored = localStorage.getItem(`profile_img_${user?.email}`);
-    return stored?.startsWith("data:") ? stored : null;
+    // data: URL(업로드) 또는 https:// URL(카카오 등 외부 CDN) 모두 허용
+    return (stored?.startsWith("data:") || stored?.startsWith("https://")) ? stored : null;
   });
 
   useEffect(() => {
     getMyProfile().then(p => {
       setProfile(p);
       const stored = localStorage.getItem(`profile_img_${user?.email}`);
-      const hasBase64 = stored?.startsWith("data:");
-      if (!hasBase64 && p?.profile_image_url) {
-        // S3 URL → fetch → base64 변환 후 localStorage 저장
-        fetch(p.profile_image_url.replace(/^http:\/\//i, "https://"))
+      const hasCached = stored?.startsWith("data:") || stored?.startsWith("https://");
+      if (!hasCached && p?.profile_image_url) {
+        const url = p.profile_image_url.replace(/^http:\/\//i, "https://");
+        // fetch로 base64 변환 시도 → CORS 차단(카카오 등) 시 URL 그대로 저장
+        fetch(url)
           .then(r => r.ok ? r.blob() : null)
           .then(blob => {
-            if (!blob) return;
+            if (!blob) throw new Error("no blob");
             const reader = new FileReader();
             reader.onload = e => {
               const b64 = e.target.result;
@@ -561,7 +563,11 @@ export default function MenteeMyPage() {
             };
             reader.readAsDataURL(blob);
           })
-          .catch(() => {});
+          .catch(() => {
+            // CORS 등으로 fetch 불가 → URL 직접 사용 (img 태그는 CORS 없이 로드 가능)
+            try { localStorage.setItem(`profile_img_${user?.email}`, url); } catch {}
+            setProfileImage(url);
+          });
       }
     }).catch(() => {});
 

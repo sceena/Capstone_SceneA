@@ -9,6 +9,7 @@ import {
   getStreamVideoDeviceId,
   openInterviewStream,
 } from "../../utils/mediaDevices";
+import { FaceMaskEffect, EMOJI_LIST } from "../../utils/faceMaskEffect";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
@@ -364,7 +365,13 @@ export default function MentoringSessionPage() {
   const [elapsed, setElapsed]   = useState(0);
   const [isMicOn, setIsMicOn]   = useState(true);
   const [isCamOn, setIsCamOn]   = useState(true);
+  const [isFaceMaskOn, setIsFaceMaskOn] = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState(EMOJI_LIST[0].emoji);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const faceMaskRef = useRef(null);
+  const originalTrackRef = useRef(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [menteeSessionDone, setMenteeSessionDone] = useState(false);
 
   const [menteeList, setMenteeList]         = useState([]);
   const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
@@ -654,6 +661,64 @@ export default function MentoringSessionPage() {
     else videoProducerRef.current?.pause();
   };
 
+  const getFaceMaskDisplayName = useCallback(() => {
+    const baseName = user?.nickname || user?.name || user?.username || user?.email?.split("@")[0] || "나";
+    const roleLabel = String(user?.role || "").toLowerCase().includes("mentor") ? "멘토" : "멘티";
+    return `${baseName} ${roleLabel}`;
+  }, [user?.email, user?.name, user?.nickname, user?.role, user?.username]);
+
+  const handleFaceMaskToggle = useCallback(async () => {
+    if (!isFaceMaskOn) {
+      // 활성화
+      const stream = localStreamRef.current;
+      if (!stream || !stream.getVideoTracks().length) return;
+      try {
+        if (!faceMaskRef.current) faceMaskRef.current = new FaceMaskEffect();
+        faceMaskRef.current.emoji = selectedEmoji;
+        faceMaskRef.current.displayName = getFaceMaskDisplayName();
+        const maskedTrack = await faceMaskRef.current.start(stream);
+        if (!maskedTrack) return;
+        const previewTrack = faceMaskRef.current.getPreviewTrack() || maskedTrack;
+        originalTrackRef.current = stream.getVideoTracks()[0];
+        if (videoProducerRef.current) {
+          await videoProducerRef.current.replaceTrack({ track: maskedTrack });
+        }
+        // 로컬 프리뷰용 스트림도 교체
+        const maskedStream = new MediaStream([previewTrack, ...stream.getAudioTracks()]);
+        setLocalMediaStream(maskedStream);
+        setIsFaceMaskOn(true);
+      } catch (e) {
+        console.error("얼굴 가리기 활성화 실패:", e);
+      }
+    } else {
+      // 비활성화
+      const stream = localStreamRef.current;
+      const restoreTrack = faceMaskRef.current?.getSourceTrackClone() || originalTrackRef.current;
+      if (restoreTrack) restoreTrack.enabled = isCamOn;
+      if (restoreTrack && videoProducerRef.current) {
+        await videoProducerRef.current.replaceTrack({ track: restoreTrack });
+      }
+      faceMaskRef.current?.stop();
+      originalTrackRef.current = null;
+      if (stream && restoreTrack) {
+        const restoredStream = new MediaStream([restoreTrack, ...stream.getAudioTracks()]);
+        localStreamRef.current = restoredStream;
+        setLocalMediaStream(restoredStream);
+      } else if (stream) {
+        setLocalMediaStream(stream);
+      }
+      setIsFaceMaskOn(false);
+    }
+  }, [getFaceMaskDisplayName, isCamOn, isFaceMaskOn, selectedEmoji]);
+
+  const handleEmojiChange = useCallback((emoji) => {
+    setSelectedEmoji(emoji);
+    if (faceMaskRef.current) {
+      faceMaskRef.current.emoji = emoji;
+    }
+    setShowEmojiPicker(false);
+  }, []);
+
   const handleEndSession = useCallback(async () => {
     clearInterval(timerRef.current);
     const sid = session.sessionId || sessionId;
@@ -661,14 +726,9 @@ export default function MentoringSessionPage() {
     if (user?.role === "mentor") {
       navigate(`/mentor/feedback/${sid}`);
     } else {
-      navigate(`/report/mentor-review/${sid}`, {
-        state: {
-          mentorName: session.mentor?.name || "멘토",
-          nextPath: `/report/ai-stream/${sid}`,
-        },
-      });
+      setMenteeSessionDone(true);
     }
-  }, [navigate, session.sessionId, session.mentor?.name, sessionId, user?.role]);
+  }, [navigate, session.sessionId, sessionId, user?.role]);
 
   const userRole = String(user?.role || "").toLowerCase();
   const isMentor = userRole.includes("mentor");
@@ -694,6 +754,58 @@ export default function MentoringSessionPage() {
       ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
     `}</style>
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Noto Sans KR', sans-serif", overflow: "hidden" }}>
+
+      {/* ── 멘티 세션 종료 오버레이 ── */}
+      {menteeSessionDone && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(13,34,64,0.92)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: 24, padding: "48px 52px",
+            textAlign: "center", maxWidth: 440, width: "90%",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+          }}>
+            {/* 체크 아이콘 */}
+            <div style={{
+              width: 72, height: 72, borderRadius: "50%",
+              background: "#E6FCF5",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 24px",
+            }}>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M6 16l7 7 13-13" stroke={GREEN} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: NAVY, marginBottom: 12, letterSpacing: "-0.03em" }}>
+              멘토링 세션이 종료됐어요
+            </h2>
+            <p style={{ fontSize: 15, color: "#495057", lineHeight: 1.7, marginBottom: 8 }}>
+              멘토가 최종 리포트를 작성하고 있습니다.
+            </p>
+            <p style={{ fontSize: 13, color: "#868E96", marginBottom: 36 }}>
+              작성이 완료되면 마이페이지에서 확인할 수 있어요.
+            </p>
+            <button
+              onClick={() => navigate("/dashboard/mentee")}
+              style={{
+                width: "100%", padding: "14px",
+                background: `linear-gradient(135deg, ${NAVY} 0%, #1B4F7A 100%)`,
+                color: "#fff", border: "none", borderRadius: 12,
+                fontSize: 15, fontWeight: 700, cursor: "pointer",
+                fontFamily: "inherit", letterSpacing: "-0.01em",
+                boxShadow: "0 6px 16px rgba(13,34,64,0.28)",
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >
+              대시보드로 이동하기 →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── 헤더 ── */}
       <header style={{ background: "#fff", borderBottom: "1px solid #E8E0D0", padding: "0 28px", height: 64, display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
@@ -784,7 +896,7 @@ export default function MentoringSessionPage() {
           {/* 비디오 */}
           <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "45vh" }}>
             <div style={{ height: 155, flexShrink: 0, display: "flex" }}>
-              <VideoTile stream={localMediaStream} label={`나 (${isMentor ? "멘토" : "멘티"})`} mirror muted isSpeaking={(audioLevels["__local"] || 0) > 0.025} camOff={!isCamOn} />
+              <VideoTile stream={localMediaStream} label={`나 (${isMentor ? "멘토" : "멘티"})`} mirror={!isFaceMaskOn} muted isSpeaking={(audioLevels["__local"] || 0) > 0.025} camOff={!isCamOn} />
             </div>
             {peerIds.map((pid, i) => (
               <div key={pid} style={{ height: 155, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
@@ -867,6 +979,34 @@ export default function MentoringSessionPage() {
           <ControlButton active={drawMode} onClick={() => setDrawMode(v => !v)} label={drawMode ? "그리기 끄기" : "펜"} activeColor="#F59E0B">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           </ControlButton>
+          <div style={{ position: "relative" }}>
+            <ControlButton active={isFaceMaskOn} onClick={handleFaceMaskToggle} label={isFaceMaskOn ? "가리기 끔" : "얼굴 가리기"} activeColor="#8B5CF6">
+              <span style={{ fontSize: 15, lineHeight: 1 }}>{selectedEmoji}</span>
+            </ControlButton>
+            {isFaceMaskOn && (
+              <button
+                onClick={() => setShowEmojiPicker(v => !v)}
+                title="스티커 변경"
+                style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#8B5CF6", border: "2px solid #0D2240", color: "#fff", fontSize: 10, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+              >
+                ▼
+              </button>
+            )}
+            {showEmojiPicker && (
+              <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, background: "#1a1a2e", borderRadius: 12, padding: "8px 10px", display: "flex", flexWrap: "wrap", gap: 4, width: "max-content", maxWidth: "min(332px, calc(100vw - 32px))", boxShadow: "0 8px 32px rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.12)", zIndex: 50 }}>
+                {EMOJI_LIST.map(({ emoji, label }) => (
+                  <button
+                    key={emoji}
+                    title={label}
+                    onClick={() => handleEmojiChange(emoji)}
+                    style={{ width: 36, height: 36, borderRadius: 8, border: selectedEmoji === emoji ? "2px solid #8B5CF6" : "2px solid transparent", background: selectedEmoji === emoji ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.06)", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s", padding: 0 }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 11 }}>{session.title} · {currentMentee?.name} ({currentMenteeIdx + 1}/{menteeList.length})</p>

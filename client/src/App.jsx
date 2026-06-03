@@ -13,7 +13,6 @@ import InterviewLobby from './pages/Interview/InterviewLobby'
 import MentoringSessionPage from './pages/Interview/MentoringSession'
 import AIReportPage from './pages/Report/AIReport'
 import ReportWaitingPage from './pages/Report/ReportWaiting'
-import MentorReviewPage from './pages/Report/MentorReview'
 import FinalReportPage from './pages/Report/FinalReport'
 import MentorFeedbackPage from './pages/Report/MentorFeedback'
 import ReportGeneratingPage from './pages/Report/ReportGenerating'
@@ -63,7 +62,6 @@ export default function App() {
       <Route path="/report/generating/:sessionId" element={<ProtectedRoute element={<ReportGeneratingPage />} />} />
       <Route path="/report/ai/:sessionId"    element={<ProtectedRoute element={<AIReportPage />} />} />
       <Route path="/report/ai-stream/:sessionId" element={<ProtectedRoute element={<ReportWaitingPage />} />} />
-      <Route path="/report/mentor-review/:sessionId" element={<ProtectedRoute element={<MentorReviewPage />} />} />
       <Route path="/report/final"            element={<ProtectedRoute element={<FinalReportPage />} />} />
       <Route path="/report/final/:sessionId" element={<ProtectedRoute element={<FinalReportPage />} />} />
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import useAuthStore, { clearAuthUser } from "../../store/authStore";
+import useAuthStore, { clearAuthUser, setAuthUser, getAuthUser } from "../../store/authStore";
 import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
 import JobAvatar from "../../components/JobAvatar";
 
@@ -71,7 +71,7 @@ const Header = ({ userName, accessToken }) => {
 };
 
 /* ── 프로필 수정 모달 ── */
-function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
+function EditProfileModal({ onClose, userEmail, onImageChange, initialBio, onNameSaved, onProfileRefresh }) {
   const [tab, setTab]       = useState("name");
   const [name, setName]     = useState("");
   const [bio, setBio]       = useState(initialBio || "");
@@ -95,10 +95,12 @@ function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
     if (!imgFile) { setError("이미지를 선택해주세요."); return; }
     setSaving(true);
     try {
-      const res = await updateMyProfile({}, imgFile);
-      const url = res?.profile_image_url || imgPreview;
-      localStorage.setItem(`profile_img_${userEmail}`, url);
-      onImageChange?.(url); setDone(true); setTimeout(onClose, 900);
+      await updateMyProfile({}, imgFile);
+      // S3 URL은 img 태그에서 인증 없이 로드 불가 → base64 미리보기를 즉시 표시하고 localStorage에 저장
+      onImageChange?.(imgPreview);
+      try { if (imgPreview) localStorage.setItem(`profile_img_${userEmail}`, imgPreview); } catch {}
+      await onProfileRefresh?.();
+      setDone(true); setTimeout(onClose, 900);
     } catch { setError("이미지 저장에 실패했습니다."); setSaving(false); }
   };
 
@@ -109,7 +111,12 @@ function EditProfileModal({ onClose, userEmail, onImageChange, initialBio }) {
     else if (tab === "bio") { data.bio = bio.trim(); }
     else { if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; } if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; } data.password = pwNew; }
     setSaving(true);
-    try { await updateMyProfile(data); setDone(true); setTimeout(onClose, 900); }
+    try {
+      await updateMyProfile(data);
+      if (tab === "name" && data.name) onNameSaved?.(data.name);
+      await onProfileRefresh?.();
+      setDone(true); setTimeout(onClose, 900);
+    }
     catch (e) { setError(e?.status === 401 ? "로그인이 만료되었습니다." : "저장에 실패했습니다."); setSaving(false); }
   };
 
@@ -163,11 +170,11 @@ export default function MentorMyPage() {
   const [activeTab, setActiveTab] = useState("pending");
   const [profile, setProfile]     = useState(user?.profileData || null);
   const [showEdit, setShowEdit]   = useState(false);
-  const [profileImage, setProfileImage] = useState(
-    () => localStorage.getItem(`profile_img_${user?.email}`)
-      || user?.profileData?.profile_image_url
-      || null
-  );
+  const [profileImage, setProfileImage] = useState(() => {
+    const stored = localStorage.getItem(`profile_img_${user?.email}`);
+    // base64만 사용 (S3 URL은 img 태그에서 직접 로드 시 실패 가능)
+    return stored?.startsWith("data:") ? stored : null;
+  });
   const [requests, setRequests]   = useState([]);
   const [confirmed, setConfirmed] = useState([]);
   const [completedSessions, setCompletedSessions] = useState([]);
@@ -176,9 +183,23 @@ export default function MentorMyPage() {
   useEffect(() => {
     getMyProfile().then(p => {
       setProfile(p);
-      if (p?.profile_image_url) {
-        setProfileImage(p.profile_image_url);
-        localStorage.setItem(`profile_img_${user?.email}`, p.profile_image_url);
+      const stored = localStorage.getItem(`profile_img_${user?.email}`);
+      const hasBase64 = stored?.startsWith("data:");
+      if (!hasBase64 && p?.profile_image_url) {
+        // S3 URL → fetch → base64 변환 후 localStorage 저장 (CORS 또는 private 이면 fallback)
+        fetch(p.profile_image_url)
+          .then(r => r.ok ? r.blob() : null)
+          .then(blob => {
+            if (!blob) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+              const b64 = e.target.result;
+              try { localStorage.setItem(`profile_img_${user?.email}`, b64); } catch {}
+              setProfileImage(b64);
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => {});
       }
     }).catch(() => {});
 
@@ -281,7 +302,7 @@ export default function MentorMyPage() {
               {/* 아바타 + 이름 */}
               <div style={{ textAlign: "center", marginBottom: 16 }}>
                 {profileImage
-                  ? <img src={profileImage} alt="profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px", display: "block", border: `2px solid ${C.border}` }}/>
+                  ? <img src={profileImage} alt="profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px", display: "block", border: `2px solid ${C.border}` }} onError={e => { e.currentTarget.style.display = "none"; setProfileImage(null); }}/>
                   : <JobAvatar jobStr={jobStr} size={72} style={{ margin: "0 auto 12px" }}/>
                 }
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>{displayName}</p>
@@ -523,7 +544,18 @@ export default function MentorMyPage() {
         </div>
       </main>
 
-      {showEdit && <EditProfileModal onClose={() => setShowEdit(false)} userEmail={user?.email} onImageChange={img => setProfileImage(img)} initialBio={profile?.bio || ""}/>}
+      {showEdit && <EditProfileModal
+        onClose={() => setShowEdit(false)}
+        userEmail={user?.email}
+        onImageChange={img => setProfileImage(img)}
+        initialBio={profile?.bio || ""}
+        onNameSaved={(newName) => {
+          const cur = getAuthUser();
+          setAuthUser({ ...cur, name: newName });
+          setProfile(prev => prev ? { ...prev, name: newName } : prev);
+        }}
+        onProfileRefresh={() => getMyProfile().then(setProfile).catch(() => {})}
+      />}
     </>
   );
 }

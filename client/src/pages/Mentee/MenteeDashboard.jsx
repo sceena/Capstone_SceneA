@@ -350,6 +350,17 @@ export default function MenteeDashboard() {
   const [sessionsError, setSessionsError] = useState("");
   const [unreadFinals, setUnreadFinals] = useState([]);
 
+  const hasResume = (() => {
+    try {
+      const key = `scena_resume_draft:${user?.email || user?.id || "anonymous"}`;
+      const job = localStorage.getItem(`${key}:job`);
+      const items = localStorage.getItem(key);
+      if (job) { const p = JSON.parse(job); if (p?.requirements || p?.looking_for) return true; }
+      if (items) { const arr = JSON.parse(items); if (arr?.some(i => i.content?.trim())) return true; }
+    } catch {}
+    return false;
+  })();
+
   useEffect(() => {
     setSessionsLoading(true);
     getMySessions()
@@ -524,51 +535,53 @@ export default function MenteeDashboard() {
           </div>
         ))}
 
-        {/* ── 자소서 업로드 배너 (항상 표시) ── */}
-        <div style={{
-          background: "linear-gradient(135deg, #FFFBEB 0%, #FFF3CD 100%)",
-          border: "1px solid #FFD43B",
-          borderRadius: 16, padding: "16px 24px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 16, marginBottom: 20, flexWrap: "wrap",
-          boxShadow: "0 4px 16px rgba(255,193,7,0.15)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{
-              width: 42, height: 42, borderRadius: 12,
-              background: "#F59F00",
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        {/* ── 자소서 배너: 미등록이면 등록 유도, 등록했으면 표시 안 함 ── */}
+        {!hasResume && (
+          <div style={{
+            background: "linear-gradient(135deg, #FFFBEB 0%, #FFF3CD 100%)",
+            border: "1px solid #FFD43B",
+            borderRadius: 16, padding: "16px 24px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 16, marginBottom: 20, flexWrap: "wrap",
+            boxShadow: "0 4px 16px rgba(255,193,7,0.15)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{
+                width: 42, height: 42, borderRadius: 12,
+                background: "#F59F00",
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                boxShadow: "0 4px 12px rgba(245,159,0,0.35)",
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              </div>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#7A4F00", marginBottom: 3 }}>
+                  멘토에게 신청하기 전에 자소서를 먼저 등록해두세요
+                </p>
+                <p style={{ fontSize: 12, color: "#9C6A00" }}>
+                  멘토가 자소서를 검토한 후 맞춤 면접 질문을 준비합니다
+                </p>
+              </div>
+            </div>
+            <Link to="/mentee/resume" style={{
+              padding: "10px 22px", background: "#F59F00", color: "#fff",
+              borderRadius: 10, fontSize: 13, fontWeight: 700,
+              textDecoration: "none", flexShrink: 0, whiteSpace: "nowrap",
               boxShadow: "0 4px 12px rgba(245,159,0,0.35)",
-            }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-                <polyline points="10 9 9 9 8 9"/>
-              </svg>
-            </div>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#7A4F00", marginBottom: 3 }}>
-                멘토에게 신청하기 전에 자소서를 먼저 등록해두세요
-              </p>
-              <p style={{ fontSize: 12, color: "#9C6A00" }}>
-                멘토가 자소서를 검토한 후 맞춤 면접 질문을 준비합니다
-              </p>
-            </div>
+              transition: "opacity 0.15s",
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >
+              자소서 등록하기 →
+            </Link>
           </div>
-          <Link to="/mentee/resume" style={{
-            padding: "10px 22px", background: "#F59F00", color: "#fff",
-            borderRadius: 10, fontSize: 13, fontWeight: 700,
-            textDecoration: "none", flexShrink: 0, whiteSpace: "nowrap",
-            boxShadow: "0 4px 12px rgba(245,159,0,0.35)",
-            transition: "opacity 0.15s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-          >
-            자소서 등록하기 →
-          </Link>
-        </div>
+        )}
 
         {/* ── 멘토 찾기 CTA ── */}
         <DashCard
@@ -694,10 +707,7 @@ export default function MenteeDashboard() {
               <div>
                 {history.map((h, i) => (
                   <HistoryItem key={i} {...h}
-                    onView={() => h.isFinal
-                      ? navigate("/report/final", { state: { sessionId: h.id, role: "mentee" } })
-                      : navigate(`/report/ai/${h.id}`, { state: { role: "mentee" } })
-                    }
+                    onView={() => navigate(`/report/final/${h.id}`, { state: { sessionId: h.id, role: "mentee" } })}
                   />
                 ))}
               </div>

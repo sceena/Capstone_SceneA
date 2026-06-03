@@ -70,3 +70,6 @@ ai:
     base-url: ${AI_SERVER_BASE_URL:https://crib-mutilator-uncle.ngrok-free.dev}
   question-generation:
     allow-missing-resume-fallback: false
+
+app:
+  demo-mode: ${IS_DEMO_MODE:true}

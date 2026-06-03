@@ -13,5 +13,7 @@ public interface AnalysisReportRepository extends JpaRepository<AnalysisReport, 
     Optional<AnalysisReport> findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(
             InterviewSession interviewSession, ReportStatus reportStatus);
 
+    Optional<AnalysisReport> findFirstByInterviewSessionOrderByCreateDateDesc(InterviewSession interviewSession);
+
     List<AnalysisReport> findAllByInterviewSessionIn(List<InterviewSession> sessions);
 }

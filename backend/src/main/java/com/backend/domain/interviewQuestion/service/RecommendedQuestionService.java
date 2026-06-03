@@ -20,12 +20,17 @@ import com.backend.domain.resume.entity.Resume;
 import com.backend.domain.resume.repository.ResumeRepository;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -44,12 +49,16 @@ public class RecommendedQuestionService {
     @Value("${ai.question-generation.allow-missing-resume-fallback:false}")
     private boolean allowMissingResumeFallback;
 
+    @Value("${app.demo-mode:${IS_DEMO_MODE:true}}")
+    private boolean demoMode;
+
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
     private final ResumeRepository resumeRepository;
     private final RecommendedQuestionBatchRepository batchRepository;
     private final RecommendedQuestionRepository recommendedQuestionRepository;
     private final AiQuestionGenerationClient aiQuestionGenerationClient;
+    private final ObjectMapper objectMapper;
 
     @Transactional(noRollbackFor = CustomException.class)
     public AiSessionQuestionGenerationResponse generateRecommendedQuestions(Long mentorId, Long sessionId) {
@@ -95,6 +104,14 @@ public class RecommendedQuestionService {
         String sessionType = resolveSessionType(candidates);
         batch.markPending(sessionType);
         recommendedQuestionRepository.deleteAllByBatch(batch);
+
+        if (demoMode) {
+            AiSessionQuestionGenerationResponse response = buildFallbackQuestionResponse(sessionType, candidates);
+            response = normalizeResponse(sessionType, candidates, response);
+            saveQuestions(batch, response);
+            batch.markCompleted(response.sessionType());
+            return filterResponse(response, scope, candidateId);
+        }
 
         AiSessionQuestionGenerationRequest request = new AiSessionQuestionGenerationRequest(
                 sessionType,
@@ -200,6 +217,91 @@ public class RecommendedQuestionService {
                 member.getName(),
                 content
         );
+    }
+
+    private AiSessionQuestionGenerationResponse buildFallbackQuestionResponse(
+            String sessionType,
+            List<AiQuestionCandidateRequest> candidates
+    ) {
+        JsonNode recommendedQuestions = loadFallbackRecommendedQuestions();
+        List<String> commonQuestions = readStringArray(recommendedQuestions.path("common_questions"));
+        List<AiPersonalQuestionResponse> personalQuestions = candidates.stream()
+                .map(candidate -> new AiPersonalQuestionResponse(
+                        candidate.candidateId(),
+                        findFallbackPersonalQuestions(recommendedQuestions.path("personal_questions"), candidate.name())
+                ))
+                .toList();
+
+        return new AiSessionQuestionGenerationResponse(sessionType, commonQuestions, personalQuestions);
+    }
+
+    private JsonNode loadFallbackRecommendedQuestions() {
+        Path path = resolveFallbackJsonPath();
+        try {
+            return objectMapper.readTree(Files.readString(path)).path("recommended_questions");
+        } catch (IOException e) {
+            log.warn("Failed to load fallback question data. path={}", path, e);
+            throw new CustomException(ErrorCode.AI_SERVER_ERROR);
+        }
+    }
+
+    private Path resolveFallbackJsonPath() {
+        List<Path> candidates = List.of(
+                Path.of("..", "ai-server", "examples", "fallback", "fallback.json"),
+                Path.of("ai-server", "examples", "fallback", "fallback.json"),
+                Path.of("examples", "fallback", "fallback.json")
+        );
+
+        return candidates.stream()
+                .map(Path::toAbsolutePath)
+                .map(Path::normalize)
+                .filter(Files::exists)
+                .findFirst()
+                .orElseThrow(() -> new CustomException(ErrorCode.AI_SERVER_ERROR));
+    }
+
+    private List<String> findFallbackPersonalQuestions(JsonNode personalQuestions, String candidateName) {
+        String candidateKey = resolveFallbackCandidateName(candidateName);
+        if (candidateKey == null || !personalQuestions.isArray()) {
+            return List.of();
+        }
+
+        for (JsonNode item : personalQuestions) {
+            if (candidateKey.equals(item.path("candidate_name").asText())) {
+                return readStringArray(item.path("questions"));
+            }
+        }
+        return List.of();
+    }
+
+    private String resolveFallbackCandidateName(String candidateName) {
+        if (candidateName == null) {
+            return null;
+        }
+        if (candidateName.contains("지아")) {
+            return "최지아";
+        }
+        if (candidateName.contains("윤진")) {
+            return "정윤진";
+        }
+        if (candidateName.contains("동현")) {
+            return "강동현";
+        }
+        return null;
+    }
+
+    private List<String> readStringArray(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            if (item.isTextual() && !item.asText().isBlank()) {
+                values.add(item.asText());
+            }
+        }
+        return values;
     }
 
     private String buildFallbackResumeContent(InterviewSession session, Member member) {

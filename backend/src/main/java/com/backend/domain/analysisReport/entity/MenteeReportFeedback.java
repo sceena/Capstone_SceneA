@@ -40,6 +40,9 @@ public class MenteeReportFeedback extends BaseEntity {
 
     private Float mentorScore;
 
+    @Column(columnDefinition = "TEXT")
+    private String mentorQuestionFeedbacksJson;
+
     @Builder
     public MenteeReportFeedback(InterviewSession interviewSession, Member mentee) {
         this.interviewSession = interviewSession;
@@ -47,7 +50,12 @@ public class MenteeReportFeedback extends BaseEntity {
     }
 
     public void updateFinal(String mentorFeedback, Float mentorScore) {
+        updateFinal(mentorFeedback, mentorScore, null);
+    }
+
+    public void updateFinal(String mentorFeedback, Float mentorScore, String mentorQuestionFeedbacksJson) {
         this.mentorFeedback = mentorFeedback;
         this.mentorScore = mentorScore;
+        this.mentorQuestionFeedbacksJson = mentorQuestionFeedbacksJson;
     }
 }

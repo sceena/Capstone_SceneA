@@ -10,6 +10,7 @@ import com.backend.domain.answerEvaluation.repository.AnswerEvaluationRepository
 import com.backend.domain.interviewAnswer.entity.InterviewAnswer;
 import com.backend.domain.interviewAnswer.repository.InterviewAnswerRepository;
 import com.backend.domain.interviewQuestion.entity.InterviewQuestion;
+import com.backend.domain.interviewQuestion.repository.InterviewQuestionRepository;
 import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
 import com.backend.global.exception.CustomException;
@@ -35,6 +36,7 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
     private final AnswerEvaluationRepository evaluationRepository;
     private final InterviewSessionRepository sessionRepository;
     private final InterviewAnswerRepository answerRepository;
+    private final InterviewQuestionRepository questionRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -110,9 +112,10 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
         validateMentorAccess(mentorId, session);
 
         for (MentorFeedbackRequest.MentorAnswerEvaluationPayload payload : payloads) {
-            InterviewAnswer answer = answerRepository.findById(payload.answerId())
-                    .orElseThrow(() -> new CustomException(ErrorCode.ANSWER_NOT_FOUND));
-            validateAnswerInSession(answer, session);
+            InterviewAnswer answer = resolveAnswerForPayload(session, payload);
+            if (answer == null) {
+                continue;
+            }
             saveMentorEvaluation(answer, payload.reasoning(), payload.score(), payload.strengths(), payload.improvements());
         }
     }
@@ -184,6 +187,78 @@ public class AnswerEvaluationService implements EvaluationJsonMapper {
         );
         answer.updateMentorScore(normalizedScore);
         return evaluationRepository.save(evaluation);
+    }
+
+    private InterviewAnswer resolveAnswerForPayload(
+            InterviewSession session,
+            MentorFeedbackRequest.MentorAnswerEvaluationPayload payload
+    ) {
+        if (payload.answerId() != null) {
+            InterviewAnswer answer = answerRepository.findById(payload.answerId()).orElse(null);
+            if (answer != null && answer.getInterviewQuestion().getInterviewSession().getId().equals(session.getId())) {
+                return answer;
+            }
+        }
+
+        List<InterviewQuestion> sessionQuestions = questionRepository.findAllByInterviewSessionOrderByOrderIndex(session);
+        InterviewQuestion question = null;
+        if (payload.questionId() != null) {
+            question = questionRepository.findById(payload.questionId())
+                    .filter(candidate -> candidate.getInterviewSession().getId().equals(session.getId()))
+                    .orElse(null);
+        }
+        if (question == null && payload.questionText() != null && !payload.questionText().isBlank()) {
+            String requestedQuestion = normalizeText(payload.questionText());
+            question = sessionQuestions.stream()
+                    .filter(candidate -> normalizeText(candidate.getContent()).equals(requestedQuestion)
+                            || normalizeText(candidate.getContent()).contains(requestedQuestion)
+                            || requestedQuestion.contains(normalizeText(candidate.getContent())))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (question != null) {
+            InterviewAnswer answer = answerRepository.findAllByInterviewQuestion(question).stream()
+                    .filter(candidate -> matchesPayloadMentee(candidate, payload))
+                    .findFirst()
+                    .orElse(null);
+            if (answer != null) {
+                return answer;
+            }
+        }
+
+        if (payload.answerText() != null && !payload.answerText().isBlank()) {
+            String requestedAnswer = normalizeText(payload.answerText());
+            return answerRepository.findAllByInterviewQuestionIn(sessionQuestions).stream()
+                    .filter(candidate -> matchesPayloadMentee(candidate, payload))
+                    .filter(candidate -> {
+                        String candidateAnswer = normalizeText(candidate.getSttText());
+                        return !candidateAnswer.isBlank()
+                                && (candidateAnswer.equals(requestedAnswer)
+                                || candidateAnswer.contains(requestedAnswer)
+                                || requestedAnswer.contains(candidateAnswer));
+                    })
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        return null;
+    }
+
+    private boolean matchesPayloadMentee(
+            InterviewAnswer answer,
+            MentorFeedbackRequest.MentorAnswerEvaluationPayload payload
+    ) {
+        return (payload.menteeId() == null || answer.getMember().getId().equals(payload.menteeId()))
+                && (payload.menteeName() == null || payload.menteeName().isBlank()
+                || payload.menteeName().equals(answer.getMember().getName()));
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value
+                .replaceAll("^Q\\d+\\s*[·.-]\\s*", "")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     private void validateMentorAccess(Long mentorId, InterviewSession session) {

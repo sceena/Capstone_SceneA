@@ -65,10 +65,159 @@ function createMockReport(sessionId) {
   };
 }
 
-async function loadReport(sessionId) {
+function getCurrentUserName() {
+  try {
+    const user = JSON.parse(localStorage.getItem("scena_auth") || "null");
+    return user?.name || user?.nickname || user?.username || "";
+  } catch {
+    return "";
+  }
+}
+
+function getDemoCandidateKey(name = "") {
+  if (name.includes("지아")) return "최지아";
+  if (name.includes("윤진")) return "정윤진";
+  if (name.includes("동현")) return "강동현";
+  return null;
+}
+
+function normalizeDemoQuestionReport(report, candidateName, index) {
+  return {
+    ...report,
+    question_id: report.question_id ?? index + 1,
+    answer_id: report.answer_id ?? null,
+    mentee_id: report.mentee_id ?? null,
+    mentee_name: report.mentee_name || candidateName,
+    ai_model_name: report.ai_model_name || "demo-fallback",
+    prompt_version: report.prompt_version || "demo_v1",
+  };
+}
+
+function buildDemoTopSummary(questionReports = []) {
+  if (!questionReports.length) return null;
+  const sorted = [...questionReports].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const toHighlight = (report, fallbackReason) => ({
+    question_id: report.question_id,
+    question: report.question,
+    reason: report.reasoning || fallbackReason,
+    metrics_summary: {
+      speaking_speed: "적정",
+      silence: "침묵 없음",
+      sentence_clarity: "명확",
+      star_structure: "S/T/A/R 분석 완료",
+    },
+  });
+
+  return {
+    best_question: toHighlight(sorted[0], "가장 강점이 잘 드러난 답변입니다."),
+    worst_question: toHighlight(sorted[sorted.length - 1], "추가 보완이 필요한 답변입니다."),
+  };
+}
+
+function tagDemoItems(candidateName, items = []) {
+  return items.map(item => `[${candidateName}] ${item}`);
+}
+
+function stripDemoItemTags(items = []) {
+  return items.map(item => String(item).replace(/^\[[^:\]]+\]\s+(?=\[[^\]]+:)/, ""));
+}
+
+function buildSingleDemoReport(sessionId, candidateReport) {
+  const candidateName = candidateReport?.candidate_name || "면접 참여자";
+  const aiReport = candidateReport?.ai_report || {};
+  const questionReports = (aiReport.question_reports || []).map((item, index) =>
+    normalizeDemoQuestionReport(item, candidateName, index)
+  );
+
+  return {
+    id: Number(sessionId) || 1,
+    session_id: Number(sessionId) || 1,
+    report_status: "first",
+    total_score: aiReport.overall_score ?? 0,
+    alignment_score: null,
+    best_moment: aiReport.top_summary?.best_question?.reason || "",
+    worst_moment: aiReport.top_summary?.worst_question?.reason || "",
+    ai_summary: aiReport.fit_gap?.job_fit_summary || "",
+    raw_ai_response_json: "",
+    mentor_feedback: null,
+    mentor_score: null,
+    __mock: true,
+    ai_report: {
+      session_id: Number(sessionId) || aiReport.session_id || 1,
+      overall_score: aiReport.overall_score ?? 0,
+      top_summary: aiReport.top_summary || buildDemoTopSummary(questionReports),
+      fit_gap: {
+        matched_requirements: stripDemoItemTags(aiReport.fit_gap?.matched_requirements || []),
+        missing_requirements: stripDemoItemTags(aiReport.fit_gap?.missing_requirements || []),
+        recommendations: stripDemoItemTags(aiReport.fit_gap?.recommendations || []),
+      },
+      question_reports: questionReports,
+    },
+  };
+}
+
+function buildGroupDemoReport(sessionId, reports = []) {
+  const questionReports = reports.flatMap(candidateReport => {
+    const candidateName = candidateReport?.candidate_name || "면접 참여자";
+    return (candidateReport?.ai_report?.question_reports || []).map((item, index) =>
+      normalizeDemoQuestionReport(item, candidateName, index)
+    );
+  });
+  const scores = reports.map(item => item?.ai_report?.overall_score).filter(score => typeof score === "number");
+
+  return {
+    id: Number(sessionId) || 1,
+    session_id: Number(sessionId) || 1,
+    report_status: "first",
+    total_score: scores.length ? Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(1)) : 0,
+    alignment_score: null,
+    best_moment: "",
+    worst_moment: "",
+    ai_summary: "",
+    raw_ai_response_json: "",
+    mentor_feedback: null,
+    mentor_score: null,
+    __mock: true,
+    ai_report: {
+      session_id: Number(sessionId) || 1,
+      overall_score: scores.length ? Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(1)) : 0,
+      top_summary: buildDemoTopSummary(questionReports),
+      fit_gap: {
+        matched_requirements: reports.flatMap(item => tagDemoItems(item.candidate_name, item.ai_report?.fit_gap?.matched_requirements || [])),
+        missing_requirements: reports.flatMap(item => tagDemoItems(item.candidate_name, item.ai_report?.fit_gap?.missing_requirements || [])),
+        recommendations: reports.flatMap(item => tagDemoItems(item.candidate_name, item.ai_report?.fit_gap?.recommendations || [])),
+      },
+      question_reports: questionReports,
+    },
+  };
+}
+
+export async function createDemoFallbackReport(sessionId, role = "mentee") {
+  const response = await fetch("/demo-fallback-report.json", { cache: "no-store" });
+  if (!response.ok) return createMockReport(sessionId);
+
+  const data = await response.json();
+  const reports = data?.reports || [];
+  if (String(role).toLowerCase().includes("mentor")) {
+    return buildGroupDemoReport(sessionId, reports);
+  }
+
+  const candidateKey = getDemoCandidateKey(getCurrentUserName());
+  const candidateReport = reports.find(item => item.candidate_name === candidateKey) || reports[0];
+  return buildSingleDemoReport(sessionId, candidateReport);
+}
+
+async function loadReport(sessionId, forceMock = false, role = "mentee") {
+  if (forceMock) {
+    return createDemoFallbackReport(sessionId, role);
+  }
+
   try {
     return await requestJson(`/api/sessions/${sessionId}/report`);
   } catch (error) {
+    if (error.status === 404) {
+      return createDemoFallbackReport(sessionId, role);
+    }
     if (USE_MOCK_REPORT) {
       return createMockReport(sessionId);
     }
@@ -208,7 +357,7 @@ function makeReportCardKey(report, index) {
 function groupQuestionReportsByMentee(questionReports = [], sessionId) {
   const groups = new Map();
   questionReports.forEach((report, index) => {
-    const menteeId = getReportMenteeId(report) ?? `session-${sessionId}`;
+    const menteeId = getReportMenteeId(report) ?? report?.mentee_name ?? report?.menteeName ?? `session-${sessionId}`;
     const key = String(menteeId);
     if (!groups.has(key)) {
       groups.set(key, {
@@ -508,12 +657,40 @@ function CoreQuestionCard({ type, question, report, questionNo }) {
   );
 }
 
-function parseFitGapItem(item) {
-  const [requirementPart, detailPart] = item.split(" / ");
-  const requirement = requirementPart?.replace(/^요구사항:\s*/, "") || item;
-  const detail = detailPart?.replace(/^근거\(([^)]+)\):\s*/, "$1 · ")?.replace(/^부족 근거:\s*/, "") || "";
+function normalizeReportDisplayText(value) {
+  return String(value || "")
+    .replace(/면접\(Q[0-9, ]+\)에서/g, "답변에서")
+    .replace(/면접 중/g, "답변 과정에서")
+    .replace(/면접 과정에서/g, "답변 과정에서");
+}
 
-  return { requirement, detail };
+function parseFitGapItem(item) {
+  const text = normalizeReportDisplayText(item).replace(/^\[[^:\]]+\]\s+(?=\[[^\]]+:)/, "").trim();
+  const bracketMatch = text.match(/^\[([^\]]+)\]\s*-\s*\[([^:]+):\s*([\s\S]+)\]$/);
+  if (bracketMatch) {
+    return {
+      requirement: normalizeReportDisplayText(bracketMatch[1]).replace(/^[^:]+:\s*/, "").trim(),
+      detail: normalizeReportDisplayText(bracketMatch[3]).replace(/\]$/, "").trim(),
+    };
+  }
+
+  const [requirementPart, detailPart] = text.split(" / ");
+  const requirement = (requirementPart || text)
+    .replace(/^\[[^:\]]+\]\s+(?=\[[^\]]+:)/, "")
+    .replace(/^\[[^\]]+\]\s*/, "")
+    .replace(/^[^:]+:\s*/, "")
+    .trim();
+  const detail = detailPart
+    ?.replace(/^[^(]+\(([^)]+)\):\s*/, "$1 - ")
+    ?.replace(/^[^:]+:\s*/, "")
+    ?.replace(/\]$/, "")
+    ?.trim()
+    || "";
+
+  return {
+    requirement: normalizeReportDisplayText(requirement),
+    detail: normalizeReportDisplayText(detail),
+  };
 }
 
 function FitGapList({ title, items = [], tone }) {
@@ -729,140 +906,156 @@ function MentorReport({ sessionId, report }) {
   const questionMetaMap = useQuestionMetaMap(sessionId);
   const menteeNameMap = buildMenteeNameMap(questionReports);
   const menteeGroups = groupQuestionReportsByMentee(questionReports, sessionId);
-  const isGroupReport = menteeGroups.length > 1;
-  const overallScore = toFivePointScore(aiReport?.overall_score ?? report?.total_score ?? 0);
-  const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#E24B4A";
+  const fitGap = aiReport?.fit_gap || {};
+  const overallScore = aiReport?.overall_score ?? report?.total_score ?? "-";
+
+  const byMenteeName = (items = [], menteeName) => {
+    const prefix = `[${menteeName}] `;
+    const filtered = items.filter(item => String(item).startsWith(prefix));
+    return filtered.length ? filtered : items;
+  };
 
   return (
-    <div id="report-content" style={{ background: BG, minHeight: "100vh", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", paddingBottom: 80 }}>
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
-
-        {/* 세션 헤더 */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {["멘토 리포트", `세션 #${report?.session_id ?? sessionId}`].map((t, i) => (
-            <span key={i} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 99, background: i === 0 ? "rgba(12,166,120,0.1)" : "rgba(13,34,64,0.06)", color: i === 0 ? GREEN : NAVY, fontWeight: 700 }}>{t}</span>
+    <div id="report-content" style={{ background: BG, minHeight: "100vh", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif", paddingBottom: 96, textAlign: "left" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "36px 24px" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+          {["멘토용 AI 리포트", `세션 #${report?.session_id || sessionId}`, `${menteeGroups.length}명`].map((t, i) => (
+            <span key={i} style={{
+              fontSize: 11, padding: "3px 10px", borderRadius: 6,
+              background: "transparent",
+              border: `1px solid ${i === 0 ? "rgba(12,166,120,0.4)" : "rgba(13,34,64,0.15)"}`,
+              color: i === 0 ? GREEN : "#868E96",
+              fontWeight: 700, letterSpacing: "0.02em",
+            }}>{t}</span>
           ))}
         </div>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: NAVY, margin: "0 0 8px", letterSpacing: "-0.02em" }}>멘티별 AI 면접 분석 리포트</h1>
+        <p style={{ color: "#868E96", fontSize: 14, margin: "0 0 36px" }}>
+          그룹 면접 결과를 멘티별로 나누어 확인합니다. 종합 평균 점수 <strong style={{ color: NAVY }}>{overallScore} / 5</strong>
+        </p>
 
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: NAVY, margin: "0 0 6px", letterSpacing: "-0.02em" }}>멘티 AI 면접 분석 리포트</h1>
-        <p style={{ color: "#868E96", fontSize: 14, margin: "0 0 28px" }}>멘티의 면접 결과를 확인하고 멘토링 세션을 준비하세요</p>
+        <SectionTitle
+          eyebrow="MENTEE REPORTS"
+          title="멘티별 분석 결과"
+          description="각 멘티마다 BEST/WORST 문항, 채용 요구사항 대비 Fit-Gap, 전체 답변 분석을 분리해서 보여줍니다."
+        />
 
-        {/* 종합 점수 */}
-        <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 24, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: 0 }}>AI 종합 점수</p>
-            <span style={{ fontSize: 30, fontWeight: 800, color: NAVY }}>{overallScore}<span style={{ fontSize: 13, color: "#868E96", fontWeight: 400 }}> / 5</span></span>
-          </div>
-          <div style={{ background: BG, borderRadius: 99, height: 8 }}>
-            <div style={{ width: `${Math.min(overallScore * 20, 100)}%`, height: 8, borderRadius: 99, background: PRIMARY_GRAD, transition: "width 1s ease" }} />
-          </div>
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {menteeGroups.map((group) => {
+            const { best, worst } = pickBestWorstReports(group.reports);
+            const matchedItems = byMenteeName(fitGap.matched_requirements || [], group.menteeName);
+            const missingItems = byMenteeName(fitGap.missing_requirements || [], group.menteeName);
+            const recommendationItems = byMenteeName(fitGap.recommendations || [], group.menteeName);
 
-        {/* Best / Worst 문항 */}
-        {questionReports.length > 0 && (
-          <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 22, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 6px" }}>{isGroupReport ? "멘티별 BEST / WORST 문항" : "BEST / WORST 문항"}</p>
-            <p style={{ fontSize: 12, color: "#868E96", lineHeight: 1.6, margin: "0 0 16px" }}>그룹 면접에서는 답변자별 점수 기준으로 핵심 문항을 분리해 보여줍니다.</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {menteeGroups.map((group) => {
-                const { best, worst } = pickBestWorstReports(group.reports);
-                return (
-                  <div key={group.menteeId} style={{ background: BG, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 16, padding: 16 }}>
-                    {isGroupReport && <p style={{ fontSize: 13, fontWeight: 900, color: NAVY, margin: "0 0 12px" }}>{group.menteeName}</p>}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                      {[
-                        { type: "best", report: best, accent: GREEN, accentBg: "rgba(12,166,120,0.06)", label: "BEST 문항" },
-                        { type: "worst", report: worst, accent: "#C0392B", accentBg: "rgba(192,57,43,0.05)", label: "WORST 문항" },
-                      ].map(({ type, report: item, accent, accentBg, label }) => (
-                        item ? (
-                          <div key={type} style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderTop: `3px solid ${accent}`, borderRadius: 14, padding: 14 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-                              <p style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>{label}</p>
-                              <span style={{ fontSize: 11, fontWeight: 800, color: accent }}>AI {toFivePointScore(item.score)}</span>
-                            </div>
-                            <p style={{ fontSize: 13, fontWeight: 800, color: NAVY, margin: "0 0 8px", lineHeight: 1.55 }}>{item.question}</p>
-                            <p style={{ fontSize: 12, color: "#495057", lineHeight: 1.65, margin: 0, background: accentBg, borderRadius: 10, padding: "9px 11px" }}>
-                              {item.reasoning || (type === "best" ? "가장 높은 평가를 받은 답변입니다." : "보완이 가장 필요한 답변입니다.")}
-                            </p>
-                          </div>
-                        ) : null
-                      ))}
-                    </div>
+            return (
+              <section key={group.menteeId} style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 24, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 20 }}>
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 800, color: GREEN, letterSpacing: "0.08em", margin: "0 0 5px" }}>MENTEE</p>
+                    <h2 style={{ fontSize: 22, fontWeight: 900, color: NAVY, margin: 0 }}>{group.menteeName}</h2>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                  <span style={{ fontSize: 12, color: NAVY, background: BG, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 99, padding: "6px 12px", fontWeight: 800 }}>
+                    답변 {group.reports.length}개
+                  </span>
+                </div>
 
-        {/* Q&A 답변 목록 */}
-        {questionReports.length > 0 && (
-          <div style={{ background: CARD, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 20, padding: 22, marginBottom: 20, boxShadow: "0 2px 12px rgba(13,34,64,0.05)" }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, margin: "0 0 18px" }}>{isGroupReport ? "멘티별 Q&A 답변" : "전체 Q&A 답변"}</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {menteeGroups.map((group) => {
-                const { worst } = pickBestWorstReports(group.reports);
-                const worstKey = worst ? makeReportCardKey(worst, worst.__reportIndex ?? 0) : null;
-                return (
-                  <div key={group.menteeId} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {isGroupReport && (
-                      <p style={{ fontSize: 13, fontWeight: 900, color: NAVY, margin: 0, paddingLeft: 2 }}>{group.menteeName}</p>
-                    )}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 24 }}>
+                  <CoreQuestionCard
+                    type="best"
+                    question={best ? { question_id: best.question_id, question: best.question, reason: best.reasoning } : null}
+                    report={best}
+                    questionNo={best ? `Q${group.reports.findIndex(item => makeReportCardKey(item, item.__reportIndex) === makeReportCardKey(best, best.__reportIndex)) + 1}` : "BEST"}
+                  />
+                  <CoreQuestionCard
+                    type="worst"
+                    question={worst ? { question_id: worst.question_id, question: worst.question, reason: worst.reasoning } : null}
+                    report={worst}
+                    questionNo={worst ? `Q${group.reports.findIndex(item => makeReportCardKey(item, item.__reportIndex) === makeReportCardKey(worst, worst.__reportIndex)) + 1}` : "WORST"}
+                  />
+                </div>
+
+                <div style={{ background: BG, border: "1px solid rgba(13,34,64,0.08)", borderRadius: 18, padding: 18, marginBottom: 24 }}>
+                  <p style={{ fontSize: 14, fontWeight: 900, color: NAVY, margin: "0 0 14px" }}>채용 요구사항 대비 Fit-Gap</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+                    <FitGapList title="충족한 요구사항" items={matchedItems} tone="matched" />
+                    <FitGapList title="부족한 요구사항" items={missingItems} tone="missing" />
+                  </div>
+                  <RecommendationList items={recommendationItems} />
+                </div>
+
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 900, color: NAVY, margin: "0 0 14px" }}>답변별 분석</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {group.reports.map((qr, i) => {
-                      const sc = toFivePointScore(qr.score);
-                      const cardKey = makeReportCardKey(qr, qr.__reportIndex ?? i);
-                      const isBad = String(cardKey) === String(worstKey);
                       const questionKind = getQuestionKindLabel(qr, questionMetaMap, menteeNameMap);
-                      const answererLabel = getAnswererLabel(qr);
+                      const isWorst = worst && makeReportCardKey(qr, qr.__reportIndex ?? i) === makeReportCardKey(worst, worst.__reportIndex ?? 0);
                       return (
-                        <div key={cardKey} style={{ background: BG, borderRadius: 14, padding: 16, borderLeft: `3px solid ${isBad ? "#C0392B" : GREEN}` }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+                        <div key={makeReportCardKey(qr, qr.__reportIndex ?? i)} style={{ background: BG, borderRadius: 14, padding: 16, borderLeft: `3px solid ${isWorst ? "#C0392B" : GREEN}` }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
                             <div>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: NAVY, lineHeight: 1.5, margin: "0 0 7px" }}>Q{i + 1} · {qr.question}</p>
+                              <p style={{ fontSize: 14, fontWeight: 800, color: NAVY, lineHeight: 1.55, margin: "0 0 7px" }}>Q{i + 1} · {qr.question}</p>
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 11, color: NAVY, background: "rgba(13,34,64,0.08)", padding: "3px 10px", borderRadius: 99, fontWeight: 800 }}>{questionKind}</span>
-                                {answererLabel && <span style={{ fontSize: 11, color: "#495057", background: CARD, padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(13,34,64,0.08)" }}>{answererLabel}</span>}
+                                <span style={{ fontSize: 11, color: NAVY, background: CARD, padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(13,34,64,0.08)", fontWeight: 800 }}>{questionKind}</span>
+                                {isWorst && <span style={{ fontSize: 11, color: "#C0392B", background: "rgba(192,57,43,0.06)", padding: "3px 10px", borderRadius: 99, fontWeight: 800 }}>보완 필요</span>}
                               </div>
                             </div>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: NAVY, background: "rgba(13,34,64,0.08)", padding: "3px 10px", borderRadius: 99, flexShrink: 0 }}>AI {sc}</span>
+                            <div style={{ flex: "0 0 auto", textAlign: "right" }}>
+                              <Stars score={scoreToStars(qr.score)} />
+                              <p style={{ fontSize: 12, color: "#868E96", fontWeight: 700, margin: "4px 0 0" }}>AI {qr.score}</p>
+                            </div>
                           </div>
-                          <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.75, background: CARD, borderRadius: 10, padding: "10px 12px", margin: 0 }}>{qr.answer}</p>
-                          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                          <div style={{ background: CARD, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                            <p style={{ fontSize: 10, fontWeight: 800, color: NAVY, opacity: 0.45, letterSpacing: "0.08em", margin: "0 0 6px" }}>답변</p>
+                            <p style={{ color: "#495057", fontSize: 14, lineHeight: 1.75, margin: 0 }}>{qr.answer}</p>
+                          </div>
+                          {qr.reasoning && (
+                            <div style={{ background: "rgba(13,34,64,0.04)", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                              <p style={{ fontSize: 10, fontWeight: 800, color: NAVY, opacity: 0.5, letterSpacing: "0.08em", margin: "0 0 6px" }}>평가 근거</p>
+                              <p style={{ fontSize: 13, color: "#495057", lineHeight: 1.7, margin: 0 }}>{qr.reasoning}</p>
+                            </div>
+                          )}
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, marginBottom: 12 }}>
+                            <div style={{ background: "rgba(12,166,120,0.06)", borderRadius: 14, padding: 14 }}>
+                              <p style={{ fontSize: 12, fontWeight: 800, color: GREEN, margin: "0 0 8px" }}>강점</p>
+                              {(qr.strengths || []).length > 0
+                                ? qr.strengths.map((item, idx) => <p key={idx} style={{ fontSize: 13, color: NAVY, opacity: 0.75, margin: "0 0 5px", lineHeight: 1.65 }}>· {item}</p>)
+                                : <p style={{ fontSize: 13, color: NAVY, opacity: 0.55, margin: 0, lineHeight: 1.65 }}>분석된 강점이 없습니다.</p>}
+                            </div>
+                            <div style={{ background: "rgba(192,57,43,0.05)", borderRadius: 14, padding: 14 }}>
+                              <p style={{ fontSize: 12, fontWeight: 800, color: "#C0392B", margin: "0 0 8px" }}>개선점</p>
+                              {(qr.improvements || []).length > 0
+                                ? qr.improvements.map((item, idx) => <p key={idx} style={{ fontSize: 13, color: NAVY, opacity: 0.75, margin: "0 0 5px", lineHeight: 1.65 }}>· {item}</p>)
+                                : <p style={{ fontSize: 13, color: NAVY, opacity: 0.55, margin: 0, lineHeight: 1.65 }}>분석된 개선점이 없습니다.</p>}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
                             <AudioPlayer sessionId={sessionId} questionId={qr.question_id} answerId={qr.answer_id} />
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                </div>
+              </section>
+            );
+          })}
+        </div>
 
-        {/* 멘토링 세션 입장 */}
-        <div style={{ background: PRIMARY_GRAD, borderRadius: 16, padding: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, boxShadow: "0 4px 20px rgba(13,34,64,0.2)" }}>
-          <div>
-            <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, margin: "0 0 6px" }}>AI 분석이 완료되었습니다</p>
-            <p style={{ color: "white", fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>멘티와 함께 리포트를 리뷰하는 멘토링 세션을 시작해보세요</p>
-          </div>
+        <div data-no-print style={{ marginTop: 28, display: "flex", justifyContent: "flex-end" }}>
           <button
             onClick={async () => {
               try { await updateSessionStatus(sessionId, "in_progress"); } catch {}
               navigate(`/mentoring/mentor/${sessionId}`);
             }}
-            style={{ flex: "0 0 auto", padding: "14px 32px", borderRadius: 12, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.2s", whiteSpace: "nowrap" }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-            onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            style={{ padding: "14px 26px", borderRadius: 12, border: "none", background: SUCCESS_GRAD, color: "white", fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 24px rgba(12,166,120,0.24)", whiteSpace: "nowrap" }}
           >
-            멘토링 세션 시작하기 →
+            멘토링 세션 시작하기
           </button>
         </div>
       </div>
     </div>
   );
 }
-
 function exportWord(role) {
   window.print();
 }
@@ -876,6 +1069,7 @@ export default function AIReportPage() {
   const [report, setReport] = useState(null);
   const [error, setError] = useState("");
   const role = location.state?.role || "mentee";
+  const forceMockReport = location.state?.forceMockReport === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -884,7 +1078,7 @@ export default function AIReportPage() {
       setError("");
       setPhase("loading");
       try {
-        const data = await loadReport(sessionId);
+        const data = await loadReport(sessionId, forceMockReport, role);
         if (cancelled) return;
         if (!data?.ai_report) {
           throw new Error("AI 리포트 데이터가 없습니다.");
@@ -906,7 +1100,7 @@ export default function AIReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, navigate, role]);
+  }, [sessionId, navigate, role, forceMockReport]);
 
   useEffect(() => {
     if (role !== "mentee" || !sessionId || !/^\d+$/.test(String(sessionId))) return;

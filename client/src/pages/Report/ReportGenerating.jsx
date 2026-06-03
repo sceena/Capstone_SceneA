@@ -329,11 +329,30 @@ export default function ReportGeneratingPage() {
   const [phase, setPhase] = useState("waiting_stt");
   const [error, setError] = useState("");
   const generatingRef = useRef(false);
+  const startedAtRef = useRef(Date.now());
+  const navigationTimerRef = useRef(null);
+  const navigatingRef = useRef(false);
   const role = String(location.state?.role || getAuthUser()?.role || "mentee").toLowerCase();
   const isMentorRole = role.includes("mentor");
 
-  const goToReport = useCallback(() => {
-    navigate(`/report/ai/${sessionId}`, { state: { role } });
+  const goToReport = useCallback((options = {}) => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+
+    const elapsed = Date.now() - startedAtRef.current;
+    const delay = Math.max(0, 30000 - elapsed);
+    if (navigationTimerRef.current) {
+      window.clearTimeout(navigationTimerRef.current);
+    }
+
+    navigationTimerRef.current = window.setTimeout(() => {
+      navigate(`/report/ai/${sessionId}`, {
+        state: {
+          role,
+          forceMockReport: options.forceMockReport === true,
+        },
+      });
+    }, delay);
   }, [navigate, role, sessionId]);
 
   // AI 분석 단계 사이클
@@ -349,6 +368,12 @@ export default function ReportGeneratingPage() {
     if (!sessionId || !/^\d+$/.test(String(sessionId))) return;
 
     let cancelled = false;
+    const fallbackTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setPhase("generating_report");
+        goToReport({ forceMockReport: true });
+      }
+    }, 30000);
 
     const poll = async () => {
       if (generatingRef.current || cancelled) return;
@@ -391,6 +416,10 @@ export default function ReportGeneratingPage() {
     return () => {
       cancelled = true;
       clearInterval(interval);
+      window.clearTimeout(fallbackTimer);
+      if (navigationTimerRef.current) {
+        window.clearTimeout(navigationTimerRef.current);
+      }
     };
   }, [sessionId, goToReport]);
 

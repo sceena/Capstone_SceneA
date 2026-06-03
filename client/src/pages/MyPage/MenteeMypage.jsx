@@ -102,7 +102,7 @@ function RadarChart({ data, size = 210 }) {
 
 /* ── 라인 차트 ── */
 function LineChart({ sessions }) {
-  const W = 480, H = 110, pad = { l: 32, r: 16, t: 12, b: 28 };
+  const W = 800, H = 160, pad = { l: 36, r: 20, t: 16, b: 32 };
   const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
   const n = sessions.length;
   if (n < 2) return (
@@ -137,18 +137,32 @@ function LineChart({ sessions }) {
 }
 
 /* ── 도넛 차트 ── */
-function DonutChart({ matched, total, size = 120 }) {
-  const r = 44, cx = size / 2, cy = size / 2;
+function DonutChart({ matched, total, size = 140 }) {
+  const r = Math.round(size * 0.38);
+  const cx = size / 2, cy = size / 2;
+  const strokeW = Math.round(size * 0.12);
   const circ = 2 * Math.PI * r;
   const pct = total > 0 ? matched / total : 0;
+  const filled = pct * circ;
+  const gap = circ - filled;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.dangerLight} strokeWidth="12" />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.primary} strokeWidth="12"
-        strokeDasharray={`${pct * circ} ${circ}`} strokeDashoffset={circ * 0.25}
-        strokeLinecap="round" style={{ transition: "stroke-dasharray 1s ease" }} />
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="18" fontWeight="800" fill={C.primary} fontFamily="'Noto Sans KR',sans-serif">{Math.round(pct * 100)}%</text>
-      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="9" fill={C.textMuted} fontFamily="'Noto Sans KR',sans-serif">충족률</text>
+      {/* 배경 링 (미충족) */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.dangerLight} strokeWidth={strokeW} />
+      {/* 채워진 링 (충족) — rotate(-90)으로 12시 방향 시작 */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.primary} strokeWidth={strokeW}
+        strokeDasharray={`${filled} ${gap}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`}
+        style={{ transition: "stroke-dasharray 0.8s ease" }} />
+      <text x={cx} y={cy + 6} textAnchor="middle" dominantBaseline="middle"
+        fontSize={Math.round(size * 0.16)} fontWeight="800" fill={C.primary}
+        fontFamily="'Noto Sans KR',sans-serif">
+        {Math.round(pct * 100)}%
+      </text>
+      <text x={cx} y={cy + Math.round(size * 0.24)} textAnchor="middle"
+        fontSize={Math.round(size * 0.08)} fill={C.textMuted}
+        fontFamily="'Noto Sans KR',sans-serif">충족률</text>
     </svg>
   );
 }
@@ -606,7 +620,14 @@ export default function MenteeMyPage() {
   });
 
   const displayName    = profile?.name ?? userName;
-  const sessionTrend   = [...historyAll].reverse().map(h => ({ ai: h.ai, date: h.date }));
+  // 멘토 최종 평점이 있는(final) 세션만, 오래된 순으로
+  const mentorScoreTrend = apiSessions
+    .filter(s => (s.reportStatus ?? s.report_status) === "final" && s.aiScore != null)
+    .reverse()
+    .map(s => ({
+      ai:   s.aiScore,
+      date: (s.scheduledAt ?? s.scheduled_at ?? "").slice(0, 10).replace(/-/g, "."),
+    }));
   const aiReport       = latestReport?.ai_report;
   const qReports       = aiReport?.question_reports || [];
   const fitGapRaw      = aiReport?.fit_gap;
@@ -737,7 +758,7 @@ export default function MenteeMyPage() {
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 0 }}>
                 {[
                   { l: "총 세션", v: `${historyAll.length}회` },
-                  { l: "최근 AI 점수", v: latestScore !== "-" ? `${latestScore}점` : "-" },
+                  { l: "멘토 평점", v: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-" },
                   { l: "최근 WPM", v: latestWpm !== "-" ? `${latestWpm}` : "-" },
                   { l: "Fit 충족률", v: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-" },
                   { l: "신청 이력", v: `${reservations.length}건` },
@@ -830,7 +851,7 @@ export default function MenteeMyPage() {
                 <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
                   {[
                     { label: "총 면접 횟수", value: `${historyAll.length}회`, sub: historyAll.length > 0 ? "면접 완료" : "면접 미완료", icon: "📋" },
-                    { label: "AI 점수 성장", value: latestScore !== "-" ? `${latestScore}점` : "-", sub: (latestScore !== "-" && firstScore !== "-" && latestScore !== firstScore) ? `${firstScore} → ${latestScore}` : "첫 세션 기준", accent: C.success },
+                    { label: "멘토 평점", value: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${mentorScoreTrend[0].ai} → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}` : "최종 리포트 기준", accent: C.success },
                     { label: "최근 WPM", value: latestWpm !== "-" ? `${latestWpm}` : "-", sub: "최근 세션 기준", accent: C.primary },
                     { label: "Fit 충족률", value: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-", sub: hasFitGap ? `${fitGap.matched}/${fitGap.total} 충족` : "AI 리포트 기반", accent: C.warning },
                   ].map((s, i) => (
@@ -845,47 +866,46 @@ export default function MenteeMyPage() {
                   ))}
                 </div>
 
-                {/* 최종 리포트 바로가기 */}
-                {latestSession && (
-                  <div style={{ background: C.white, borderRadius: 16, padding: "18px 22px", boxShadow: C.shadow, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 12, background: C.successLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.success} strokeWidth="2" strokeLinecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                {/* 최종 리포트 도착 배너 — final이고 아직 안 본 경우만 */}
+                {(() => {
+                  if (!latestSession || latestReport?.report_status !== "final") return null;
+                  const viewed = (() => { try { return JSON.parse(localStorage.getItem("scena_viewed_finals") || "[]"); } catch { return []; } })();
+                  if (viewed.includes(String(latestSession.id))) return null;
+                  const markViewed = () => {
+                    try {
+                      const next = [...new Set([...viewed, String(latestSession.id)])];
+                      localStorage.setItem("scena_viewed_finals", JSON.stringify(next));
+                    } catch {}
+                  };
+                  return (
+                    <div style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #1B4F7A 100%)`, borderRadius: 16, padding: "20px 22px", boxShadow: "0 6px 20px rgba(13,34,64,0.22)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, position: "relative" }}>
+                      {/* X 버튼 */}
+                      <button onClick={markViewed} style={{ position: "absolute", top: 10, right: 12, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 26, height: 26, color: C.white, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: C.success, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 4px 12px rgba(12,166,120,0.4)" }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                        </div>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, background: C.success, color: "white", padding: "2px 8px", borderRadius: 99 }}>NEW</span>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: C.white, margin: 0 }}>최종 리포트가 도착했어요</p>
+                          </div>
+                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", margin: 0 }}>
+                            {latestSession.mentor ? `${latestSession.mentor} 멘토` : "멘토"}의 코멘트 + AI 분석이 합쳐진 최종 리포트를 확인하세요
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>
-                          {latestReport?.report_status === "final" ? "최종 리포트 완성" : "최신 세션 리포트"}
-                        </p>
-                        <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>
-                          {latestReport?.report_status === "final"
-                            ? "멘토 코멘트와 AI 분석이 모두 포함된 최종 리포트입니다"
-                            : latestReport ? "AI 리포트가 준비됐어요 · 멘토 최종 리포트 작성 대기 중" : "리포트 준비 중입니다"}
-                        </p>
-                      </div>
+                      <button onClick={() => { markViewed(); navigate(`/report/final/${latestSession.id}`, { state: { sessionId: latestSession.id, role: "mentee" } }); }} style={{
+                        padding: "10px 20px", borderRadius: 10, border: "none", background: C.success,
+                        color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                        flexShrink: 0, whiteSpace: "nowrap", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.15s",
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+                        onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                      >지금 확인하기 →</button>
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                      {latestReport && (
-                        <button onClick={() => navigate(`/report/ai/${latestSession.id}`)} style={{
-                          padding: "9px 16px", borderRadius: 10, border: `1px solid ${C.primary}`, background: C.white,
-                          color: C.primary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.15s",
-                        }}
-                          onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
-                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-                        >AI 리포트</button>
-                      )}
-                      {latestSession && (
-                        <button onClick={() => navigate(`/report/final/${latestSession.id}`, { state: { sessionId: latestSession.id, role: "mentee" } })} style={{
-                          padding: "9px 16px", borderRadius: 10, border: "none", background: C.primaryGrad,
-                          color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                          boxShadow: "0 4px 12px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
-                        }}
-                          onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-                        >최종 리포트 →</button>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 레이더 + Fit-Gap */}
                 <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -920,7 +940,7 @@ export default function MenteeMyPage() {
                     {hasFitGap ? (
                       <>
                         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 16 }}>
-                          <DonutChart matched={fitGap.matched} total={fitGap.total} size={110} />
+                          <DonutChart matched={fitGap.matched} total={fitGap.total} size={140} />
                           <div style={{ flex: 1 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                               <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.primary }} />
@@ -955,41 +975,16 @@ export default function MenteeMyPage() {
                   </Card>
                 </div>
 
-                {/* 점수 추이 + 문항별 점수 */}
-                <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}>
-
-                  <Card>
-                    <CardHeader label="SCORE TREND" title="세션별 AI 점수 추이"
-                      sub={sessionTrend.length >= 2 ? `${firstScore} → ${latestScore} · ${historyAll.length}회 세션` : "2회 이상 세션 완료 후 표시"}
-                    />
-                    <LineChart sessions={sessionTrend} />
-                  </Card>
-
-                  <Card>
-                    <CardHeader label="QUESTION SCORES" title="문항별 점수"
-                      sub={qReports.length > 0 ? `${latestSession?.title?.slice(0, 14) || "최근 세션"} · 10점 만점` : "최근 세션 기준"}
-                    />
-                    {qReports.length > 0 ? (
-                      <>
-                        <QuestionScoreBar questions={recentQuestions} />
-                        <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
-                          {[{ c: C.success, l: "우수 (7+)" }, { c: C.warning, l: "보통 (5~)" }, { c: C.danger, l: "보완 (~5)" }].map((x, i) => (
-                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <div style={{ width: 8, height: 8, borderRadius: 2, background: x.c }} />
-                              <span style={{ fontSize: 10, color: C.textMuted }}>{x.l}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <EmptyState
-                        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>}
-                        title="문항 데이터 없음"
-                        sub="AI 리포트 생성 후 문항별 점수가 표시됩니다"
-                      />
-                    )}
-                  </Card>
-                </div>
+                {/* 멘토 평점 추이 — 전체 너비 */}
+                <Card>
+                  <CardHeader label="MENTOR SCORE TREND" title="멘토 최종 평점 추이"
+                    sub={mentorScoreTrend.length >= 2
+                      ? `${mentorScoreTrend[0].ai}점 → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점 · ${mentorScoreTrend.length}회`
+                      : mentorScoreTrend.length === 1 ? "최종 리포트 1회 기준"
+                      : "멘토 최종 리포트 완성 후 표시됩니다"}
+                  />
+                  <LineChart sessions={mentorScoreTrend} />
+                </Card>
               </div>
             )}
 

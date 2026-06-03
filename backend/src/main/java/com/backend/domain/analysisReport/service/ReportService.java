@@ -76,13 +76,25 @@ public class ReportService {
     private final ObjectMapper objectMapper;
 
     public ReportResponse getReport(Long memberId, Long sessionId) {
+        return getReport(memberId, sessionId, null);
+    }
+
+    public ReportResponse getReport(Long memberId, Long sessionId, Long requestedMenteeId) {
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
 
         validateAccess(memberId, session);
-        Member targetMentee = session.getMentor().getId().equals(memberId)
-                ? null
-                : memberRepository.getReferenceById(memberId);
+        // 세션 참여자라면 menteeId 지정 조회 허용 (그룹 공유 리포트)
+        // - 멘토: menteeId 지정 시 해당 멘티 필터, 없으면 전체
+        // - 멘티: menteeId 지정 시 해당 멘티 필터 (세션 내 공유), 없으면 본인
+        Member targetMentee;
+        if (requestedMenteeId != null) {
+            targetMentee = memberRepository.getReferenceById(requestedMenteeId);
+        } else if (session.getMentor().getId().equals(memberId)) {
+            targetMentee = null;
+        } else {
+            targetMentee = memberRepository.getReferenceById(memberId);
+        }
 
         MenteeReportFeedback selectedFeedback = targetMentee == null
                 ? null

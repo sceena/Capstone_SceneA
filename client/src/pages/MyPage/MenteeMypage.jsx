@@ -248,8 +248,7 @@ const HistoryItem = ({ num, title, ai, mentor, date, isGroup, id, navigate }) =>
 /* ── 멘토 신청 이력 아이템 ── */
 const RESERVATION_STATUS = {
   PENDING:   { label: "대기 중", bg: "#FFF3BF", color: "#E67700" },
-  ACCEPTED:  { label: "수락됨",  bg: "#E6FCF5", color: "#0CA678" },
-  REJECTED:  { label: "거절됨",  bg: "#FFF5F5", color: "#E03131" },
+  CONFIRMED: { label: "수락됨",  bg: "#E6FCF5", color: "#0CA678" },
   CANCELLED: { label: "취소됨",  bg: C.bg,      color: C.textMuted },
   DONE:      { label: "완료",    bg: "#F0F4FF", color: "#4C6EF5" },
 };
@@ -260,7 +259,7 @@ const ReservationItem = ({ r }) => {
   const createdAt   = r.created_at   || r.createdAt;
   // 수락됐고 예약 시간이 지났으면 "완료"
   const isPast = scheduledAt && new Date(scheduledAt) < new Date();
-  const statusKey = (reservStatus === "ACCEPTED" && isPast) ? "DONE" : reservStatus;
+  const statusKey = (reservStatus === "CONFIRMED" && isPast) ? "DONE" : reservStatus;
   const status = RESERVATION_STATUS[statusKey] || RESERVATION_STATUS.PENDING;
   const formatDate  = v => v ? new Date(v).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
   return (

@@ -56,6 +56,7 @@ public class FastApiAiSttClient implements AiSttClient {
             AiSttResponse response = restClient.post()
                     .uri("/api/stt")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .header("ngrok-skip-browser-warning", "true")
                     .body(toMultipartBody(audio))
                     .retrieve()
                     .body(AiSttResponse.class);

@@ -34,6 +34,7 @@ public class FastApiAiReportClient implements AiReportClient {
             AiReportResponse response = restClient.post()
                     .uri("/report")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .header("ngrok-skip-browser-warning", "true")
                     .body(request)
                     .retrieve()
                     .body(AiReportResponse.class);

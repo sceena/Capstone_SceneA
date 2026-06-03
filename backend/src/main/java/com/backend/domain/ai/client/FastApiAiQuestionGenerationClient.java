@@ -34,6 +34,7 @@ public class FastApiAiQuestionGenerationClient implements AiQuestionGenerationCl
             AiSessionQuestionGenerationResponse response = restClient.post()
                     .uri("/api/generate-session-questions")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .header("ngrok-skip-browser-warning", "true")
                     .body(request)
                     .retrieve()
                     .body(AiSessionQuestionGenerationResponse.class);

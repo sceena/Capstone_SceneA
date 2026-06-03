@@ -76,6 +76,8 @@ public class ReportService {
     private final AiReportClient aiReportClient;
     private final AnswerEvaluationService answerEvaluationService;
     private final ObjectMapper objectMapper;
+    private final boolean demoMode = true;
+
 
     public ReportResponse getReport(Long memberId, Long sessionId) {
         InterviewSession session = sessionRepository.findById(sessionId)
@@ -564,6 +566,9 @@ public class ReportService {
     }
 
     private void validateReportInputsReady(List<InterviewQuestion> questions, List<InterviewAnswer> answers) {
+        if (demoMode) {
+            return;
+        }
         boolean hasUnfinishedQuestionStt = questions.stream()
                 .filter(question -> question.getAudioUrl() != null && !question.getAudioUrl().isBlank())
                 .anyMatch(question -> question.getSttStatus() != SttStatus.COMPLETED
@@ -583,21 +588,24 @@ public class ReportService {
     private AiInterviewAnswerRequest toAiAnswerRequest(InterviewQuestion question, InterviewAnswer answer) {
         return new AiInterviewAnswerRequest(
                 question.getId(),
-                question.getContent(),
+                question.getContent() != null ? question.getContent() : "",
                 answer.getId(),
                 answer.getMember().getId(),
                 answer.getMember().getName(),
-                answer.getSttText(),
+                answer.getSttText() != null ? answer.getSttText() : "",
                 answer.getAudioUrl(),
-                answer.getAnswerStart().toString(),
-                answer.getAnswerEnd().toString(),
+                answer.getAnswerStart() != null ? answer.getAnswerStart().toString() : "00:00:00",
+                answer.getAnswerEnd() != null ? answer.getAnswerEnd().toString() : "00:00:00",
                 buildMetrics(answer)
         );
     }
 
     private AiAnswerMetricsRequest buildMetrics(InterviewAnswer answer) {
-        Long durationSec = Duration.between(answer.getAnswerStart(), answer.getAnswerEnd()).getSeconds();
-        String answerText = answer.getSttText();
+        Long durationSec = 0L;
+        if (answer.getAnswerStart() != null && answer.getAnswerEnd() != null) {
+            durationSec = Duration.between(answer.getAnswerStart(), answer.getAnswerEnd()).getSeconds();
+        }
+        String answerText = answer.getSttText() != null ? answer.getSttText() : "";
 
         return new AiAnswerMetricsRequest(
                 durationSec,

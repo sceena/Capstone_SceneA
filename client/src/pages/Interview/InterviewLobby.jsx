@@ -530,7 +530,7 @@ export default function InterviewLobby({ role = "mentee" }) {
   useEffect(() => {
     if (!id || !/^\d+$/.test(id)) return;
 
-    const loadResume = selectedMenteeId
+    const loadResume = (role === "mentor" && selectedMenteeId)
       ? getMenteeResume(id, selectedMenteeId)
       : getResume(id);
 
@@ -543,7 +543,7 @@ export default function InterviewLobby({ role = "mentee" }) {
       setResumeError("제출한 자소서를 불러오지 못했습니다.");
       setOpenResumeIndex(null);
     });
-  }, [id, selectedMenteeId]);
+  }, [id, role, selectedMenteeId]);
 
   /* API 데이터 우선, 없으면 fallback */
   const session = {

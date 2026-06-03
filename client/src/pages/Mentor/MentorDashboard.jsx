@@ -583,7 +583,11 @@ const normalizeStatus   = s => String(s || "").toLowerCase();
 const getScheduledAt    = s => s.scheduledAt ?? s.scheduled_at ?? "";
 const getSessionTitle   = s => s.title ?? (s.job_category ? `${s.job_category} 모의 면접` : "모의 면접");
 const getMenteeName     = s => s.menteeName ?? s.mentee_name ?? "";
-const getSessionType    = s => s.sessionType ?? s.session_type ?? "1:1 면접";
+const getSessionType    = s => {
+  const maxP = Number(s.max_participants ?? s.maxParticipants ?? 1);
+  if (maxP > 1) return "그룹 면접";
+  return s.sessionType ?? s.session_type ?? "1:1 면접";
+};
 const getReservationSessionType = r => {
   const maxParticipants = Number(r.max_participants ?? r.maxParticipants ?? 1);
   return maxParticipants > 1 ? "그룹 면접" : "1:1 면접";
@@ -626,7 +630,7 @@ export default function MentorDashboard() {
       id: s.id,
       title: getSessionTitle(s),
       date: toDateText(getScheduledAt(s)),
-      mentor: getMenteeName(s),
+      mentor: getMenteeName(s) ? `${getMenteeName(s)} 멘티` : "",
       type: getSessionType(s),
       time: toTimeText(getScheduledAt(s)),
     }));
@@ -670,7 +674,7 @@ export default function MentorDashboard() {
       date: toDateText(getScheduledAt(s)),
       time: toTimeText(getScheduledAt(s)),
       title: getSessionTitle(s),
-      mentor: getMenteeName(s),
+      mentor: getMenteeName(s) ? `${getMenteeName(s)} 멘티` : "",
       type: getSessionType(s),
       status: "confirmed",
     }));
@@ -773,7 +777,11 @@ export default function MentorDashboard() {
 
         {/* ── 미완료 피드백 알림 배너 ── */}
         {(() => {
-          const pf = rawSessions.filter(s => normalizeStatus(s.status) === "completed" && !s.feedbackSubmitted);
+          // "first" = AI 리포트 있음 + 멘토 피드백 미완료 / "final" = 이미 전송완료
+          const pf = rawSessions.filter(s =>
+            normalizeStatus(s.status) === "completed" &&
+            (s.reportStatus ?? s.report_status) === "first"
+          );
           if (pf.length === 0) return null;
           return (
             <div style={{

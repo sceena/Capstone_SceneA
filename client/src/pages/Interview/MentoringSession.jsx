@@ -49,11 +49,36 @@ function getReportCommentKey(report, index = 0) {
   return `question-${getReportQuestionId(report) ?? "unknown"}-mentee-${getReportMenteeId(report) ?? "session"}-${index}`;
 }
 
-function filterReportsForMentee(questionReports = [], currentMentee) {
-  const menteeId = currentMentee?.id ?? currentMentee?.menteeId ?? currentMentee?.memberId;
+function filterReportsForMentee(questionReports = [], currentMentee, answerEvaluations = []) {
+  const menteeId = currentMentee?.user_id ?? currentMentee?.userId
+    ?? currentMentee?.id ?? currentMentee?.menteeId ?? currentMentee?.memberId;
   if (menteeId == null) return questionReports;
-  const filtered = questionReports.filter((report) => String(getReportMenteeId(report) ?? "") === String(menteeId));
-  return filtered.length > 0 ? filtered : questionReports;
+
+  // 1차: question_report.mentee_id 직접 매칭
+  const byMenteeId = questionReports.filter(
+    r => String(getReportMenteeId(r) ?? "") === String(menteeId)
+  );
+  if (byMenteeId.length > 0) return byMenteeId;
+
+  // 2차: AI가 mentee_id를 안 채운 경우 → answer_evaluations로 answer_id 매핑
+  if (answerEvaluations.length > 0) {
+    const menteeAnswerIds = new Set(
+      answerEvaluations
+        .filter(ev => String(ev.mentee_id ?? ev.menteeId ?? "") === String(menteeId))
+        .map(ev => String(ev.answer_id ?? ev.answerId ?? ""))
+        .filter(Boolean)
+    );
+    if (menteeAnswerIds.size > 0) {
+      const byAnswerId = questionReports.filter(r => {
+        const aid = String(r.answer_id ?? r.answerId ?? "");
+        return aid && menteeAnswerIds.has(aid);
+      });
+      if (byAnswerId.length > 0) return byAnswerId;
+    }
+  }
+
+  // 3차: 1:1 세션(모든 report에 mentee_id 없음) → 전체 반환
+  return questionReports.every(r => !getReportMenteeId(r)) ? questionReports : [];
 }
 
 function pickReportExtremes(reports = []) {
@@ -125,7 +150,7 @@ const D = {
 };
 
 // ─── 공유 리포트 뷰 ──────────────────────────────────────────────
-function SharedReport({ report, isMentor = false, currentMentee = null, mentorComments = {}, onCommentChange }) {
+function SharedReport({ report, isMentor = false, currentMentee = null, mentorComments = {}, onCommentChange, answerEvaluations = [] }) {
   if (!report?.ai_report) {
     return (
       <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
@@ -143,7 +168,19 @@ function SharedReport({ report, isMentor = false, currentMentee = null, mentorCo
 
   const aiReport = report.ai_report;
   const questionReports = aiReport?.question_reports || [];
-  const visibleQuestionReports = filterReportsForMentee(questionReports, currentMentee);
+  const visibleQuestionReports = filterReportsForMentee(questionReports, currentMentee, answerEvaluations);
+
+  if (currentMentee && visibleQuestionReports.length === 0 && questionReports.length > 0) {
+    return (
+      <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ color: D.muted, fontSize: 14, marginBottom: 6 }}>{currentMentee.name} 멘티의 답변 데이터를 찾을 수 없어요</p>
+          <p style={{ color: D.dim, fontSize: 12 }}>AI 리포트가 처리 중이거나 데이터가 없습니다</p>
+        </div>
+      </div>
+    );
+  }
+
   const topSummary = aiReport?.top_summary;
   const { bestReport, worstReport } = pickReportExtremes(visibleQuestionReports);
   const best = bestReport
@@ -362,6 +399,9 @@ export default function MentoringSessionPage() {
 
   const [session, setSession]   = useState({ mentor: { name: "" }, title: "", date: "", time: "" });
   const [reportData, setReportData] = useState(null);
+  // 멘티별 리포트 캐시 { [userId]: reportData }
+  const [menteeReports, setMenteeReports] = useState({});
+  const menteeReportsRef = useRef({});
   const [elapsed, setElapsed]   = useState(0);
   const [isMicOn, setIsMicOn]   = useState(true);
   const [isCamOn, setIsCamOn]   = useState(true);
@@ -459,20 +499,42 @@ export default function MentoringSessionPage() {
     getSessionReport(sessionId)
       .then(data => {
         if (data?.ai_report) setReportData(data);
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  /* ── 멘티별 리포트 로드 (그룹 공유용) ── */
+  const loadReportForUser = useCallback((userId) => {
+    if (!userId || !sessionId) return;
+    if (menteeReportsRef.current[String(userId)]) return; // 이미 로드됨
+    getSessionReport(sessionId, userId)
+      .then(data => {
         if (data) {
-          setSession(prev => ({ ...prev, report: data }));
-          setMenteeList(prev => prev.map((m, i) => i === 0 ? { ...m, report: { ...data, menteeName: m.name } } : m));
+          menteeReportsRef.current[String(userId)] = data;
+          setMenteeReports(prev => ({ ...prev, [String(userId)]: data }));
         }
       })
       .catch(() => {});
   }, [sessionId]);
 
-  /* ── 멘티 네비게이션 ── */
+  /* ── 멘티 네비게이션: 멘토가 전환 시 전원에게 sync ── */
   const handleMenteeNav = useCallback((newIdx) => {
     const clamped = Math.max(0, Math.min(newIdx, menteeList.length - 1));
     setCurrentMenteeIdx(clamped);
-    socketRef.current?.emit("reportSync", { index: clamped });
-  }, [menteeList.length]);
+    const target = menteeList[clamped];
+    const targetUserId = target?.user_id ?? target?.userId ?? target?.id;
+    if (targetUserId) loadReportForUser(targetUserId);
+    socketRef.current?.emit("reportSync", { index: clamped, menteeUserId: targetUserId });
+  }, [menteeList, loadReportForUser]);
+
+  /* ── 멘티 목록 확정 시 모든 멘티 리포트 프리로드 ── */
+  useEffect(() => {
+    if (menteeList.length === 0) return;
+    menteeList.forEach(m => {
+      const uid = m.user_id ?? m.userId ?? m.id;
+      if (uid) loadReportForUser(uid);
+    });
+  }, [menteeList.length]); // eslint-disable-line
 
   /* ── 코멘트 핸들러 ── */
   const handleCommentChange = useCallback((questionId, value) => {
@@ -600,7 +662,11 @@ export default function MentoringSessionPage() {
         setPeerIds(prev => prev.filter(p => p !== peerId));
         setPeerMuteStates(prev => { const next = { ...prev }; delete next[peerId]; return next; });
       });
-      socket.on("reportSync", ({ index }) => { if (!isCancelled) setCurrentMenteeIdx(index); });
+      socket.on("reportSync", ({ index, menteeUserId }) => {
+        if (isCancelled) return;
+        setCurrentMenteeIdx(index);
+        if (menteeUserId) loadReportForUser(menteeUserId);
+      });
     };
 
     init();
@@ -739,6 +805,14 @@ export default function MentoringSessionPage() {
   const isMentor = userRole.includes("mentor");
   const currentMentee = menteeList[currentMenteeIdx] || null;
 
+  // 현재 보여줄 리포트: 멘티별 캐시 우선, 없으면 전체 리포트
+  const currentMenteeUserId = currentMentee
+    ? String(currentMentee.user_id ?? currentMentee.userId ?? currentMentee.id ?? "")
+    : null;
+  const activeReport = (currentMenteeUserId && menteeReports[currentMenteeUserId])
+    ? menteeReports[currentMenteeUserId]
+    : reportData;
+
   const getPeerName = (peerId) => {
     // 멘티 목록에서 먼저 확인
     const mentee = menteeList.find(m => String(m.user_id ?? m.userId ?? m.id ?? "") === String(peerId));
@@ -846,21 +920,32 @@ export default function MentoringSessionPage() {
         {/* 좌측: 리포트 + 드로잉 레이어 */}
         <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
-          {/* 멘티 전환 네비게이터 */}
-          <div style={{ background: "#fff", borderBottom: "1px solid #E8E0D0", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
+          {/* 멘티 전환 네비게이터 — 그룹이면 스텝 강조 */}
+          <div style={{ background: menteeList.length > 1 ? "#F0F4FF" : "#fff", borderBottom: "1px solid #E8E0D0", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
             <button onClick={() => handleMenteeNav(currentMenteeIdx - 1)} disabled={currentMenteeIdx === 0 || !isMentor}
-              style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: currentMenteeIdx === 0 || !isMentor ? "#F3F4F6" : "#fff", color: currentMenteeIdx === 0 || !isMentor ? "#9CA3AF" : NAVY, fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx === 0 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
+              style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${currentMenteeIdx === 0 || !isMentor ? "#D1D5DB" : NAVY}`, background: currentMenteeIdx === 0 || !isMentor ? "#F3F4F6" : NAVY, color: currentMenteeIdx === 0 || !isMentor ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx === 0 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
               ← 이전
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {menteeList.length > 1 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", background: "#E0E7FF", borderRadius: 99, padding: "2px 10px" }}>
+                  그룹 면접 · {currentMenteeIdx + 1}/{menteeList.length}명
+                </span>
+              )}
               {menteeList.map((m, i) => (
-                <button key={m.id} onClick={() => isMentor && handleMenteeNav(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: `2px solid ${i === currentMenteeIdx ? NAVY : "#D1D5DB"}`, background: i === currentMenteeIdx ? NAVY : "#fff", color: i === currentMenteeIdx ? "#fff" : "#555", fontSize: 12, fontWeight: 700, cursor: isMentor ? "pointer" : "default", fontFamily: "inherit", transition: "all 0.15s" }}>{i + 1}</button>
+                <button key={m.user_id ?? m.id ?? i} onClick={() => isMentor && handleMenteeNav(i)} title={m.name}
+                  style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${i === currentMenteeIdx ? NAVY : "#D1D5DB"}`, background: i === currentMenteeIdx ? NAVY : "#fff", color: i === currentMenteeIdx ? "#fff" : "#555", fontSize: 12, fontWeight: 700, cursor: isMentor ? "pointer" : "default", fontFamily: "inherit", transition: "all 0.15s" }}>
+                  {i + 1}
+                </button>
               ))}
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#111", marginLeft: 4 }}>{currentMentee?.name} 멘티</span>
+              <div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{currentMentee?.name}</span>
+                <span style={{ fontSize: 12, color: "#6B7280", marginLeft: 4 }}>멘티 리포트</span>
+              </div>
               {!isMentor && <span style={{ fontSize: 11, color: GREEN, fontWeight: 600 }}>· 멘토가 화면을 제어합니다</span>}
             </div>
             <button onClick={() => handleMenteeNav(currentMenteeIdx + 1)} disabled={currentMenteeIdx >= menteeList.length - 1 || !isMentor}
-              style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid #D1D5DB", background: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#F3F4F6" : "#fff", color: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#9CA3AF" : NAVY, fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
+              style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#D1D5DB" : NAVY}`, background: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#F3F4F6" : NAVY, color: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
               다음 →
             </button>
           </div>
@@ -868,11 +953,12 @@ export default function MentoringSessionPage() {
           {/* 리포트 스크롤 영역 */}
           <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto" }}>
             <SharedReport
-              report={reportData}
+              report={activeReport}
               isMentor={isMentor}
               currentMentee={currentMentee}
               mentorComments={mentorComments}
               onCommentChange={handleCommentChange}
+              answerEvaluations={activeReport?.answer_evaluations || []}
             />
           </div>
 

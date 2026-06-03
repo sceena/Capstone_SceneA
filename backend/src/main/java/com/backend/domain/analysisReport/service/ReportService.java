@@ -110,6 +110,32 @@ public class ReportService {
         );
     }
 
+    /** 그룹 세션 공유용: 세션 참여자라면 누구든 특정 멘티 리포트 조회 가능 */
+    public ReportResponse getReportForMentee(Long memberId, Long sessionId, Long targetMenteeId) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+
+        validateAccess(memberId, session); // 세션 참여자 여부 확인
+        Member targetMentee = memberRepository.getReferenceById(targetMenteeId);
+        MenteeReportFeedback selectedFeedback =
+                menteeReportFeedbackRepository.findByInterviewSessionAndMentee(session, targetMentee).orElse(null);
+
+        AnalysisReport report = reportRepository
+                .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FINAL)
+                .orElseGet(() -> reportRepository
+                        .findFirstByInterviewSessionAndReportStatusOrderByCreateDateDesc(session, ReportStatus.FIRST)
+                        .orElseThrow(() -> new CustomException(ErrorCode.REPORT_NOT_FOUND)));
+
+        AiReportResponse aiReport = parseAiReport(report.getRawAiResponseJson());
+        List<AnswerEvaluationResponse> evaluations = answerEvaluationService.getEvaluationResponses(session);
+        List<MenteeReportFeedback> allMenteeFeedbacks = menteeReportFeedbackRepository.findAllByInterviewSession(session);
+
+        aiReport = filterAiReportByMentee(aiReport, targetMenteeId);
+        evaluations = filterEvaluationsByMentee(evaluations, targetMenteeId);
+
+        return ReportResponse.from(report, aiReport, evaluations, selectedFeedback, allMenteeFeedbacks);
+    }
+
     @Transactional
     public ReportResponse generateReport(Long memberId, Long sessionId) {
         InterviewSession session = sessionRepository.findById(sessionId)

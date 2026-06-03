@@ -328,7 +328,11 @@ const normalizeStatus = s => String(s || "").toLowerCase();
 const getScheduledAt  = s => s.scheduledAt ?? s.scheduled_at ?? "";
 const getSessionTitle = s => s.title ?? (s.job_category ? `${s.job_category} 모의 면접` : "모의 면접");
 const getMentorName   = s => s.mentorName ?? s.mentor_name ?? "";
-const getSessionType  = s => s.sessionType ?? s.session_type ?? "1:1 면접";
+const getSessionType  = s => {
+  const maxP = Number(s.max_participants ?? s.maxParticipants ?? 1);
+  if (maxP > 1) return "그룹 면접";
+  return s.sessionType ?? s.session_type ?? "1:1 면접";
+};
 const toDateText      = v => v ? String(v).slice(5, 10).replace("-", ".") : "";
 const toTimeText      = v => v ? String(v).slice(11, 16) : "";
 const toScheduledTime = s => {
@@ -411,8 +415,12 @@ export default function MenteeDashboard() {
     isFinal: s.report_status === "final" || s.tag === "최종 리포트",
   }));
 
-  const avgScore = completedSessions.length > 0
-    ? Math.round(completedSessions.reduce((a, s) => a + (Number(s.aiScore) || 0), 0) / completedSessions.length)
+  const finalSessions = completedSessions.filter(
+    s => (s.report_status ?? s.reportStatus) === "final"
+  );
+  const finalWithScore = finalSessions.filter(s => Number.isFinite(Number(s.ai_score ?? s.aiScore)));
+  const avgScore = finalWithScore.length > 0
+    ? (finalWithScore.reduce((a, s) => a + Number(s.ai_score ?? s.aiScore), 0) / finalWithScore.length).toFixed(1)
     : null;
 
   const now = new Date();
@@ -470,9 +478,9 @@ export default function MenteeDashboard() {
             }
           />
           <StatCard
-            label="평균 AI 점수"
+            label="멘토 평균 평점"
             value={avgScore !== null ? `${avgScore}점` : "-"}
-            sub={avgScore !== null ? `${completedSessions.length}회 면접 기준` : "면접 완료 후 표시"}
+            sub={avgScore !== null ? `${finalWithScore.length}회 최종 리포트 기준` : "최종 리포트 완성 후 표시"}
             gradient={C.warningGrad}
             shadowColor="rgba(247,103,7,0.28)"
             icon={
@@ -484,7 +492,18 @@ export default function MenteeDashboard() {
         </div>
 
         {/* ── 미확인 최종 리포트 배너 ── */}
-        {unreadFinals.map(s => (
+        {unreadFinals.map(s => {
+          const markViewed = (id) => {
+            try {
+              const viewed = JSON.parse(localStorage.getItem("scena_viewed_finals") || "[]");
+              const sid = String(id);
+              if (!viewed.includes(sid)) {
+                localStorage.setItem("scena_viewed_finals", JSON.stringify([...viewed, sid]));
+              }
+            } catch {}
+            setUnreadFinals(prev => prev.filter(u => u.id !== id));
+          };
+          return (
           <div key={s.id} style={{
             background: C.primaryGrad,
             borderRadius: 16, padding: "20px 28px",
@@ -493,6 +512,14 @@ export default function MenteeDashboard() {
             boxShadow: C.shadowLg, position: "relative", overflow: "hidden",
           }}>
             <div style={{ position: "absolute", right: -20, top: -20, width: 120, height: 120, borderRadius: "50%", background: "rgba(12,166,120,0.15)", pointerEvents: "none" }} />
+            {/* X 닫기 버튼 */}
+            <button onClick={() => markViewed(s.id)} style={{
+              position: "absolute", top: 12, right: 12, zIndex: 2,
+              background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%",
+              width: 28, height: 28, cursor: "pointer", color: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: 700,
+            }}>✕</button>
             <div style={{ display: "flex", alignItems: "center", gap: 16, zIndex: 1 }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 14,
@@ -517,7 +544,7 @@ export default function MenteeDashboard() {
               </div>
             </div>
             <button
-              onClick={() => navigate("/report/final", { state: { sessionId: s.id, role: "mentee" } })}
+              onClick={() => { markViewed(s.id); navigate(`/report/final/${s.id}`, { state: { sessionId: s.id, role: "mentee" } }); }}
               style={{
                 padding: "12px 24px", borderRadius: 10,
                 border: "none", background: C.success,
@@ -533,7 +560,8 @@ export default function MenteeDashboard() {
               지금 확인하기 →
             </button>
           </div>
-        ))}
+          );
+        })}
 
         {/* ── 자소서 배너: 미등록이면 등록 유도, 등록했으면 표시 안 함 ── */}
         {!hasResume && (

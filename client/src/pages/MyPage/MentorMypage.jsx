@@ -172,8 +172,7 @@ export default function MentorMyPage() {
   const [showEdit, setShowEdit]   = useState(false);
   const [profileImage, setProfileImage] = useState(() => {
     const stored = localStorage.getItem(`profile_img_${user?.email}`);
-    // base64만 사용 (S3 URL은 img 태그에서 직접 로드 시 실패 가능)
-    return stored?.startsWith("data:") ? stored : null;
+    return (stored?.startsWith("data:") || stored?.startsWith("https://")) ? stored : null;
   });
   const [requests, setRequests]   = useState([]);
   const [confirmed, setConfirmed] = useState([]);
@@ -184,13 +183,13 @@ export default function MentorMyPage() {
     getMyProfile().then(p => {
       setProfile(p);
       const stored = localStorage.getItem(`profile_img_${user?.email}`);
-      const hasBase64 = stored?.startsWith("data:");
-      if (!hasBase64 && p?.profile_image_url) {
-        // S3 URL → fetch → base64 변환 후 localStorage 저장 (CORS 또는 private 이면 fallback)
-        fetch(p.profile_image_url.replace(/^http:\/\//i, "https://"))
+      const hasCached = stored?.startsWith("data:") || stored?.startsWith("https://");
+      if (!hasCached && p?.profile_image_url) {
+        const url = p.profile_image_url.replace(/^http:\/\//i, "https://");
+        fetch(url)
           .then(r => r.ok ? r.blob() : null)
           .then(blob => {
-            if (!blob) return;
+            if (!blob) throw new Error("no blob");
             const reader = new FileReader();
             reader.onload = e => {
               const b64 = e.target.result;
@@ -199,7 +198,10 @@ export default function MentorMyPage() {
             };
             reader.readAsDataURL(blob);
           })
-          .catch(() => {});
+          .catch(() => {
+            try { localStorage.setItem(`profile_img_${user?.email}`, url); } catch {}
+            setProfileImage(url);
+          });
       }
     }).catch(() => {});
 
@@ -219,7 +221,9 @@ export default function MentorMyPage() {
       setRequests(pending);
       setConfirmed(conf);
       setCompletedSessions(completed);
-      setPendingFeedbackSessions(completed.filter(s => s.reportStatus !== "final"));
+      // "first" = AI 리포트 생성됨, 멘토 피드백 미작성 상태만 표시
+      // null = AI 리포트 미생성 (500 오류 등), "final" = 이미 완료
+      setPendingFeedbackSessions(completed.filter(s => s.reportStatus === "first"));
     }).catch(() => {});
   }, []);
 
@@ -332,38 +336,7 @@ export default function MentorMyPage() {
                 );
               })()}
 
-              {tags.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center", marginBottom: 16 }}>
-                  {tags.slice(0, 6).map((t, i) => (
-                    <span key={i} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: C.bg, color: C.textSub, border: `1px solid ${C.border}` }}>{t}</span>
-                  ))}
-                </div>
-              )}
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "14px 0", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, marginBottom: 14 }}>
-                {[
-                  { n: String(totalSessions), l: "총 멘티" },
-                  { n: "-",                   l: "평균평점" },
-                  { n: String(thisMonth),     l: "이번달" },
-                ].map((s, i) => (
-                  <div key={i} style={{ textAlign: "center" }}>
-                    <p style={{ fontSize: 16, fontWeight: 800, color: C.primary, margin: 0 }}>{s.n}</p>
-                    <p style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s.l}</p>
-                  </div>
-                ))}
-              </div>
-
-              {[
-                { l: "대기 요청",      v: `${requests.length}건`,          alert: false },
-                { l: "확정 세션",      v: `${confirmed.length}건`,         alert: false },
-                { l: "완료 세션",      v: `${totalSessions}건`,            alert: false },
-                { l: "피드백 미작성",  v: `${pendingFeedbackSessions.length}건`, alert: pendingFeedbackSessions.length > 0 },
-              ].map((r, i, arr) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                  <span style={{ fontSize: 12, color: C.textMuted }}>{r.l}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: r.alert ? C.danger : C.primary }}>{r.v}</span>
-                </div>
-              ))}
             </Card>
 
             {/* 프로필 수정 · 회원탈퇴 */}

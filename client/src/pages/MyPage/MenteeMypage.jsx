@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore, { clearAuthUser, setAuthUser, getAuthUser } from "../../store/authStore";
-import { getMyProfile, updateMyProfile, getUserSessions } from "../../api/users";
-import { getSessionReport } from "../../api/sessions";
+import { getMyProfile, updateMyProfile } from "../../api/users";
+import { getSessionReport, getMySessions } from "../../api/sessions";
 import { getMenteeReservations } from "../../api/reservations";
 import JobAvatar from "../../components/JobAvatar";
 
@@ -102,7 +102,7 @@ function RadarChart({ data, size = 210 }) {
 
 /* ── 라인 차트 ── */
 function LineChart({ sessions }) {
-  const W = 480, H = 110, pad = { l: 32, r: 16, t: 12, b: 28 };
+  const W = 800, H = 160, pad = { l: 36, r: 20, t: 16, b: 32 };
   const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
   const n = sessions.length;
   if (n < 2) return (
@@ -137,18 +137,32 @@ function LineChart({ sessions }) {
 }
 
 /* ── 도넛 차트 ── */
-function DonutChart({ matched, total, size = 120 }) {
-  const r = 44, cx = size / 2, cy = size / 2;
+function DonutChart({ matched, total, size = 140 }) {
+  const r = Math.round(size * 0.38);
+  const cx = size / 2, cy = size / 2;
+  const strokeW = Math.round(size * 0.12);
   const circ = 2 * Math.PI * r;
   const pct = total > 0 ? matched / total : 0;
+  const filled = pct * circ;
+  const gap = circ - filled;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.dangerLight} strokeWidth="12" />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.primary} strokeWidth="12"
-        strokeDasharray={`${pct * circ} ${circ}`} strokeDashoffset={circ * 0.25}
-        strokeLinecap="round" style={{ transition: "stroke-dasharray 1s ease" }} />
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="18" fontWeight="800" fill={C.primary} fontFamily="'Noto Sans KR',sans-serif">{Math.round(pct * 100)}%</text>
-      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="9" fill={C.textMuted} fontFamily="'Noto Sans KR',sans-serif">충족률</text>
+      {/* 배경 링 (미충족) */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.dangerLight} strokeWidth={strokeW} />
+      {/* 채워진 링 (충족) — rotate(-90)으로 12시 방향 시작 */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.primary} strokeWidth={strokeW}
+        strokeDasharray={`${filled} ${gap}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`}
+        style={{ transition: "stroke-dasharray 0.8s ease" }} />
+      <text x={cx} y={cy + 6} textAnchor="middle" dominantBaseline="middle"
+        fontSize={Math.round(size * 0.16)} fontWeight="800" fill={C.primary}
+        fontFamily="'Noto Sans KR',sans-serif">
+        {Math.round(pct * 100)}%
+      </text>
+      <text x={cx} y={cy + Math.round(size * 0.24)} textAnchor="middle"
+        fontSize={Math.round(size * 0.08)} fill={C.textMuted}
+        fontFamily="'Noto Sans KR',sans-serif">충족률</text>
     </svg>
   );
 }
@@ -187,8 +201,7 @@ const WPM_COLOR = {
   "매우 빠름": { bg: "#FFF5F5", color: "#E03131" },
 };
 
-const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, date, type, id, navigate }) => {
-  const wc = WPM_COLOR[wpmLevel] || { bg: C.bg, color: C.textSub };
+const HistoryItem = ({ num, title, ai, mentor, date, isGroup, id, navigate }) => {
   return (
     <div style={{ padding: "18px 0", borderBottom: `1px solid ${C.border}` }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
@@ -199,17 +212,29 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
           fontSize: 12, fontWeight: 700, color: C.primary,
         }}>{num}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
             <p style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</p>
             <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: C.successLight, color: C.success, fontWeight: 600 }}>완료</span>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-            <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: wc.bg, color: wc.color, fontWeight: 600 }}>WPM {wpm} · {wpmLevel}</span>
-            {star !== "-" && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.bg, color: C.textSub }}>STAR {star}</span>}
-            <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.primaryLight, color: C.primary, fontWeight: 600 }}>AI {ai}점</span>
-            {silence > 0 && <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.dangerLight, color: C.danger }}>침묵 {silence}회</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            {mentor && (
+              <span style={{ fontSize: 12, color: C.textSub, display: "flex", alignItems: "center", gap: 3 }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                {mentor} 멘토
+              </span>
+            )}
+            {date && <span style={{ fontSize: 12, color: C.textMuted }}>· {date}</span>}
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+              background: isGroup ? "#FFF3BF" : C.primaryLight,
+              color: isGroup ? "#E67700" : C.primary,
+            }}>{isGroup ? "그룹" : "1:1"}</span>
+            {ai > 0 && (
+              <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.primaryLight, color: C.primary, fontWeight: 600 }}>
+                AI {ai}점
+              </span>
+            )}
           </div>
-          <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>멘토 {mentor} · {date} · {type}</p>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => id && navigate(`/report/ai/${id}`)} style={{
               padding: "8px 14px", background: C.white, color: C.primary,
@@ -236,30 +261,20 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
 
 /* ── 멘토 신청 이력 아이템 ── */
 const RESERVATION_STATUS = {
-  PENDING:   { label: "대기 중",  bg: "#FFF3BF", color: "#E67700" },
-  ACCEPTED:  { label: "수락됨",  bg: "#E6FCF5", color: "#0CA678" },
-  REJECTED:  { label: "거절됨",  bg: "#FFF5F5", color: "#E03131" },
+  PENDING:   { label: "대기 중", bg: "#FFF3BF", color: "#E67700" },
+  CONFIRMED: { label: "수락됨",  bg: "#E6FCF5", color: "#0CA678" },
   CANCELLED: { label: "취소됨",  bg: C.bg,      color: C.textMuted },
-};
-
-const SESSION_STATUS = {
-  COMPLETED:   { label: "세션 종료", bg: "#F0F4FF", color: "#4C6EF5" },
-  IN_PROGRESS: { label: "진행 중",   bg: "#FFF3BF", color: "#E67700" },
-  SCHEDULED:   { label: "예정됨",    bg: "#E6FCF5", color: "#0CA678" },
-  PENDING:     { label: "대기 중",   bg: C.bg,      color: C.textMuted },
+  DONE:      { label: "완료",    bg: "#F0F4FF", color: "#4C6EF5" },
 };
 
 const ReservationItem = ({ r }) => {
-  const sessionStatus = r.session_status || r.sessionStatus;
   const reservStatus = r.status?.toUpperCase();
-  // 세션이 완료된 경우 "세션 종료"를 우선 표시
-  const status = (reservStatus === "ACCEPTED" && sessionStatus === "COMPLETED")
-    ? SESSION_STATUS.COMPLETED
-    : (sessionStatus && reservStatus === "ACCEPTED" && SESSION_STATUS[sessionStatus?.toUpperCase()])
-    ? SESSION_STATUS[sessionStatus.toUpperCase()]
-    : RESERVATION_STATUS[reservStatus] || RESERVATION_STATUS.PENDING;
   const scheduledAt = r.scheduled_at || r.scheduledAt;
   const createdAt   = r.created_at   || r.createdAt;
+  // 수락됐고 예약 시간이 지났으면 "완료"
+  const isPast = scheduledAt && new Date(scheduledAt) < new Date();
+  const statusKey = (reservStatus === "CONFIRMED" && isPast) ? "DONE" : reservStatus;
+  const status = RESERVATION_STATUS[statusKey] || RESERVATION_STATUS.PENDING;
   const formatDate  = v => v ? new Date(v).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
   return (
     <div style={{ padding: "18px 0", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14 }}>
@@ -524,6 +539,8 @@ export default function MenteeMyPage() {
   const [profile, setProfile]         = useState(user?.profileData || null);
   const [apiSessions, setApiSessions] = useState([]);
   const [latestReport, setLatestReport] = useState(null);
+  const [recentReports, setRecentReports] = useState([]);
+  const [mentorScoreTrend, setMentorScoreTrend] = useState([]);
   const [reservations, setReservations] = useState([]);
 
   const hasResume = (() => {
@@ -539,20 +556,22 @@ export default function MenteeMyPage() {
   const [showEdit, setShowEdit]       = useState(false);
   const [profileImage, setProfileImage] = useState(() => {
     const stored = localStorage.getItem(`profile_img_${user?.email}`);
-    return stored?.startsWith("data:") ? stored : null;
+    // data: URL(업로드) 또는 https:// URL(카카오 등 외부 CDN) 모두 허용
+    return (stored?.startsWith("data:") || stored?.startsWith("https://")) ? stored : null;
   });
 
   useEffect(() => {
     getMyProfile().then(p => {
       setProfile(p);
       const stored = localStorage.getItem(`profile_img_${user?.email}`);
-      const hasBase64 = stored?.startsWith("data:");
-      if (!hasBase64 && p?.profile_image_url) {
-        // S3 URL → fetch → base64 변환 후 localStorage 저장
-        fetch(p.profile_image_url.replace(/^http:\/\//i, "https://"))
+      const hasCached = stored?.startsWith("data:") || stored?.startsWith("https://");
+      if (!hasCached && p?.profile_image_url) {
+        const url = p.profile_image_url.replace(/^http:\/\//i, "https://");
+        // fetch로 base64 변환 시도 → CORS 차단(카카오 등) 시 URL 그대로 저장
+        fetch(url)
           .then(r => r.ok ? r.blob() : null)
           .then(blob => {
-            if (!blob) return;
+            if (!blob) throw new Error("no blob");
             const reader = new FileReader();
             reader.onload = e => {
               const b64 = e.target.result;
@@ -561,49 +580,97 @@ export default function MenteeMyPage() {
             };
             reader.readAsDataURL(blob);
           })
-          .catch(() => {});
+          .catch(() => {
+            // CORS 등으로 fetch 불가 → URL 직접 사용 (img 태그는 CORS 없이 로드 가능)
+            try { localStorage.setItem(`profile_img_${user?.email}`, url); } catch {}
+            setProfileImage(url);
+          });
       }
     }).catch(() => {});
 
-    getUserSessions().then(data => {
+    getMySessions().then(async data => {
       if (!data?.length) return;
-      setApiSessions(data);
-      const latestId = data[0]?.id;
-      if (latestId) getSessionReport(latestId).then(setLatestReport).catch(() => {});
+      // 완료된 세션만, 최신순
+      const completed = [...data]
+        .filter(s => (s.status ?? "").toLowerCase() === "completed")
+        .sort((a, b) => new Date(b.scheduledAt ?? b.scheduled_at ?? 0) - new Date(a.scheduledAt ?? a.scheduled_at ?? 0));
+      setApiSessions(completed);
+
+      // 최근 3개 리포트 fetch (역량 종합 분석 평균용 + 최신 리포트)
+      const top3 = completed.slice(0, 3);
+      if (top3.length > 0) {
+        const reports = await Promise.all(
+          top3.map(s => getSessionReport(s.id).catch(() => null))
+        );
+        const validReports = reports.filter(Boolean);
+        if (validReports.length > 0) setLatestReport(validReports[0]);
+        setRecentReports(validReports);
+      }
+
+      // 최종 리포트가 있는 세션들의 mentor_score로 추이 구성 (오래된 순)
+      const finalSessions = [...completed]
+        .filter(s => (s.reportStatus ?? s.report_status) === "final")
+        .reverse();
+      if (finalSessions.length > 0) {
+        const reports = await Promise.all(
+          finalSessions.map(s => getSessionReport(s.id).catch(() => null))
+        );
+        const trend = reports
+          .map((report, i) => ({
+            ai:   report?.mentor_score ?? null,
+            date: (finalSessions[i].scheduledAt ?? finalSessions[i].scheduled_at ?? "").slice(0, 10).replace(/-/g, "."),
+          }))
+          .filter(item => item.ai != null);
+        setMentorScoreTrend(trend);
+      }
     }).catch(() => {});
 
     getMenteeReservations().then(setReservations).catch(() => {});
   }, []);
 
-  const historyAll = apiSessions.map((s, i, arr) => ({
-    id:       s.id,
-    num:      arr.length - i,
-    title:    s.title ?? "모의 면접",
-    wpm:      s.wpm ?? 0,
-    wpmLevel: s.wpmLevel ?? "양호",
-    star:     s.star ?? "-",
-    ai:       s.aiScore ?? 0,
-    silence:  s.silence ?? null,
-    mentor:   s.mentorName ?? "",
-    date:     s.scheduledAt?.slice(0, 10).replace(/-/g, ".") ?? "",
-    type:     s.sessionType ?? "1:1",
-  }));
+  const historyAll = apiSessions.map((s, i, arr) => {
+    const jobCat    = s.jobCategory ?? s.job_category ?? "";
+    const mentorName = s.mentorName ?? s.mentor_name ?? "";
+    const sessionType = s.sessionType ?? s.session_type ?? "1:1 면접";
+    const isGroup   = sessionType.includes("그룹");
+    const title     = jobCat ? `${jobCat} 모의 면접` : "모의 면접";
+    const dateStr   = (s.scheduledAt ?? s.scheduled_at ?? s.startedAt ?? s.started_at ?? "").slice(0, 10).replace(/-/g, ".");
+    return {
+      id:      s.id,
+      num:     arr.length - i,
+      title,
+      ai:      s.aiScore ?? 0,
+      mentor:  mentorName,
+      date:    dateStr,
+      type:    sessionType,
+      isGroup,
+    };
+  });
 
   const displayName    = profile?.name ?? userName;
-  const sessionTrend   = [...historyAll].reverse().map(h => ({ ai: h.ai, date: h.date }));
   const aiReport       = latestReport?.ai_report;
   const qReports       = aiReport?.question_reports || [];
   const fitGapRaw      = aiReport?.fit_gap;
 
-  const radarData = deriveRadarFromReport(qReports) || [
-    { label: "STAR 구조화", value: 0 },
-    { label: "말하기 안정성", value: 0 },
-    { label: "논리적 답변", value: 0 },
-    { label: "문장 간결성", value: 0 },
-    { label: "직무 역량", value: 0 },
-    { label: "면접 전달력", value: 0 },
-  ];
-  const hasRadar = qReports.length > 0;
+  const radarDataList = recentReports
+    .map(r => deriveRadarFromReport(r?.ai_report?.question_reports || []))
+    .filter(Boolean);
+  const radarData = radarDataList.length > 0
+    ? radarDataList[0].map((item, i) => ({
+        label: item.label,
+        value: Math.round(
+          radarDataList.reduce((sum, d) => sum + (d[i]?.value ?? 0), 0) / radarDataList.length
+        ),
+      }))
+    : [
+        { label: "STAR 구조화", value: 0 },
+        { label: "말하기 안정성", value: 0 },
+        { label: "논리적 답변", value: 0 },
+        { label: "문장 간결성", value: 0 },
+        { label: "직무 역량", value: 0 },
+        { label: "면접 전달력", value: 0 },
+      ];
+  const hasRadar = radarDataList.length > 0;
 
   const recentQuestions = qReports.length > 0
     ? qReports.map(q => ({ question: q.question, score: q.score }))
@@ -617,20 +684,11 @@ export default function MenteeMyPage() {
   const fitMatchedItems = fitGapRaw?.matched_requirements?.map(i => i.split(" / ")[0]?.replace(/^요구사항:\s*/, "") || i) ?? [];
   const fitMissingItems = fitGapRaw?.missing_requirements?.map(i => i.split(" / ")[0]?.replace(/^요구사항:\s*/, "") || i) ?? [];
 
-  const mentorFeedback = latestReport?.mentor_feedback;
   const latestSession  = historyAll[0];
-  const comments = mentorFeedback ? [{
-    initials: latestSession?.mentor?.slice(0, 2) || "멘T",
-    name:     `${latestSession?.mentor || "멘토"} 멘토`,
-    bg:       C.primary,
-    date:     latestSession?.date?.slice(5) || "",
-    session:  `${latestSession?.num}회차 · ${latestSession?.title}`,
-    text:     mentorFeedback,
-  }] : [];
 
-  const latestScore = historyAll[0]?.ai ?? "-";
-  const firstScore  = historyAll[historyAll.length - 1]?.ai ?? "-";
-  const latestWpm   = historyAll[0]?.wpm ?? "-";
+  const latestWpm       = historyAll[0]?.wpm ?? "-";
+  const latestMentorScore = mentorScoreTrend.length > 0 ? mentorScoreTrend[mentorScoreTrend.length - 1].ai : null;
+  const firstMentorScore  = mentorScoreTrend.length > 0 ? mentorScoreTrend[0].ai : null;
 
   const handleWithdraw = async () => {
     if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
@@ -642,7 +700,6 @@ export default function MenteeMyPage() {
     { k: "dashboard", l: "대시보드" },
     { k: "reservations", l: "신청 이력", count: reservations.length },
     { k: "history", l: "면접 히스토리", count: historyAll.length },
-    { k: "comments", l: "멘토 코멘트", count: comments.length },
   ];
 
   const Card = ({ children, style }) => (
@@ -731,7 +788,7 @@ export default function MenteeMyPage() {
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 0 }}>
                 {[
                   { l: "총 세션", v: `${historyAll.length}회` },
-                  { l: "최근 AI 점수", v: latestScore !== "-" ? `${latestScore}점` : "-" },
+                  { l: "멘토 평점", v: latestMentorScore != null ? `${latestMentorScore}점` : "-" },
                   { l: "최근 WPM", v: latestWpm !== "-" ? `${latestWpm}` : "-" },
                   { l: "Fit 충족률", v: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-" },
                   { l: "신청 이력", v: `${reservations.length}건` },
@@ -824,7 +881,7 @@ export default function MenteeMyPage() {
                 <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
                   {[
                     { label: "총 면접 횟수", value: `${historyAll.length}회`, sub: historyAll.length > 0 ? "면접 완료" : "면접 미완료", icon: "📋" },
-                    { label: "AI 점수 성장", value: latestScore !== "-" ? `${latestScore}점` : "-", sub: (latestScore !== "-" && firstScore !== "-" && latestScore !== firstScore) ? `${firstScore} → ${latestScore}` : "첫 세션 기준", accent: C.success },
+                    { label: "멘토 평점", value: latestMentorScore != null ? `${latestMentorScore}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${firstMentorScore}점 → ${latestMentorScore}점` : "최종 리포트 기준", accent: C.success },
                     { label: "최근 WPM", value: latestWpm !== "-" ? `${latestWpm}` : "-", sub: "최근 세션 기준", accent: C.primary },
                     { label: "Fit 충족률", value: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-", sub: hasFitGap ? `${fitGap.matched}/${fitGap.total} 충족` : "AI 리포트 기반", accent: C.warning },
                   ].map((s, i) => (
@@ -839,53 +896,52 @@ export default function MenteeMyPage() {
                   ))}
                 </div>
 
-                {/* 최종 리포트 바로가기 */}
-                {latestSession && (
-                  <div style={{ background: C.white, borderRadius: 16, padding: "18px 22px", boxShadow: C.shadow, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 12, background: C.successLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.success} strokeWidth="2" strokeLinecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                {/* 최종 리포트 도착 배너 — final이고 아직 안 본 경우만 */}
+                {(() => {
+                  if (!latestSession || latestReport?.report_status !== "final") return null;
+                  const viewed = (() => { try { return JSON.parse(localStorage.getItem("scena_viewed_finals") || "[]"); } catch { return []; } })();
+                  if (viewed.includes(String(latestSession.id))) return null;
+                  const markViewed = () => {
+                    try {
+                      const next = [...new Set([...viewed, String(latestSession.id)])];
+                      localStorage.setItem("scena_viewed_finals", JSON.stringify(next));
+                    } catch {}
+                  };
+                  return (
+                    <div style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #1B4F7A 100%)`, borderRadius: 16, padding: "20px 22px", boxShadow: "0 6px 20px rgba(13,34,64,0.22)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, position: "relative" }}>
+                      {/* X 버튼 */}
+                      <button onClick={markViewed} style={{ position: "absolute", top: 10, right: 12, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 26, height: 26, color: C.white, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: C.success, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 4px 12px rgba(12,166,120,0.4)" }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                        </div>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, background: C.success, color: "white", padding: "2px 8px", borderRadius: 99 }}>NEW</span>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: C.white, margin: 0 }}>최종 리포트가 도착했어요</p>
+                          </div>
+                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", margin: 0 }}>
+                            {latestSession.mentor ? `${latestSession.mentor} 멘토` : "멘토"}의 코멘트 + AI 분석이 합쳐진 최종 리포트를 확인하세요
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>
-                          {latestReport?.report_status === "final" ? "최종 리포트 완성" : "최신 세션 리포트"}
-                        </p>
-                        <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>
-                          {latestReport?.report_status === "final"
-                            ? "멘토 코멘트와 AI 분석이 모두 포함된 최종 리포트입니다"
-                            : latestReport ? "AI 리포트가 준비됐어요 · 멘토 최종 리포트 작성 대기 중" : "리포트 준비 중입니다"}
-                        </p>
-                      </div>
+                      <button onClick={() => { markViewed(); navigate(`/report/final/${latestSession.id}`, { state: { sessionId: latestSession.id, role: "mentee" } }); }} style={{
+                        padding: "10px 20px", borderRadius: 10, border: "none", background: C.success,
+                        color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                        flexShrink: 0, whiteSpace: "nowrap", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.15s",
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+                        onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                      >지금 확인하기 →</button>
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                      {latestReport && (
-                        <button onClick={() => navigate(`/report/ai/${latestSession.id}`)} style={{
-                          padding: "9px 16px", borderRadius: 10, border: `1px solid ${C.primary}`, background: C.white,
-                          color: C.primary, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.15s",
-                        }}
-                          onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
-                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-                        >AI 리포트</button>
-                      )}
-                      {latestSession && (
-                        <button onClick={() => navigate(`/report/final/${latestSession.id}`, { state: { sessionId: latestSession.id, role: "mentee" } })} style={{
-                          padding: "9px 16px", borderRadius: 10, border: "none", background: C.primaryGrad,
-                          color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                          boxShadow: "0 4px 12px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
-                        }}
-                          onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-                        >최종 리포트 →</button>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 레이더 + Fit-Gap */}
                 <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
 
                   <Card>
-                    <CardHeader label="CAPABILITY RADAR" title="역량 종합 분석" sub={hasRadar ? `AI 리포트 기반 · 최근 세션 (${qReports.length}문항)` : "AI 리포트 데이터 없음"} />
+                    <CardHeader label="CAPABILITY RADAR" title="역량 종합 분석" sub={hasRadar ? `최근 ${radarDataList.length}회 세션 평균` : "AI 리포트 데이터 없음"} />
                     {hasRadar ? (
                       <>
                         <div style={{ display: "flex", justifyContent: "center" }}>
@@ -914,7 +970,7 @@ export default function MenteeMyPage() {
                     {hasFitGap ? (
                       <>
                         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 16 }}>
-                          <DonutChart matched={fitGap.matched} total={fitGap.total} size={110} />
+                          <DonutChart matched={fitGap.matched} total={fitGap.total} size={140} />
                           <div style={{ flex: 1 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                               <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.primary }} />
@@ -949,41 +1005,16 @@ export default function MenteeMyPage() {
                   </Card>
                 </div>
 
-                {/* 점수 추이 + 문항별 점수 */}
-                <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}>
-
-                  <Card>
-                    <CardHeader label="SCORE TREND" title="세션별 AI 점수 추이"
-                      sub={sessionTrend.length >= 2 ? `${firstScore} → ${latestScore} · ${historyAll.length}회 세션` : "2회 이상 세션 완료 후 표시"}
-                    />
-                    <LineChart sessions={sessionTrend} />
-                  </Card>
-
-                  <Card>
-                    <CardHeader label="QUESTION SCORES" title="문항별 점수"
-                      sub={qReports.length > 0 ? `${latestSession?.title?.slice(0, 14) || "최근 세션"} · 10점 만점` : "최근 세션 기준"}
-                    />
-                    {qReports.length > 0 ? (
-                      <>
-                        <QuestionScoreBar questions={recentQuestions} />
-                        <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
-                          {[{ c: C.success, l: "우수 (7+)" }, { c: C.warning, l: "보통 (5~)" }, { c: C.danger, l: "보완 (~5)" }].map((x, i) => (
-                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <div style={{ width: 8, height: 8, borderRadius: 2, background: x.c }} />
-                              <span style={{ fontSize: 10, color: C.textMuted }}>{x.l}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <EmptyState
-                        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>}
-                        title="문항 데이터 없음"
-                        sub="AI 리포트 생성 후 문항별 점수가 표시됩니다"
-                      />
-                    )}
-                  </Card>
-                </div>
+                {/* 멘토 평점 추이 — 전체 너비 */}
+                <Card>
+                  <CardHeader label="MENTOR SCORE TREND" title="멘토 최종 평점 추이"
+                    sub={mentorScoreTrend.length >= 2
+                      ? `${mentorScoreTrend[0].ai}점 → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점 · ${mentorScoreTrend.length}회`
+                      : mentorScoreTrend.length === 1 ? "최종 리포트 1회 기준"
+                      : "멘토 최종 리포트 완성 후 표시됩니다"}
+                  />
+                  <LineChart sessions={mentorScoreTrend} />
+                </Card>
               </div>
             )}
 
@@ -1031,37 +1062,6 @@ export default function MenteeMyPage() {
               </Card>
             )}
 
-            {/* ══ 멘토 코멘트 탭 ══ */}
-            {activeTab === "comments" && (
-              <Card>
-                <CardHeader title="멘토 코멘트" sub="멘토가 남긴 피드백을 확인하세요" />
-                {comments.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    {comments.map((c, i) => (
-                      <div key={i} style={{ background: C.bg, borderRadius: 14, padding: "18px 20px" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.primaryGrad, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: C.white }}>{c.initials}</div>
-                            <div>
-                              <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{c.name}</p>
-                              <p style={{ fontSize: 11, color: C.textMuted }}>{c.session}</p>
-                            </div>
-                          </div>
-                          <span style={{ fontSize: 12, color: C.textMuted }}>{c.date}</span>
-                        </div>
-                        <p style={{ fontSize: 13, color: C.text, lineHeight: 1.8 }}>{c.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>}
-                    title="멘토 코멘트가 없어요"
-                    sub="면접 완료 후 멘토가 피드백을 남기면 여기에 표시됩니다"
-                  />
-                )}
-              </Card>
-            )}
 
             </div> {/* minHeight 래퍼 닫기 */}
 

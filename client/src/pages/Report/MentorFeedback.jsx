@@ -167,7 +167,8 @@ function buildMenteesFromQuestionReports(
   answerEvaluations = [],
   mentorFeedback = "",
   reportMentorScore = null,
-  menteeReportFeedbacks = []
+  menteeReportFeedbacks = [],
+  participantNameMap = {}
 ) {
   const groups = new Map();
   const { byAnswerId: evaluationsByAnswerId, byQuestionMentee: evaluationsByQuestionMentee } = buildEvaluationMap(answerEvaluations);
@@ -177,22 +178,51 @@ function buildMenteesFromQuestionReports(
       .filter((menteeKey) => menteeKey != null)
       .map(String)
   );
-  const isGroupReport = reportMenteeKeys.size > 1;
+  // answer_evaluations의 mentee_id로도 그룹 여부 판별 (AI가 question_report.mentee_id를 안 채운 경우 대비)
+  const evalMenteeIds = new Set(
+    answerEvaluations
+      .map(ev => ev?.mentee_id ?? ev?.menteeId)
+      .filter(Boolean)
+      .map(String)
+  );
+  const isGroupReport = reportMenteeKeys.size > 1 || evalMenteeIds.size > 1;
   const feedbackByMentee = new Map();
   menteeReportFeedbacks.forEach((feedback) => {
     const menteeId = feedback?.mentee_id ?? feedback?.menteeId;
     if (menteeId != null) feedbackByMentee.set(String(menteeId), feedback);
   });
 
+  // answer_evaluations에서 answerId → { menteeId, menteeName } 역방향 맵
+  const evalByAnswerId = new Map();
+  const menteeNameFromEval = new Map();
+  answerEvaluations.forEach(ev => {
+    const eid = ev?.mentee_id ?? ev?.menteeId;
+    const ename = ev?.mentee_name ?? ev?.menteeName;
+    const aid = ev?.answer_id ?? ev?.answerId;
+    if (eid != null) {
+      if (ename) menteeNameFromEval.set(String(eid), ename);
+      if (aid != null) evalByAnswerId.set(String(aid), { menteeId: eid, menteeName: ename });
+    }
+  });
+
   questionReports.forEach((report, index) => {
-    const menteeName = report.mentee_name || report.menteeName || "면접 참여자";
-    const menteeId = report.mentee_id ?? report.menteeId ?? menteeName ?? `session-${sessionId}`;
+    // question_report.mentee_id가 없으면 answer_id로 멘티 식별
+    const rawMenteeId = report.mentee_id ?? report.menteeId;
+    const answerId = String(report.answer_id ?? report.answerId ?? "");
+    const resolvedFromEval = !rawMenteeId && answerId ? evalByAnswerId.get(answerId) : null;
+    const menteeId = rawMenteeId ?? resolvedFromEval?.menteeId ?? report.mentee_name ?? report.menteeName ?? `session-${sessionId}`;
+    const menteeName = report.mentee_name
+      || report.menteeName
+      || resolvedFromEval?.menteeName
+      || menteeNameFromEval.get(String(menteeId))
+      || participantNameMap[String(menteeId)]
+      || `멘티 ${String(menteeId).startsWith("session-") ? index + 1 : menteeId}`;
     const menteeFeedback = feedbackByMentee.get(String(menteeId));
     if (!groups.has(menteeId)) {
       groups.set(menteeId, {
         menteeId,
         menteeName,
-        menteeTrack: menteeFeedback || reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
+        menteeTrack: (menteeFeedback || (!isGroupReport && reportStatus === "final")) ? "최종 리포트" : "1차 AI 리포트",
         mentorFeedback: menteeFeedback?.mentor_feedback ?? menteeFeedback?.mentorFeedback ?? (isGroupReport ? "" : mentorFeedback),
         mentorScore: menteeFeedback?.mentor_score ?? menteeFeedback?.mentorScore ?? (isGroupReport ? null : reportMentorScore),
         qnas: [],
@@ -260,7 +290,7 @@ export default function MentorFeedbackPage() {
   const [activeTemplate, setActiveTemplate] = useState(null);
   const [usesLocalFallbackReport, setUsesLocalFallbackReport] = useState(false);
 
-  const applyReportData = (data) => {
+  const applyReportData = (data, participantNameMap = {}) => {
     if (data?.__mock) {
       setUsesLocalFallbackReport(true);
     }
@@ -278,7 +308,8 @@ export default function MentorFeedbackPage() {
         data?.answer_evaluations || [],
         data?.mentor_feedback || "",
         data?.mentor_score ?? null,
-        data?.mentee_report_feedbacks || data?.menteeReportFeedbacks || []
+        data?.mentee_report_feedbacks || data?.menteeReportFeedbacks || [],
+        participantNameMap
       ));
     }
   };
@@ -298,6 +329,8 @@ export default function MentorFeedbackPage() {
 
         if (cancelled) return;
 
+        // 참여자 이름 맵 (user_id → name)
+        let participantNameMap = {};
         if (sessionData.status === "fulfilled" && sessionData.value) {
           const s = sessionData.value;
           setSessionInfo({
@@ -306,10 +339,15 @@ export default function MentorFeedbackPage() {
             duration: s.duration || "",
             type: s.sessionType || "1:1",
           });
+          (s.participants || []).forEach(p => {
+            if (p.user_id ?? p.userId) {
+              participantNameMap[String(p.user_id ?? p.userId)] = p.name;
+            }
+          });
         }
 
         if (reportData.status === "fulfilled" && reportData.value) {
-          applyReportData(reportData.value);
+          applyReportData(reportData.value, participantNameMap);
         } else {
           applyReportData(await createDemoFallbackReport(sessionId, "mentor"));
         }
@@ -323,7 +361,7 @@ export default function MentorFeedbackPage() {
     return () => { cancelled = true; };
   }, [sessionId]);
 
-  // Init per-mentee feedback state
+  // Init per-mentee feedback state + 이미 final인 멘티는 sentMentees에 추가
   useEffect(() => {
     setAllFeedbacks(prev => {
       const next = {};
@@ -345,6 +383,16 @@ export default function MentorFeedbackPage() {
           mentorScore: existing?.mentorScore ?? m.mentorScore ?? 4.0,
         };
       });
+      return next;
+    });
+    // 이미 최종 리포트가 전송된 멘티는 자동으로 sent 처리
+    setSentMentees(prev => {
+      const alreadyFinal = menteeList
+        .filter(m => m.menteeTrack === "최종 리포트")
+        .map(m => m.menteeId);
+      if (alreadyFinal.length === 0) return prev;
+      const next = new Set(prev);
+      alreadyFinal.forEach(id => next.add(id));
       return next;
     });
   }, [menteeList]);
@@ -657,8 +705,19 @@ export default function MentorFeedbackPage() {
           )}
         </div>
 
+        {/* 전송 완료 잠금 배너 */}
+        {currentSent && (
+          <div style={{ background: "#E1F5EE", border: `1px solid ${GREEN}60`, borderRadius: 12, padding: "14px 20px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 18, color: GREEN }}>✓</span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, color: GREEN, margin: 0 }}>이미 전송된 최종 리포트입니다</p>
+              <p style={{ fontSize: 12, color: "#444", marginTop: 2 }}>멘티에게 전달이 완료되어 수정할 수 없습니다.</p>
+            </div>
+          </div>
+        )}
+
         {/* Section 1: Per-question feedback */}
-        <div style={{ marginBottom: 8 }}>
+        <div style={{ marginBottom: 8, opacity: currentSent ? 0.55 : 1, pointerEvents: currentSent ? "none" : "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>1</div>
             <div>
@@ -676,7 +735,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Section 2: Overall score */}
-        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 16 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 16, opacity: currentSent ? 0.55 : 1, pointerEvents: currentSent ? "none" : "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>2</div>
             <div>
@@ -688,7 +747,7 @@ export default function MentorFeedbackPage() {
         </div>
 
         {/* Section 3: Total feedback */}
-        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 28 }}>
+        <div style={{ background: CARD, border: "1px solid #E9ECEF", borderRadius: 14, padding: "20px 24px", marginBottom: 28, opacity: currentSent ? 0.55 : 1, pointerEvents: currentSent ? "none" : "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: NAVY, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>3</div>
             <div>
@@ -752,18 +811,15 @@ export default function MentorFeedbackPage() {
               대시보드로 이동
             </button>
           )}
-          <button type="button" onClick={handleSendCurrent} disabled={isSending} style={{
+          <button type="button" onClick={handleSendCurrent} disabled={isSending || currentSent} style={{
             padding: "13px 28px", borderRadius: 11, border: "none",
-            background: isSending ? "#aaa" : NAVY, color: "white",
+            background: currentSent ? "#0CA678" : isSending ? "#aaa" : NAVY, color: "white",
             fontSize: 14, fontWeight: 700,
-            cursor: isSending ? "not-allowed" : "pointer",
+            cursor: (isSending || currentSent) ? "not-allowed" : "pointer",
             transition: "background 0.2s", whiteSpace: "nowrap",
+            opacity: currentSent ? 0.75 : 1,
           }}>
-            {isSending
-              ? "저장 중..."
-              : currentSent
-              ? "수정본 다시 저장"
-              : "수정본 저장 후 전송 →"}
+            {isSending ? "저장 중..." : currentSent ? "✓ 전송 완료" : "수정본 저장 후 전송 →"}
           </button>
         </div>
 

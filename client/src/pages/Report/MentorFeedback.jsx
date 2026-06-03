@@ -220,7 +220,7 @@ function buildMenteesFromQuestionReports(
       groups.set(menteeId, {
         menteeId,
         menteeName,
-        menteeTrack: menteeFeedback || reportStatus === "final" ? "최종 리포트" : "1차 AI 리포트",
+        menteeTrack: (menteeFeedback || (!isGroupReport && reportStatus === "final")) ? "최종 리포트" : "1차 AI 리포트",
         mentorFeedback: menteeFeedback?.mentor_feedback ?? menteeFeedback?.mentorFeedback ?? (isGroupReport ? "" : mentorFeedback),
         mentorScore: menteeFeedback?.mentor_score ?? menteeFeedback?.mentorScore ?? (isGroupReport ? null : reportMentorScore),
         qnas: [],

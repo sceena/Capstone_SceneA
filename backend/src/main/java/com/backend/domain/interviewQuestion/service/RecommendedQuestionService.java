@@ -28,7 +28,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.core.io.ClassPathResource;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -236,12 +238,20 @@ public class RecommendedQuestionService {
     }
 
     private JsonNode loadFallbackRecommendedQuestions() {
-        Path path = resolveFallbackJsonPath();
         try {
+            Path path = resolveFallbackJsonPath();
             return objectMapper.readTree(Files.readString(path)).path("recommended_questions");
-        } catch (IOException e) {
-            log.warn("Failed to load fallback question data. path={}", path, e);
-            throw new CustomException(ErrorCode.AI_SERVER_ERROR);
+        } catch (Exception e) {
+            log.info("Filesystem fallback.json not found or failed to load, trying classpath. reason={}", e.getMessage());
+            try {
+                ClassPathResource resource = new ClassPathResource("fallback.json");
+                try (InputStream is = resource.getInputStream()) {
+                    return objectMapper.readTree(is).path("recommended_questions");
+                }
+            } catch (IOException ex) {
+                log.error("Failed to load classpath fallback.json", ex);
+                throw new CustomException(ErrorCode.AI_SERVER_ERROR);
+            }
         }
     }
 

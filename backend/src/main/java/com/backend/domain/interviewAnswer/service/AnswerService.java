@@ -74,6 +74,7 @@ public class AnswerService {
         InterviewQuestion question = findQuestion(questionId, session);
         Member member = findMember(memberId);
         validateParticipant(member, session);
+        validateQuestionAnswerTarget(question, member);
 
         String key = uploadToS3(audio);
 
@@ -391,6 +392,13 @@ public class AnswerService {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
         if (!participantRepository.existsByInterviewSessionAndMember(session, member)) {
+            throw new CustomException(ErrorCode.ACCESS_DENIED);
+        }
+    }
+
+    private void validateQuestionAnswerTarget(InterviewQuestion question, Member member) {
+        Long candidateId = question.getCandidateId();
+        if (candidateId != null && !candidateId.equals(member.getId())) {
             throw new CustomException(ErrorCode.ACCESS_DENIED);
         }
     }

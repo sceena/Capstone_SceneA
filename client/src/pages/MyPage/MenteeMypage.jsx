@@ -137,18 +137,32 @@ function LineChart({ sessions }) {
 }
 
 /* ── 도넛 차트 ── */
-function DonutChart({ matched, total, size = 120 }) {
-  const r = 44, cx = size / 2, cy = size / 2;
+function DonutChart({ matched, total, size = 140 }) {
+  const r = Math.round(size * 0.38);
+  const cx = size / 2, cy = size / 2;
+  const strokeW = Math.round(size * 0.12);
   const circ = 2 * Math.PI * r;
   const pct = total > 0 ? matched / total : 0;
+  const filled = pct * circ;
+  const gap = circ - filled;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.dangerLight} strokeWidth="12" />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.primary} strokeWidth="12"
-        strokeDasharray={`${pct * circ} ${circ}`} strokeDashoffset={circ * 0.25}
-        strokeLinecap="round" style={{ transition: "stroke-dasharray 1s ease" }} />
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="18" fontWeight="800" fill={C.primary} fontFamily="'Noto Sans KR',sans-serif">{Math.round(pct * 100)}%</text>
-      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="9" fill={C.textMuted} fontFamily="'Noto Sans KR',sans-serif">충족률</text>
+      {/* 배경 링 (미충족) */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.dangerLight} strokeWidth={strokeW} />
+      {/* 채워진 링 (충족) — rotate(-90)으로 12시 방향 시작 */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.primary} strokeWidth={strokeW}
+        strokeDasharray={`${filled} ${gap}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`}
+        style={{ transition: "stroke-dasharray 0.8s ease" }} />
+      <text x={cx} y={cy + 6} textAnchor="middle" dominantBaseline="middle"
+        fontSize={Math.round(size * 0.16)} fontWeight="800" fill={C.primary}
+        fontFamily="'Noto Sans KR',sans-serif">
+        {Math.round(pct * 100)}%
+      </text>
+      <text x={cx} y={cy + Math.round(size * 0.24)} textAnchor="middle"
+        fontSize={Math.round(size * 0.08)} fill={C.textMuted}
+        fontFamily="'Noto Sans KR',sans-serif">충족률</text>
     </svg>
   );
 }
@@ -606,7 +620,14 @@ export default function MenteeMyPage() {
   });
 
   const displayName    = profile?.name ?? userName;
-  const sessionTrend   = [...historyAll].reverse().map(h => ({ ai: h.ai, date: h.date }));
+  // 멘토 최종 평점이 있는(final) 세션만, 오래된 순으로
+  const mentorScoreTrend = apiSessions
+    .filter(s => (s.reportStatus ?? s.report_status) === "final" && s.aiScore != null)
+    .reverse()
+    .map(s => ({
+      ai:   s.aiScore,
+      date: (s.scheduledAt ?? s.scheduled_at ?? "").slice(0, 10).replace(/-/g, "."),
+    }));
   const aiReport       = latestReport?.ai_report;
   const qReports       = aiReport?.question_reports || [];
   const fitGapRaw      = aiReport?.fit_gap;
@@ -737,7 +758,7 @@ export default function MenteeMyPage() {
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 0 }}>
                 {[
                   { l: "총 세션", v: `${historyAll.length}회` },
-                  { l: "최근 AI 점수", v: latestScore !== "-" ? `${latestScore}점` : "-" },
+                  { l: "멘토 평점", v: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-" },
                   { l: "최근 WPM", v: latestWpm !== "-" ? `${latestWpm}` : "-" },
                   { l: "Fit 충족률", v: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-" },
                   { l: "신청 이력", v: `${reservations.length}건` },
@@ -830,7 +851,7 @@ export default function MenteeMyPage() {
                 <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
                   {[
                     { label: "총 면접 횟수", value: `${historyAll.length}회`, sub: historyAll.length > 0 ? "면접 완료" : "면접 미완료", icon: "📋" },
-                    { label: "AI 점수 성장", value: latestScore !== "-" ? `${latestScore}점` : "-", sub: (latestScore !== "-" && firstScore !== "-" && latestScore !== firstScore) ? `${firstScore} → ${latestScore}` : "첫 세션 기준", accent: C.success },
+                    { label: "멘토 평점", value: mentorScoreTrend.length > 0 ? `${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${mentorScoreTrend[0].ai} → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}` : "최종 리포트 기준", accent: C.success },
                     { label: "최근 WPM", value: latestWpm !== "-" ? `${latestWpm}` : "-", sub: "최근 세션 기준", accent: C.primary },
                     { label: "Fit 충족률", value: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-", sub: hasFitGap ? `${fitGap.matched}/${fitGap.total} 충족` : "AI 리포트 기반", accent: C.warning },
                   ].map((s, i) => (
@@ -919,7 +940,7 @@ export default function MenteeMyPage() {
                     {hasFitGap ? (
                       <>
                         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 16 }}>
-                          <DonutChart matched={fitGap.matched} total={fitGap.total} size={110} />
+                          <DonutChart matched={fitGap.matched} total={fitGap.total} size={140} />
                           <div style={{ flex: 1 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                               <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.primary }} />
@@ -954,12 +975,15 @@ export default function MenteeMyPage() {
                   </Card>
                 </div>
 
-                {/* 세션별 AI 점수 추이 — 전체 너비 */}
+                {/* 멘토 평점 추이 — 전체 너비 */}
                 <Card>
-                  <CardHeader label="SCORE TREND" title="세션별 AI 점수 추이"
-                    sub={sessionTrend.length >= 2 ? `${firstScore} → ${latestScore} · ${historyAll.length}회 세션` : "2회 이상 세션 완료 후 표시"}
+                  <CardHeader label="MENTOR SCORE TREND" title="멘토 최종 평점 추이"
+                    sub={mentorScoreTrend.length >= 2
+                      ? `${mentorScoreTrend[0].ai}점 → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점 · ${mentorScoreTrend.length}회`
+                      : mentorScoreTrend.length === 1 ? "최종 리포트 1회 기준"
+                      : "멘토 최종 리포트 완성 후 표시됩니다"}
                   />
-                  <LineChart sessions={sessionTrend} />
+                  <LineChart sessions={mentorScoreTrend} />
                 </Card>
               </div>
             )}

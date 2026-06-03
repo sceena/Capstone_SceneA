@@ -51,8 +51,8 @@ public class RecommendedQuestionService {
     @Value("${ai.question-generation.allow-missing-resume-fallback:false}")
     private boolean allowMissingResumeFallback;
 
-    @Value("${app.demo-mode:${IS_DEMO_MODE:true}}")
-    private boolean demoMode;
+    private final boolean demoMode = true;
+
 
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;

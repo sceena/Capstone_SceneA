@@ -328,7 +328,11 @@ const normalizeStatus = s => String(s || "").toLowerCase();
 const getScheduledAt  = s => s.scheduledAt ?? s.scheduled_at ?? "";
 const getSessionTitle = s => s.title ?? (s.job_category ? `${s.job_category} 모의 면접` : "모의 면접");
 const getMentorName   = s => s.mentorName ?? s.mentor_name ?? "";
-const getSessionType  = s => s.sessionType ?? s.session_type ?? "1:1 면접";
+const getSessionType  = s => {
+  const maxP = Number(s.max_participants ?? s.maxParticipants ?? 1);
+  if (maxP > 1) return "그룹 면접";
+  return s.sessionType ?? s.session_type ?? "1:1 면접";
+};
 const toDateText      = v => v ? String(v).slice(5, 10).replace("-", ".") : "";
 const toTimeText      = v => v ? String(v).slice(11, 16) : "";
 const toScheduledTime = s => {

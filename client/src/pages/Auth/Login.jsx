@@ -57,32 +57,14 @@ const EyeIcon = ({ open }) => (
   </svg>
 );
 
-/* ── 로고 SVG ── */
-const LogoIcon = ({ size = 26, color = C.white }) => (
-  <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-    <circle cx="14" cy="14" r="2" fill={color}/>
-    {[0,45,90,135,180,225,270,315].map((deg, i) => {
-      const r = deg * Math.PI / 180;
-      return (
-        <line key={i}
-          x1={14 + 2.5 * Math.cos(r)} y1={14 + 2.5 * Math.sin(r)}
-          x2={14 + 10  * Math.cos(r)} y2={14 + 10  * Math.sin(r)}
-          stroke={color} strokeWidth="1.5" strokeLinecap="round"
-        />
-      );
-    })}
-    {[0,90,180,270].map((deg, i) => {
-      const r = deg * Math.PI / 180;
-      const mx = 14 + 7 * Math.cos(r), my = 14 + 7 * Math.sin(r);
-      const offR = r + Math.PI / 2;
-      return (
-        <g key={`b${i}`}>
-          <line x1={mx} y1={my} x2={mx + 3*Math.cos(offR)} y2={my + 3*Math.sin(offR)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/>
-          <line x1={mx} y1={my} x2={mx - 3*Math.cos(offR)} y2={my - 3*Math.sin(offR)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/>
-        </g>
-      );
-    })}
-  </svg>
+/* ── 브랜드 이미지 ── */
+const BrandMark = ({ size = 34 }) => (
+  <img
+    src="/meondori-logo.svg"
+    alt=""
+    aria-hidden="true"
+    style={{ width: size, height: size, objectFit: "contain", flexShrink: 0 }}
+  />
 );
 
 /* ============================================================
@@ -271,10 +253,10 @@ export default function Login() {
             display:"flex", alignItems:"center", gap:10,
             textDecoration:"none", position:"relative", zIndex:1,
           }}>
-            <LogoIcon size={26} color={C.white}/>
             <span style={{ fontSize:18, fontWeight:700, color:C.white, letterSpacing:"-0.3px" }}>
-              SceneA
+              면도리
             </span>
+            <BrandMark size={32}/>
           </Link>
 
           {/* 카피 */}
@@ -315,7 +297,7 @@ export default function Login() {
             fontSize:12, color:"rgba(255,255,255,0.3)",
             letterSpacing:"0.02em",
           }}>
-            © 2026 SceneA. Capstone Design Project.
+            © 2026 면도리. Capstone Design Project.
           </p>
         </div>
 

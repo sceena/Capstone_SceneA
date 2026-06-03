@@ -93,21 +93,6 @@ const availabilityToSlotConfig = (availability) => {
   };
 };
 
-/* ── 로고 ── */
-const LogoIcon = ({ size=26, color=C.white }) => (
-  <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-    <circle cx="14" cy="14" r="2" fill={color}/>
-    {[0,45,90,135,180,225,270,315].map((deg,i)=>{
-      const r=deg*Math.PI/180;
-      return <line key={i} x1={14+2.5*Math.cos(r)} y1={14+2.5*Math.sin(r)} x2={14+10*Math.cos(r)} y2={14+10*Math.sin(r)} stroke={color} strokeWidth="1.5" strokeLinecap="round"/>;
-    })}
-    {[0,90,180,270].map((deg,i)=>{
-      const r=deg*Math.PI/180,mx=14+7*Math.cos(r),my=14+7*Math.sin(r),o=r+Math.PI/2;
-      return <g key={i}><line x1={mx} y1={my} x2={mx+3*Math.cos(o)} y2={my+3*Math.sin(o)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/><line x1={mx} y1={my} x2={mx-3*Math.cos(o)} y2={my-3*Math.sin(o)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/></g>;
-    })}
-  </svg>
-);
-
 /* ── 헤더 ── */
 const Header = ({ userName, accessToken }) => {
   const navigate = useNavigate();
@@ -119,12 +104,8 @@ const Header = ({ userName, accessToken }) => {
     <header style={{ background: C.white, padding: "0 5%", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: C.primaryGrad, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>Scene<span style={{ color: C.navy }}>A</span></span>
+          <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>면도리</span>
+          <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
         </div>
         {/* 우측: 네비게이션 + 로그아웃 */}
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>

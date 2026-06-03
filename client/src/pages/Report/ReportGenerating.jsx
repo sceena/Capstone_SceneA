@@ -449,13 +449,9 @@ export default function ReportGeneratingPage() {
       {/* 헤더 — 대시보드와 동일한 흰 헤더 */}
       <header style={{ background: C.white, padding: "0 5%", position: "sticky", top: 0, zIndex: 100, boxShadow: `0 1px 0 ${C.border}, 0 2px 8px rgba(0,0,0,0.04)` }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: C.primaryGrad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-            </div>
-            <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>Scene<span style={{ color: C.primary }}>A</span></span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>면도리</span>
+            <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.success, animation: "pulse 1.2s ease-in-out infinite" }} />

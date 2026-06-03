@@ -1451,13 +1451,8 @@ export default function InterviewSession({ role = "mentee" }) {
           {/* 로고 + 상태 */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: "#F1F1F3", border: "1px solid #E5E5E5", color: "#202123", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
-                  <rect x="1" y="4" width="11" height="9" rx="1.5" fill="currentColor"/>
-                  <path d="M12 7.5l5-2.5v8l-5-2.5V7.5z" fill="currentColor"/>
-                </svg>
-              </div>
-              <span style={{ fontSize: 15, fontWeight: 800, color: "#202123", letterSpacing: "-0.03em" }}>Scene<span style={{ color: "#10A37F" }}>A</span></span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#202123", letterSpacing: "-0.03em" }}>면도리</span>
+              <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 30, height: 30, objectFit: "contain", flexShrink: 0 }} />
             </div>
             {isMentor && (
               <>

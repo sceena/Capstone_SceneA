@@ -38,19 +38,10 @@ const Header = ({ userName, accessToken, role }) => {
         height: 64, maxWidth: 1200, margin: "0 auto",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: C.primaryGrad,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 12px rgba(13,34,64,0.3)",
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-          </div>
           <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>
-            Scene<span style={{ color: C.primary }}>A</span>
+            면도리
           </span>
+          <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
         </div>
 
         {/* 우측: 네비게이션 + 로그아웃 */}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
 /* ============================================================
-   SceneA — 메인 홈 페이지  (pages/Home/index.jsx)
+   면도리 — 메인 홈 페이지  (pages/Home/index.jsx)
    딥 네이비 + 크림 컬러 시스템 / 반응형
    ============================================================ */
 
@@ -94,35 +94,14 @@ const GlobalStyle = () => (
   `}</style>
 );
 
-/* ── 로고 아이콘 SVG ── */
-const LogoIcon = ({ size = 28, color = C.white }) => (
-  <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-    <circle cx="14" cy="14" r="2" fill={color} />
-    {[0,45,90,135,180,225,270,315].map((deg, i) => {
-      const r = deg * Math.PI / 180;
-      const x1 = 14 + 2.5 * Math.cos(r), y1 = 14 + 2.5 * Math.sin(r);
-      const x2 = 14 + 10 * Math.cos(r), y2 = 14 + 10 * Math.sin(r);
-      return (
-        <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
-          stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-      );
-    })}
-    {[0,90,180,270].map((deg, i) => {
-      const r = deg * Math.PI / 180;
-      const mx = 14 + 7 * Math.cos(r), my = 14 + 7 * Math.sin(r);
-      const offR = r + Math.PI / 2;
-      return (
-        <g key={`branch-${i}`}>
-          <line x1={mx} y1={my}
-            x2={mx + 3 * Math.cos(offR)} y2={my + 3 * Math.sin(offR)}
-            stroke={color} strokeWidth="1.2" strokeLinecap="round" />
-          <line x1={mx} y1={my}
-            x2={mx - 3 * Math.cos(offR)} y2={my - 3 * Math.sin(offR)}
-            stroke={color} strokeWidth="1.2" strokeLinecap="round" />
-        </g>
-      );
-    })}
-  </svg>
+/* ── 브랜드 이미지 ── */
+const BrandMark = ({ size = 36, opacity = 1 }) => (
+  <img
+    src="/meondori-logo.svg"
+    alt=""
+    aria-hidden="true"
+    style={{ width: size, height: size, objectFit: "contain", flexShrink: 0, opacity }}
+  />
 );
 
 /* ── 헤더 ── */
@@ -152,13 +131,13 @@ const Header = () => {
           display: "flex", alignItems: "center", gap: 10,
           textDecoration: "none",
         }}>
-          <LogoIcon size={28} color={C.white} />
           <span style={{
             fontFamily: "'Noto Sans KR', sans-serif",
             fontWeight: 700, fontSize: 18, color: C.white, letterSpacing: "-0.3px",
           }}>
-            SceneA
+            면도리
           </span>
+          <BrandMark size={34}/>
         </Link>
 
         {/* 우측 버튼 */}
@@ -914,7 +893,7 @@ const MentorsSection = () => {
           현직자 멘토
         </h2>
         <p style={{ marginTop: 16, fontSize: 15, color: "rgba(255,255,255,0.5)", lineHeight: 1.7 }}>
-          SceneA와 함께한 멘티들의 이야기
+          면도리와 함께한 멘티들의 이야기
         </p>
       </div>
 
@@ -1059,7 +1038,7 @@ const ReviewsAndCTA = () => (
             },
             {
               initials: "김M", bg: "#145A32", name: "김민준", role: "토스 iOS 개발자 지원", stars: 4,
-              text: "SceneA 없었으면 면접 준비 방향 자체를 잘못 잡았을 것 같아요. AI가 제 답변의 논리 구조 문제를 짚어주고 멘토님이 개선 방향을 잡아줘서 단기간에 많이 성장했습니다.",
+              text: "면도리 없었으면 면접 준비 방향 자체를 잘못 잡았을 것 같아요. AI가 제 답변의 논리 구조 문제를 짚어주고 멘토님이 개선 방향을 잡아줘서 단기간에 많이 성장했습니다.",
             },
           ].map((r, i) => (
             <div key={i} style={{
@@ -1102,14 +1081,14 @@ const ReviewsAndCTA = () => (
         </div>
       </div>
 
-      {/* ── 오른쪽: Why SceneA ── */}
+      {/* ── 오른쪽: Why 면도리 ── */}
       <div className="fade-up" style={{ display: "flex", flexDirection: "column" }}>
         <p style={{
           fontSize: 12, fontWeight: 600, letterSpacing: "0.18em",
           color: C.mid, textTransform: "uppercase",
           marginBottom: 14,
         }}>
-          Why SceneA
+          Why 면도리
         </p>
         <h2 style={{
           fontSize: 28, fontWeight: 700, color: C.navy,
@@ -1118,7 +1097,7 @@ const ReviewsAndCTA = () => (
         }}>
           취준생이라면 꼭 알아야 할
           <br />
-          <span style={{ color: C.accent }}>SceneA를 써야 하는 이유</span>
+          <span style={{ color: C.accent }}>면도리를 써야 하는 이유</span>
         </h2>
         <p style={{ fontSize: 14, color: C.textSub, lineHeight: 1.7, marginBottom: 28 }}>
           혼자 반복하는 연습엔 한계가 있습니다. 데이터와 현직자 경험을 동시에 활용하세요.
@@ -1216,11 +1195,11 @@ const Footer = () => (
       flexWrap: "wrap", gap: 16,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <LogoIcon size={22} color="rgba(255,255,255,0.5)" />
-        <span style={{ fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>SceneA</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>면도리</span>
+        <BrandMark size={28} opacity={0.62}/>
       </div>
       <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
-        © 2026 SceneA. Capstone Design Project.
+        © 2026 면도리. Capstone Design Project.
       </p>
     </div>
   </footer>
@@ -1262,4 +1241,3 @@ export default function Home() {
     </>
   );
 }
-

@@ -497,13 +497,8 @@ function LoadingScreen({ onDone }) {
     <div style={{ minHeight: "100vh", background: BG, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
       {/* Animated logo */}
       <div style={{ marginBottom: 40 }}>
-        <div style={{ width: 72, height: 72, background: NAVY, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", animation: "pulse 1.5s ease-in-out infinite" }}>
-          <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-            <rect x="4" y="4" width="12" height="12" rx="2" fill="white" opacity="0.9" />
-            <rect x="20" y="4" width="12" height="12" rx="2" fill="white" opacity="0.6" />
-            <rect x="4" y="20" width="12" height="12" rx="2" fill="white" opacity="0.6" />
-            <rect x="20" y="20" width="12" height="12" rx="2" fill={GREEN} opacity="1" />
-          </svg>
+        <div style={{ width: 82, height: 82, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", animation: "pulse 1.5s ease-in-out infinite" }}>
+          <img src="/meondori-logo.svg" alt="면도리" style={{ width: 82, height: 82, objectFit: "contain" }} />
         </div>
         <h2 style={{ textAlign: "center", color: NAVY, fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>AI 면접 분석 리포트</h2>
         <p style={{ textAlign: "center", color: "#868E96", fontSize: 14, margin: "8px 0 0" }}>면접 데이터를 정밀 분석하고 있습니다</p>
@@ -527,14 +522,10 @@ function Header({ onExportWord, role }) {
     <header style={{ background: CARD, padding: "0 5%", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 1200, width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: PRIMARY_GRAD, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-          </div>
           <span style={{ fontSize: 17, fontWeight: 800, color: "#1A1B1E", letterSpacing: "-0.03em" }}>
-            Scene<span style={{ color: NAVY }}>A</span>
+            면도리
           </span>
+          <img src="/meondori-logo.svg" alt="" aria-hidden="true" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: "#868E96", marginLeft: 4 }}>/ AI 면접 분석 리포트</span>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: role === "mentor" ? "#E8EEF6" : "#E6FCF5", color: role === "mentor" ? NAVY : GREEN, marginLeft: 4 }}>
             {role === "mentor" ? "멘토 보기" : "멘티 보기"}

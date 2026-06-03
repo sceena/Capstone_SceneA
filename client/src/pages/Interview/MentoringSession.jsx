@@ -13,6 +13,7 @@ import { FaceMaskEffect, EMOJI_LIST } from "../../utils/faceMaskEffect";
 
 const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
 const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
+const USE_DEMO_MENTORING_REPORT = import.meta.env.VITE_USE_DEMO_MENTORING_REPORT !== "false";
 
 const NAVY  = "#0D2240";
 const GREEN = "#1D9E75";
@@ -33,6 +34,63 @@ function toFivePointScore(score) {
 
 function getReportMenteeId(report) {
   return report?.mentee_id ?? report?.menteeId ?? null;
+}
+
+function getMenteeUserId(mentee) {
+  return mentee?.user_id ?? mentee?.userId ?? mentee?.id ?? mentee?.menteeId ?? mentee?.memberId ?? null;
+}
+
+function getDemoCandidateKey(name = "") {
+  if (name.includes("지아")) return "최지아";
+  if (name.includes("윤진")) return "정윤진";
+  if (name.includes("동현")) return "강동현";
+  return null;
+}
+
+function getDemoCandidateReport(reports = [], mentee, fallbackIndex = 0) {
+  const menteeName = mentee?.name || mentee?.menteeName || "";
+  const candidateKey = getDemoCandidateKey(menteeName);
+  if (candidateKey) {
+    const matched = reports.find(report => report?.candidate_name === candidateKey);
+    if (matched) return matched;
+  }
+  return reports[fallbackIndex % Math.max(reports.length, 1)] || null;
+}
+
+async function createDemoMentoringReport(sessionId, mentee, fallbackIndex = 0) {
+  const response = await fetch("/demo-fallback-report.json", { cache: "no-store" });
+  if (!response.ok) return null;
+
+  const data = await response.json();
+  const candidateReport = getDemoCandidateReport(data?.reports || [], mentee, fallbackIndex);
+  if (!candidateReport) return null;
+
+  const report = JSON.parse(JSON.stringify(candidateReport));
+  const sessionNumber = Number(sessionId) || report.session_id || 1;
+  const menteeId = getMenteeUserId(mentee);
+  const menteeName = mentee?.name || report.candidate_name || "멘티";
+  const questionReports = report.ai_report?.question_reports || [];
+
+  report.id = sessionNumber;
+  report.session_id = sessionNumber;
+  report.report_status = "first";
+  report.candidate_name = menteeName;
+  report.__mock = true;
+  report.ai_report = {
+    ...(report.ai_report || {}),
+    session_id: sessionNumber,
+    question_reports: questionReports.map((questionReport, index) => ({
+      ...questionReport,
+      question_id: questionReport.question_id ?? index + 1,
+      answer_id: questionReport.answer_id ?? `demo-${menteeId ?? fallbackIndex}-${questionReport.question_id ?? index + 1}`,
+      mentee_id: menteeId,
+      mentee_name: menteeName,
+      ai_model_name: questionReport.ai_model_name || "demo-fallback",
+      prompt_version: questionReport.prompt_version || "demo_v1",
+    })),
+  };
+
+  return report;
 }
 
 function getReportAnswerId(report) {
@@ -492,37 +550,75 @@ export default function MentoringSessionPage() {
     getSession(sessionId)
       .then(data => {
         const sessionMentees = (data.participants || []).filter(p => p.role !== 'mentor');
-        if (sessionMentees.length > 0) setMenteeList(sessionMentees.map(m => ({ ...m, report: null })));
+        if (sessionMentees.length > 0) {
+          const normalizedMentees = sessionMentees.map(m => ({ ...m, report: null }));
+          setMenteeList(normalizedMentees);
+          const currentUserId = user?.id ?? user?.user_id ?? user?.userId;
+          if (String(user?.role || "").toLowerCase().includes("mentee") && currentUserId != null) {
+            const myIndex = normalizedMentees.findIndex(mentee => String(getMenteeUserId(mentee)) === String(currentUserId));
+            if (myIndex >= 0) setCurrentMenteeIdx(myIndex);
+          }
+        }
         setSession(prev => ({ ...prev, ...data, mentor: data.mentor || prev.mentor }));
       })
       .catch(() => {});
-    getSessionReport(sessionId)
-      .then(data => {
-        if (data?.ai_report) setReportData(data);
-      })
-      .catch(() => {});
-  }, [sessionId]);
+    if (!USE_DEMO_MENTORING_REPORT) {
+      getSessionReport(sessionId)
+        .then(data => {
+          if (data?.ai_report) setReportData(data);
+        })
+        .catch(() => {});
+    }
+  }, [sessionId, user?.id, user?.role, user?.userId, user?.user_id]);
 
   /* ── 멘티별 리포트 로드 (그룹 공유용) ── */
   const loadReportForUser = useCallback((userId) => {
     if (!userId || !sessionId) return;
     if (menteeReportsRef.current[String(userId)]) return; // 이미 로드됨
+
+    const targetIndex = menteeList.findIndex(mentee => String(getMenteeUserId(mentee)) === String(userId));
+    const targetMentee = targetIndex >= 0 ? menteeList[targetIndex] : null;
+
+    if (USE_DEMO_MENTORING_REPORT && targetMentee) {
+      createDemoMentoringReport(sessionId, targetMentee, targetIndex)
+        .then(data => {
+          if (data) {
+            menteeReportsRef.current[String(userId)] = data;
+            setMenteeReports(prev => ({ ...prev, [String(userId)]: data }));
+            setReportData(prev => prev ?? data);
+          }
+        })
+        .catch(() => {
+          getSessionReport(sessionId, userId)
+            .then(data => {
+              if (data) {
+                menteeReportsRef.current[String(userId)] = data;
+                setMenteeReports(prev => ({ ...prev, [String(userId)]: data }));
+                setReportData(prev => prev ?? data);
+              }
+            })
+            .catch(() => {});
+        });
+      return;
+    }
+
     getSessionReport(sessionId, userId)
       .then(data => {
         if (data) {
           menteeReportsRef.current[String(userId)] = data;
           setMenteeReports(prev => ({ ...prev, [String(userId)]: data }));
+          setReportData(prev => prev ?? data);
         }
       })
       .catch(() => {});
-  }, [sessionId]);
+  }, [sessionId, menteeList]);
 
   /* ── 멘티 네비게이션: 멘토가 전환 시 전원에게 sync ── */
   const handleMenteeNav = useCallback((newIdx) => {
     const clamped = Math.max(0, Math.min(newIdx, menteeList.length - 1));
     setCurrentMenteeIdx(clamped);
     const target = menteeList[clamped];
-    const targetUserId = target?.user_id ?? target?.userId ?? target?.id;
+    const targetUserId = getMenteeUserId(target);
     if (targetUserId) loadReportForUser(targetUserId);
     socketRef.current?.emit("reportSync", { index: clamped, menteeUserId: targetUserId });
   }, [menteeList, loadReportForUser]);
@@ -531,10 +627,10 @@ export default function MentoringSessionPage() {
   useEffect(() => {
     if (menteeList.length === 0) return;
     menteeList.forEach(m => {
-      const uid = m.user_id ?? m.userId ?? m.id;
+      const uid = getMenteeUserId(m);
       if (uid) loadReportForUser(uid);
     });
-  }, [menteeList.length]); // eslint-disable-line
+  }, [menteeList, loadReportForUser]);
 
   /* ── 코멘트 핸들러 ── */
   const handleCommentChange = useCallback((questionId, value) => {
@@ -807,11 +903,13 @@ export default function MentoringSessionPage() {
 
   // 현재 보여줄 리포트: 멘티별 캐시 우선, 없으면 전체 리포트
   const currentMenteeUserId = currentMentee
-    ? String(currentMentee.user_id ?? currentMentee.userId ?? currentMentee.id ?? "")
+    ? String(getMenteeUserId(currentMentee) ?? "")
     : null;
   const activeReport = (currentMenteeUserId && menteeReports[currentMenteeUserId])
     ? menteeReports[currentMenteeUserId]
     : reportData;
+  const activeAiReport = activeReport?.ai_report;
+  const activeOverallScore = toFivePointScore(activeAiReport?.overall_score ?? activeReport?.total_score);
 
   const getPeerName = (peerId) => {
     // 멘티 목록에서 먼저 확인
@@ -1017,15 +1115,15 @@ export default function MentoringSessionPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
               <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>AI 종합 점수</span>
               <span style={{ fontSize: 16, fontWeight: 800, color: GREEN }}>
-                {toFivePointScore(reportData?.ai_report?.overall_score) || "--"}
+                {activeOverallScore || "--"}
                 <span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/5</span>
               </span>
             </div>
             <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height: 4 }}>
-              <div style={{ width: `${Math.min(toFivePointScore(reportData?.ai_report?.overall_score) * 20, 100)}%`, height: 4, borderRadius: 99, background: GREEN, transition: "width 0.5s ease" }} />
+              <div style={{ width: `${Math.min(activeOverallScore * 20, 100)}%`, height: 4, borderRadius: 99, background: GREEN, transition: "width 0.5s ease" }} />
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
-              {(reportData?.ai_report?.fit_gap?.missing_requirements || []).slice(0, 3).map((req, i) => {
+              {(activeAiReport?.fit_gap?.missing_requirements || []).slice(0, 3).map((req, i) => {
                 const label = parseFitGapItem(req).requirement;
                 return <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "rgba(226,75,74,0.18)", color: "#E24B4A", fontWeight: 600 }}>{label.length > 14 ? label.slice(0, 14) + "…" : label}</span>;
               })}

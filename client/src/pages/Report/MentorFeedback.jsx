@@ -96,9 +96,11 @@ function QuestionCard({ qna, feedbacks, onChange }) {
             placeholder="AI 평가를 현직자 관점에서 어떻게 수정했는지 근거를 작성해주세요."
             style={{
               width: "100%", borderRadius: 8, border: "1px solid #D1D5DB",
+              background: "#FFFFFF", boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
               padding: "10px 12px", fontSize: 13, lineHeight: 1.7, color: "#333",
               fontFamily: "inherit", resize: "none", overflow: "hidden", outline: "none",
               minHeight: 72, transition: "border-color 0.15s", boxSizing: "border-box",
+              colorScheme: "light",
             }}
             onFocus={(e) => (e.target.style.borderColor = GREEN)}
             onBlur={(e) => (e.target.style.borderColor = "#D1D5DB")}

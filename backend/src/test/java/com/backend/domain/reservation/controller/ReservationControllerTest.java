@@ -2,8 +2,10 @@ package com.backend.domain.reservation.controller;
 
 import com.backend.domain.reservation.dto.request.ReservationAcceptRequest;
 import com.backend.domain.reservation.dto.request.ReservationRequest;
+import com.backend.domain.reservation.dto.response.MenteeReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationAcceptResponse;
 import com.backend.domain.reservation.dto.response.ReservationResponse;
+import com.backend.domain.reservation.dto.response.ReservationSummaryResponse;
 import com.backend.domain.reservation.entity.ReservationStatus;
 import com.backend.domain.reservation.service.ReservationService;
 import com.backend.global.exception.CustomException;
@@ -19,10 +21,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -44,10 +48,74 @@ class ReservationControllerTest {
     private ReservationService reservationService;
 
     @Test
+    void 멘토_예약요청_목록_조회_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTOR");
+        ReservationSummaryResponse response = new ReservationSummaryResponse(
+                1L, null, 2L, "김멘티", 3L, LocalDateTime.now(),
+                ReservationStatus.PENDING, "자소서 내용", "꼬리질문 피드백 부탁드려요", LocalDateTime.now()
+        );
+
+        given(reservationService.getMentorReservations(any(), eq(null))).willReturn(List.of(response));
+
+        mockMvc.perform(get("/api/reservation/mentor")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].mentee_name").value("김멘티"))
+                .andExpect(jsonPath("$[0].request_note").value("꼬리질문 피드백 부탁드려요"))
+                .andExpect(jsonPath("$[0].resume_content").value("자소서 내용"));
+    }
+
+    @Test
+    void 멘토_예약요청_목록_인증없이_401() throws Exception {
+        mockMvc.perform(get("/api/reservation/mentor"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 멘티_예약목록_조회_성공_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(2L, "MENTEE");
+        MenteeReservationResponse response = new MenteeReservationResponse(
+                1L, null, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.PENDING, LocalDateTime.now()
+        );
+
+        given(reservationService.getMenteeReservations(any(), eq(null))).willReturn(List.of(response));
+
+        mockMvc.perform(get("/api/reservation/mentee")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].mentor_name").value("박멘토"))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+    }
+
+    @Test
+    void 멘티_예약목록_status_필터_조회_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(2L, "MENTEE");
+        MenteeReservationResponse response = new MenteeReservationResponse(
+                1L, 5L, 10L, "박멘토", 3L, LocalDateTime.now(), ReservationStatus.CONFIRMED, LocalDateTime.now()
+        );
+
+        given(reservationService.getMenteeReservations(any(), eq(ReservationStatus.CONFIRMED))).willReturn(List.of(response));
+
+        mockMvc.perform(get("/api/reservation/mentee")
+                        .param("status", "CONFIRMED")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].session_id").value(5))
+                .andExpect(jsonPath("$[0].status").value("CONFIRMED"));
+    }
+
+    @Test
+    void 멘티_예약목록_인증없이_401() throws Exception {
+        mockMvc.perform(get("/api/reservation/mentee"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void 예약_신청_성공_201() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        ReservationRequest request = new ReservationRequest(3L, 7L, 12L);
-        ReservationResponse response = new ReservationResponse(55L, 3L, 7L, ReservationStatus.PENDING, LocalDateTime.now());
+        ReservationRequest request = new ReservationRequest(3L, 7L, 42L, 12L);
+        ReservationResponse response = new ReservationResponse(55L, 3L, 7L, 42L, ReservationStatus.PENDING, LocalDateTime.now());
 
         given(reservationService.createReservation(any(), any())).willReturn(response);
 
@@ -64,7 +132,7 @@ class ReservationControllerTest {
 
     @Test
     void 예약_신청_인증없이_401() throws Exception {
-        ReservationRequest request = new ReservationRequest(3L, 7L, 12L);
+        ReservationRequest request = new ReservationRequest(3L, 7L, 42L, 12L);
 
         mockMvc.perform(post("/api/reservation/request")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -75,7 +143,7 @@ class ReservationControllerTest {
     @Test
     void 예약_신청_이미예약된슬롯_409() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        ReservationRequest request = new ReservationRequest(3L, 7L, 12L);
+        ReservationRequest request = new ReservationRequest(3L, 7L, 42L, 12L);
 
         given(reservationService.createReservation(any(), any()))
                 .willThrow(new CustomException(ErrorCode.RESERVATION_SLOT_TAKEN));
@@ -91,7 +159,7 @@ class ReservationControllerTest {
     void 예약_수락_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(2L, "MENTOR");
         ReservationAcceptRequest request = new ReservationAcceptRequest(true);
-        ReservationAcceptResponse response = new ReservationAcceptResponse(55L, ReservationStatus.CONFIRMED, LocalDateTime.now());
+        ReservationAcceptResponse response = new ReservationAcceptResponse(55L, 42L, ReservationStatus.CONFIRMED, LocalDateTime.now());
 
         given(reservationService.acceptReservation(any(), eq(55L), any())).willReturn(response);
 

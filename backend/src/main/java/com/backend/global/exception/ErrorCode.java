@@ -16,6 +16,7 @@ public enum ErrorCode {
 
     // 인증
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
+    OAUTH_EMAIL_CONFLICT(HttpStatus.CONFLICT, "해당 이메일은 이미 일반 로그인으로 가입되어 있습니다. 이메일 로그인을 이용해주세요."),
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
     WITHDRAWN_MEMBER(HttpStatus.UNAUTHORIZED, "탈퇴한 회원입니다."),
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 회원입니다."),
@@ -42,7 +43,13 @@ public enum ErrorCode {
 
     // AI 분석 / 리포트
     ANALYSIS_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 분석 결과입니다."),
-    REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 리포트입니다.");
+    REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 리포트입니다."),
+    REPORT_NOT_READY(HttpStatus.CONFLICT, "STT 변환이 완료된 뒤 리포트를 생성할 수 있습니다."),
+    ANSWER_EVALUATION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 답변 평가입니다."),
+    AI_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "AI 서버 호출에 실패했습니다."),
+
+    // 파일
+    INVALID_FILE(HttpStatus.BAD_REQUEST, "이미지 파일만 업로드할 수 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

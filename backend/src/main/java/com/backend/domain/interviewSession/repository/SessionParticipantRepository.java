@@ -17,6 +17,8 @@ public interface SessionParticipantRepository extends JpaRepository<SessionParti
 
     Page<SessionParticipant> findAllByMember(Member member, Pageable pageable);
 
+    List<SessionParticipant> findAllByMember(Member member);
+
     Page<SessionParticipant> findAllByMemberAndInterviewSession_Status(Member member, SessionStatus status, Pageable pageable);
 
     Optional<SessionParticipant> findByInterviewSessionAndMember(InterviewSession interviewSession, Member member);

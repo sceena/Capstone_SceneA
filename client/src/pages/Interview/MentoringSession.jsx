@@ -1,409 +1,391 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { io } from "socket.io-client";
+import { Device } from "mediasoup-client";
 import useAuthStore from "../../store/authStore";
+import { getAuthUser } from "../../store/authStore";
+import { getSession, getSessionReport, updateSessionStatus } from "../../api/sessions";
+import {
+  getStreamVideoDeviceId,
+  openInterviewStream,
+} from "../../utils/mediaDevices";
+import { FaceMaskEffect, EMOJI_LIST } from "../../utils/faceMaskEffect";
 
-// ─── 상수 ────────────────────────────────────────────────────────
-const NAVY = "#0D2240";
+const MEDIA_SERVER = import.meta.env.VITE_MEDIA_SERVER_URL || "http://localhost:4000";
+const MEDIA_SERVER_PATH = import.meta.env.VITE_MEDIA_SERVER_PATH || '/socket.io';
+
+const NAVY  = "#0D2240";
 const GREEN = "#1D9E75";
+const BG    = "#F0F4F8";
 
-// ─── 더미 세션 데이터 (실제 연동 시 API로 교체) ─────────────────
-const MOCK_SESSION = {
-  sessionId: "sess-001",
-  title: "OOO 멘토 개인 멘토링 진행",
-  date: "2026.04.02",
-  time: "19:00",
-  mentor: { id: "m1", name: "박지훈", role: "Moderator", avatar: null },
-  mentee: { id: "u1", name: "김민준", avatar: null },
-  report: {
-    title: "AI 정밀 진단 리포트",
-    menteeName: "김민준",
-    date: "2026.04.02",
-    totalScore: 85,
-    bestMoment: {
-      quote: "결국 벤치마킹 데이터를 정리해 팀원들을 설득했습니다.",
-      reason: "수치 기반 결과 제시 + 행동-결과 인과관계가 명확해 설득력이 높아요.",
-    },
-    worstMoment: {
-      quote: "어... 그러니까 제 생각에는 그게 좀...",
-      reason: "만연체 + 경험 없는 이론 나열. 구체적 사례로 전환 필요해요.",
-    },
-    scriptSegments: [
-      { text: "네, 저는 지난 캡스톤 프로젝트에서 팀원 간 역할 분담 문제로 갈등이 생긴 경험이 있습니다.", type: "S" },
-      { text: " 어... 그러니까 제 생각에는 그게 좀...", type: "BAD" },
-      { text: " 백엔드 팀원과 API 설계 방향에서 의견 충돌이 있었습니다.", type: "T" },
-      { text: " 저는 상대방의 입장을 먼저 들어보자는 생각으로...", type: "A" },
-    ],
-    fitGap: [
-      { label: "Java / Spring Boot", pct: 92 },
-      { label: "대규모 트래픽 경험", pct: 78 },
-      { label: "CI/CD · DevOps", pct: 51 },
-      { label: "MSA · 분산 시스템", pct: 44 },
-      { label: "데이터 파이프라인", pct: 22 },
-    ],
-    qnas: [
-      {
-        id: "q1",
-        question: "Q1 · 기술적 도전과 해결 과정을 말해주세요.",
-        aiScore: 4.0,
-        transcript: "카카오 인턴 당시 결제 서버 피크 타임 응답 지연 문제를 Redis 캐싱으로 해결, 응답 시간 340ms 달성.",
-      },
-      {
-        id: "q2",
-        question: "Q2 · 협업 중 의견 충돌 경험이 있나요?",
-        aiScore: 5.0,
-        transcript: "REST API 설계 방향 충돌 → 장단점 문서화 → 팀 합의 도출 → API 일관성 향상.",
-      },
-      {
-        id: "q3",
-        question: "Q3 · MSA 서비스 간 통신 방식을 설명해보세요.",
-        aiScore: 2.0,
-        transcript: "MSA는 서비스들이 독립적으로 운영되고 REST, 메시지 큐, gRPC 방법이 있는데 저는 주로 REST를 많이 써봤고...",
-      },
-    ],
-  },
-};
+function parseFitGapItem(item) {
+  const [requirementPart, detailPart] = item.split(" / ");
+  const requirement = requirementPart?.replace(/^요구사항:\s*/, "") || item;
+  const detail = detailPart?.replace(/^근거\(([^)]+)\):\s*/, "$1 · ")?.replace(/^부족 근거:\s*/, "") || "";
+  return { requirement, detail };
+}
 
-// ─── 세그먼트 색상 맵 ─────────────────────────────────────────────
-const SEGMENT_STYLE = {
-  S:   { bg: "#DBEAFE", color: "#1E40AF" },
-  T:   { bg: "#D1FAE5", color: "#065F46" },
-  A:   { bg: "#FEF3C7", color: "#92400E" },
-  R:   { bg: "#FCE7F3", color: "#9D174D" },
-  BAD: { bg: "transparent", color: "#E24B4A", underline: true },
-};
+function toFivePointScore(score) {
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(1, Math.min(5, numeric > 5 ? numeric / 2 : numeric));
+}
 
-// ─── 아바타 컴포넌트 ─────────────────────────────────────────────
+function getReportMenteeId(report) {
+  return report?.mentee_id ?? report?.menteeId ?? null;
+}
+
+function getReportAnswerId(report) {
+  return report?.answer_id ?? report?.answerId ?? null;
+}
+
+function getReportQuestionId(report) {
+  return report?.question_id ?? report?.questionId ?? null;
+}
+
+function getReportCommentKey(report, index = 0) {
+  const answerId = getReportAnswerId(report);
+  if (answerId != null) return `answer-${answerId}`;
+  return `question-${getReportQuestionId(report) ?? "unknown"}-mentee-${getReportMenteeId(report) ?? "session"}-${index}`;
+}
+
+function filterReportsForMentee(questionReports = [], currentMentee, answerEvaluations = []) {
+  const menteeId = currentMentee?.user_id ?? currentMentee?.userId
+    ?? currentMentee?.id ?? currentMentee?.menteeId ?? currentMentee?.memberId;
+  if (menteeId == null) return questionReports;
+
+  // 1차: question_report.mentee_id 직접 매칭
+  const byMenteeId = questionReports.filter(
+    r => String(getReportMenteeId(r) ?? "") === String(menteeId)
+  );
+  if (byMenteeId.length > 0) return byMenteeId;
+
+  // 2차: AI가 mentee_id를 안 채운 경우 → answer_evaluations로 answer_id 매핑
+  if (answerEvaluations.length > 0) {
+    const menteeAnswerIds = new Set(
+      answerEvaluations
+        .filter(ev => String(ev.mentee_id ?? ev.menteeId ?? "") === String(menteeId))
+        .map(ev => String(ev.answer_id ?? ev.answerId ?? ""))
+        .filter(Boolean)
+    );
+    if (menteeAnswerIds.size > 0) {
+      const byAnswerId = questionReports.filter(r => {
+        const aid = String(r.answer_id ?? r.answerId ?? "");
+        return aid && menteeAnswerIds.has(aid);
+      });
+      if (byAnswerId.length > 0) return byAnswerId;
+    }
+  }
+
+  // 3차: 1:1 세션(모든 report에 mentee_id 없음) → 전체 반환
+  return questionReports.every(r => !getReportMenteeId(r)) ? questionReports : [];
+}
+
+function pickReportExtremes(reports = []) {
+  if (reports.length === 0) return { bestReport: null, worstReport: null };
+  return reports.reduce((acc, report) => {
+    const score = toFivePointScore(report?.score);
+    const bestScore = acc.bestReport ? toFivePointScore(acc.bestReport.score) : -Infinity;
+    const worstScore = acc.worstReport ? toFivePointScore(acc.worstReport.score) : Infinity;
+    return {
+      bestReport: score > bestScore ? report : acc.bestReport,
+      worstReport: score < worstScore ? report : acc.worstReport,
+    };
+  }, { bestReport: null, worstReport: null });
+}
+
+// ─── 아바타 ─────────────────────────────────────────────────────
 function Avatar({ name, size = 36, bg = NAVY, fontSize = 12 }) {
-  const initials = name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: bg,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "white",
-        fontWeight: 700,
-        fontSize,
-        flexShrink: 0,
-        fontFamily: "inherit",
-      }}
-    >
+    <div style={{ width: size, height: size, borderRadius: "50%", background: bg, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize, flexShrink: 0 }}>
       {initials}
     </div>
   );
 }
 
-// ─── Fit-Gap Bar ─────────────────────────────────────────────────
-function FitBar({ label, pct }) {
-  const color = pct >= 70 ? GREEN : pct >= 45 ? "#F59E0B" : "#E24B4A";
+// ─── 비디오 타일 ─────────────────────────────────────────────────
+function VideoTile({ stream, label, mirror = false, muted = false, isSpeaking = false, camOff = false }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || !stream) return;
+    video.srcObject = stream;
+    video.muted = muted;
+    video.play().catch(() => {});
+  }, [stream, muted]);
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-        <span style={{ color: "#444" }}>{label}</span>
-        <span style={{ fontWeight: 700, color }}>{pct}%</span>
-      </div>
-      <div style={{ background: "#E8E5DF", borderRadius: 99, height: 6 }}>
-        <div style={{ width: `${pct}%`, height: 6, borderRadius: 99, background: color }} />
-      </div>
-    </div>
-  );
-}
-
-// ─── 비디오 피드 박스 ─────────────────────────────────────────────
-function VideoBox({ participant, isLocal = false }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        background: "#0A0A0A",
-        position: "relative",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderBottom: "1px solid #222",
-        overflow: "hidden",
-        minHeight: 0,
-      }}
-    >
-      {/* 실제 구현 시 <video> 태그로 교체 */}
-      {/* <video ref={videoRef} autoPlay playsInline muted={isLocal} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> */}
-      <Avatar
-        name={participant.name}
-        size={56}
-        bg={isLocal ? "#1E3A5F" : "#3A5F3A"}
-        fontSize={18}
-      />
-
-      {/* 이름 레이블 */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 10,
-          left: 10,
-          background: "rgba(0,0,0,0.65)",
-          color: "white",
-          fontSize: 11,
-          padding: "3px 8px",
-          borderRadius: 5,
-          fontWeight: 600,
-        }}
-      >
-        {participant.name}
-      </div>
-
-      {/* 역할 뱃지 */}
-      {participant.role && (
-        <div
-          style={{
-            position: "absolute",
-            top: 10,
-            right: 10,
-            background: GREEN,
-            color: "white",
-            fontSize: 9,
-            padding: "2px 7px",
-            borderRadius: 4,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-          }}
-        >
-          {participant.role}
+    <div style={{ flex: 1, minHeight: 0, position: "relative", background: "#0A0A0A", overflow: "hidden", border: `2px solid ${isSpeaking ? GREEN : "transparent"}`, transition: "border-color 0.3s" }}>
+      <video ref={ref} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: mirror ? "scaleX(-1)" : "none", display: camOff ? "none" : "block" }} />
+      {camOff && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Avatar name={label || "?"} size={48} bg="#1E3A5F" fontSize={16} />
         </div>
       )}
-
-      {/* 마이크 상태 아이콘 */}
-      <div style={{ position: "absolute", bottom: 10, right: 10 }}>
-        {isLocal ? (
-          /* 음소거 아이콘 */
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2">
-            <line x1="1" y1="1" x2="23" y2="23" />
-            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-            <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-          </svg>
-        ) : (
-          /* 마이크 활성 아이콘 */
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-          </svg>
-        )}
-      </div>
+      {label && (
+        <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(0,0,0,0.65)", borderRadius: 5, padding: "2px 8px" }}>
+          <span style={{ color: "#fff", fontSize: 11, fontWeight: 600 }}>{label}</span>
+        </div>
+      )}
+      {isSpeaking && (
+        <div style={{ position: "absolute", top: 6, right: 6, display: "flex", alignItems: "flex-end", gap: 2 }}>
+          {[3, 6, 4, 8, 4].map((h, i) => (
+            <div key={i} style={{ width: 2, background: GREEN, borderRadius: 2, height: h, animation: `speakPulse 0.5s ease-in-out ${i * 0.08}s infinite` }} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── 공유 리포트 뷰 (좌측 패널) ─────────────────────────────────
-function SharedReport({ report }) {
+const D = {
+  bg:     "#F4F7FA",
+  card:   "#ffffff",
+  card2:  "#F8FAFC",
+  border: "rgba(0,0,0,0.07)",
+  text:   "#1a1b1e",
+  muted:  "#6B7280",
+  dim:    "#9CA3AF",
+  shadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
+};
+
+// ─── 공유 리포트 뷰 ──────────────────────────────────────────────
+function SharedReport({ report, isMentor = false, currentMentee = null, mentorComments = {}, onCommentChange, answerEvaluations = [] }) {
+  if (!report?.ai_report) {
+    return (
+      <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(13,34,64,0.06)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1.2s linear infinite" }}>
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+          </div>
+          <p style={{ color: D.muted, fontSize: 14 }}>AI 리포트 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const aiReport = report.ai_report;
+  const questionReports = aiReport?.question_reports || [];
+  const visibleQuestionReports = filterReportsForMentee(questionReports, currentMentee, answerEvaluations);
+
+  if (currentMentee && visibleQuestionReports.length === 0 && questionReports.length > 0) {
+    return (
+      <div style={{ background: D.bg, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ color: D.muted, fontSize: 14, marginBottom: 6 }}>{currentMentee.name} 멘티의 답변 데이터를 찾을 수 없어요</p>
+          <p style={{ color: D.dim, fontSize: 12 }}>AI 리포트가 처리 중이거나 데이터가 없습니다</p>
+        </div>
+      </div>
+    );
+  }
+
+  const topSummary = aiReport?.top_summary;
+  const { bestReport, worstReport } = pickReportExtremes(visibleQuestionReports);
+  const best = bestReport
+    ? { question_id: bestReport.question_id, question: bestReport.question, reason: bestReport.reasoning }
+    : topSummary?.best_question;
+  const worst = worstReport
+    ? { question_id: worstReport.question_id, question: worstReport.question, reason: worstReport.reasoning }
+    : topSummary?.worst_question;
+  const fitGap = aiReport?.fit_gap;
+  const overallScore = toFivePointScore(aiReport?.overall_score ?? report?.total_score ?? 0);
+  const scoreColor = overallScore >= 4 ? GREEN : overallScore >= 3 ? "#F59E0B" : "#C0392B";
+
+  const commentedCount = visibleQuestionReports.filter((qr, index) => (mentorComments[getReportCommentKey(qr, index)] || "").trim().length > 0).length;
   return (
-    <div
-      style={{
-        flex: 1,
-        background: "#EDEBE6",
-        overflowY: "auto",
-        padding: "24px",
-        scrollBehavior: "smooth",
-      }}
-    >
-      <div
-        style={{
-          background: "white",
-          borderRadius: 14,
-          padding: "28px 32px",
-          maxWidth: 680,
-          margin: "0 auto",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-        }}
-      >
-        {/* 리포트 헤더 */}
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#111", marginBottom: 6 }}>
-            {report.title}
-          </h2>
-          <p style={{ fontSize: 13, color: "#888" }}>
-            {report.menteeName} 멘티 · {report.date}
-          </p>
-        </div>
+    <div style={{ background: D.bg, minHeight: "100%", padding: "22px 20px", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif" }}>
+      <div style={{ maxWidth: 700, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
 
-        {/* 발화 효율성 */}
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 11, color: "#999", fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>
-            발화 효율성 분석
-          </p>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 8,
-            }}
-          >
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>종합 진단 점수</span>
-            <span style={{ fontSize: 20, fontWeight: 700, color: "#111" }}>
-              {report.totalScore} / 100
-            </span>
+        {/* ── META ── */}
+        <div style={{ background: D.card, borderRadius: 16, padding: "20px 24px", boxShadow: D.shadow }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            {["1차 AI 리포트", "분석 완료"].map((t, i) => (
+              <span key={i} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: `1px solid ${i === 0 ? "rgba(29,158,117,0.35)" : "rgba(0,0,0,0.1)"}`, color: i === 0 ? GREEN : D.muted, fontWeight: 600 }}>{t}</span>
+            ))}
           </div>
-          <div style={{ background: "#E8E5DF", borderRadius: 99, height: 8 }}>
-            <div
-              style={{
-                width: `${report.totalScore}%`,
-                height: 8,
-                borderRadius: 99,
-                background: "#111",
-                transition: "width 1s ease",
-              }}
-            />
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: D.text, margin: "0 0 4px", letterSpacing: "-0.02em" }}>AI 면접 분석 리포트</h2>
+          <p style={{ color: D.muted, fontSize: 12, margin: "0 0 14px" }}>세션 #{report?.session_id} · 종합 점수 <strong style={{ color: D.text }}>{overallScore} / 5</strong></p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: D.text }}>AI 종합 점수</span>
+            <span style={{ fontSize: 22, fontWeight: 800, color: scoreColor }}>{overallScore}<span style={{ fontSize: 12, color: D.dim, fontWeight: 400 }}> / 5</span></span>
+          </div>
+          <div style={{ background: "#E9ECEF", borderRadius: 99, height: 7 }}>
+            <div style={{ width: `${Math.min(overallScore * 20, 100)}%`, height: 7, borderRadius: 99, background: scoreColor, transition: "width 1s ease" }} />
           </div>
         </div>
 
-        {/* 결정적 승부처 */}
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 11, color: "#999", fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>
-            결정적 승부처
-          </p>
-          <div
-            style={{
-              background: "#F0FDF4",
-              border: "1px solid #BBF7D0",
-              borderRadius: 10,
-              padding: "14px 16px",
-              marginBottom: 10,
-            }}
-          >
-            <p style={{ fontSize: 10, fontWeight: 700, color: GREEN, letterSpacing: 1, marginBottom: 6 }}>
-              BEST MOMENT
-            </p>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#111", lineHeight: 1.6, marginBottom: 6 }}>
-              "{report.bestMoment.quote}"
-            </p>
-            <p style={{ fontSize: 12, color: "#166534", lineHeight: 1.5 }}>
-              {report.bestMoment.reason}
-            </p>
-          </div>
-          <div
-            style={{
-              background: "#FFF5F5",
-              border: "1px solid #FED7D7",
-              borderRadius: 10,
-              padding: "14px 16px",
-            }}
-          >
-            <p style={{ fontSize: 10, fontWeight: 700, color: "#E24B4A", letterSpacing: 1, marginBottom: 6 }}>
-              WORST MOMENT
-            </p>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#111", lineHeight: 1.6, marginBottom: 6 }}>
-              "{report.worstMoment.quote}"
-            </p>
-            <p style={{ fontSize: 12, color: "#9B1C1C", lineHeight: 1.5 }}>
-              {report.worstMoment.reason}
-            </p>
-          </div>
-        </div>
-
-        {/* 지능형 스크립트 분석 */}
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 11, color: "#999", fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>
-            지능형 스크립트 분석
-          </p>
-          <p style={{ fontSize: 14, lineHeight: 2 }}>
-            {report.scriptSegments.map((seg, i) => {
-              const style = SEGMENT_STYLE[seg.type] || {};
+        {/* ── KEY QUESTIONS ── */}
+        <div style={{ background: D.card, borderRadius: 16, padding: "18px 22px", boxShadow: D.shadow }}>
+          <p style={{ fontSize: 10, fontWeight: 800, color: D.dim, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 4px" }}>KEY QUESTIONS</p>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: D.text, margin: "0 0 14px" }}>AI가 뽑은 핵심 문항</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {[{ type: "best", question: best, qreport: bestReport }, { type: "worst", question: worst, qreport: worstReport }].map(({ type, question, qreport }) => {
+              const isBest = type === "best";
+              const accent = isBest ? GREEN : "#E53E3E";
+              const accentBg = isBest ? "#F0FDF4" : "#FFF5F5";
+              const accentBorder = isBest ? "rgba(29,158,117,0.2)" : "rgba(229,62,62,0.2)";
               return (
-                <span
-                  key={i}
-                  style={{
-                    background: style.bg || "transparent",
-                    color: style.color || "#333",
-                    borderRadius: style.bg && style.bg !== "transparent" ? 3 : 0,
-                    padding: style.bg && style.bg !== "transparent" ? "1px 3px" : 0,
-                    borderBottom: style.underline ? "2px solid #E24B4A" : "none",
-                  }}
-                >
-                  {seg.text}
-                </span>
+                <div key={type} style={{ background: D.card2, border: `1px solid ${accentBorder}`, borderTop: `3px solid ${accent}`, borderRadius: 12, padding: 14 }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 6px" }}>{isBest ? "BEST 문항" : "WORST 문항"}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: D.text, lineHeight: 1.5, margin: "0 0 8px" }}>{question?.question || "정보 없음"}</p>
+                  {qreport?.answer && (
+                    <p style={{ fontSize: 11, color: D.muted, lineHeight: 1.7, background: D.bg, borderRadius: 8, padding: "8px 10px", margin: "0 0 8px" }}>
+                      {qreport.answer.length > 90 ? qreport.answer.slice(0, 90) + "…" : qreport.answer}
+                    </p>
+                  )}
+                  {question?.reason && (
+                    <div style={{ background: accentBg, borderRadius: 8, padding: "8px 10px" }}>
+                      <p style={{ fontSize: 11, color: D.text, lineHeight: 1.6, margin: 0 }}>{question.reason}</p>
+                    </div>
+                  )}
+                </div>
               );
             })}
-          </p>
-          <p
-            style={{
-              fontSize: 12,
-              color: "#AAA",
-              textAlign: "center",
-              marginTop: 16,
-              paddingTop: 16,
-              borderTop: "1px dashed #E0DDD8",
-            }}
-          >
-            아래로 스크롤하면 더 많은 결과를 확인할 수 있어요
-          </p>
+          </div>
         </div>
 
-        {/* Fit-Gap */}
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 11, color: "#999", fontWeight: 700, letterSpacing: 1, marginBottom: 12 }}>
-            핏-갭 (Fit-Gap) 역량 분석
-          </p>
-          {report.fitGap.map((item) => (
-            <FitBar key={item.label} label={item.label} pct={item.pct} />
-          ))}
-        </div>
-
-        {/* Q&A */}
-        <div>
-          <p style={{ fontSize: 11, color: "#999", fontWeight: 700, letterSpacing: 1, marginBottom: 12 }}>
-            Q&A 스크립트 요약
-          </p>
-          {report.qnas.map((qna) => {
-            const scoreColor = qna.aiScore >= 4 ? GREEN : qna.aiScore >= 3 ? "#F59E0B" : "#E24B4A";
-            return (
-              <div
-                key={qna.id}
-                style={{
-                  padding: "12px 0",
-                  borderBottom: "1px solid #FAF8F4",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    gap: 12,
-                    marginBottom: 6,
-                  }}
-                >
-                  <p style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{qna.question}</p>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: scoreColor,
-                      whiteSpace: "nowrap",
-                      background: `${scoreColor}15`,
-                      padding: "2px 9px",
-                      borderRadius: 99,
-                    }}
-                  >
-                    AI {qna.aiScore.toFixed(1)}
-                  </span>
+        {/* ── FIT-GAP ── */}
+        <div style={{ background: D.card, borderRadius: 16, padding: "18px 22px", boxShadow: D.shadow }}>
+          <p style={{ fontSize: 10, fontWeight: 800, color: D.dim, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 4px" }}>FIT-GAP</p>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: D.text, margin: "0 0 14px" }}>채용 요구사항 대비 역량 분석</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            {[
+              { title: "충족한 요구사항", items: fitGap?.matched_requirements || [], tone: "matched" },
+              { title: "부족한 요구사항", items: fitGap?.missing_requirements || [], tone: "missing" },
+            ].map(({ title, items, tone }) => {
+              const isMatched = tone === "matched";
+              const accent = isMatched ? GREEN : "#E53E3E";
+              const bg = isMatched ? "#F0FDF4" : "#FFF5F5";
+              const border = isMatched ? "rgba(29,158,117,0.2)" : "rgba(229,62,62,0.2)";
+              return (
+                <div key={tone} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 12, padding: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: D.text, margin: 0 }}>{title}</p>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: accent, background: "#fff", borderRadius: 99, padding: "2px 8px", border: `1px solid ${border}` }}>{items.length}개</span>
+                  </div>
+                  {items.map((item, idx) => {
+                    const parsed = parseFitGapItem(item);
+                    return (
+                      <div key={idx} style={{ background: "#fff", borderRadius: 8, padding: "7px 10px", marginBottom: idx < items.length - 1 ? 6 : 0, display: "flex", gap: 8, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: accent, flexShrink: 0, marginTop: 6 }} />
+                        <div>
+                          <p style={{ fontSize: 11, fontWeight: 600, color: D.text, margin: parsed.detail ? "0 0 3px" : 0 }}>{parsed.requirement}</p>
+                          {parsed.detail && <p style={{ fontSize: 10, color: D.muted, lineHeight: 1.5, margin: 0 }}>{parsed.detail}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <p style={{ fontSize: 12, color: "#666", lineHeight: 1.7 }}>
-                  {qna.transcript}
-                </p>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          {(fitGap?.recommendations || []).length > 0 && (
+            <div style={{ background: D.card2, border: `1px solid ${D.border}`, borderRadius: 10, padding: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: D.text, margin: "0 0 10px" }}>추천 보완 방향</p>
+              {fitGap.recommendations.map((item, idx) => (
+                <div key={idx} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: idx < fitGap.recommendations.length - 1 ? 8 : 0 }}>
+                  <span style={{ width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg,#0D2240,#1B4F7A)", color: "white", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{idx + 1}</span>
+                  <p style={{ fontSize: 12, color: D.muted, lineHeight: 1.7, margin: 0 }}>{item}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* ── QUESTION REPORTS ── */}
+        <div style={{ background: D.card, borderRadius: 16, padding: "18px 22px", boxShadow: D.shadow }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 800, color: D.dim, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 4px" }}>QUESTION REPORTS</p>
+              <h3 style={{ fontSize: 15, fontWeight: 800, color: D.text, margin: 0 }}>전체 Q&A 답변 분석</h3>
+            </div>
+            {isMentor && visibleQuestionReports.length > 0 && (
+              <span style={{ fontSize: 11, color: commentedCount === visibleQuestionReports.length ? GREEN : D.muted, fontWeight: 700, background: commentedCount === visibleQuestionReports.length ? "#F0FDF4" : D.card2, padding: "4px 12px", borderRadius: 99, border: `1px solid ${commentedCount === visibleQuestionReports.length ? "rgba(29,158,117,0.3)" : D.border}` }}>
+                코멘트 {commentedCount}/{visibleQuestionReports.length}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {visibleQuestionReports.map((qr, i) => {
+              const commentKey = getReportCommentKey(qr, i);
+              const worstIndex = worstReport ? visibleQuestionReports.indexOf(worstReport) : -1;
+              const worstKey = worstReport ? getReportCommentKey(worstReport, worstIndex) : null;
+              const isBad = commentKey === worstKey;
+              const score = toFivePointScore(qr.score);
+              const scColor = score >= 4 ? GREEN : score >= 3 ? "#F59E0B" : "#E53E3E";
+              const hasComment = (mentorComments[commentKey] || "").trim().length > 0;
+              return (
+                <div key={commentKey} style={{ background: D.card2, border: `1px solid ${D.border}`, borderLeft: `3px solid ${isBad ? "#E53E3E" : GREEN}`, borderRadius: 12, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: D.text, lineHeight: 1.55, margin: "0 0 4px" }}>Q{i + 1} · {qr.question}</p>
+                      {isBad && <span style={{ fontSize: 10, color: "#E53E3E", background: "#FFF5F5", padding: "2px 8px", borderRadius: 99, fontWeight: 700, border: "1px solid rgba(229,62,62,0.2)" }}>보완 필요</span>}
+                    </div>
+                    <div style={{ flexShrink: 0, textAlign: "right" }}>
+                      <span style={{ display: "inline-flex", gap: 1 }}>
+                        {[1,2,3,4,5].map(n => <span key={n} style={{ fontSize: 13, color: n <= Math.round(score) ? "#F59E0B" : "#E5E7EB" }}>★</span>)}
+                      </span>
+                      <p style={{ fontSize: 11, color: scColor, fontWeight: 700, margin: "2px 0 0" }}>AI {score}</p>
+                    </div>
+                  </div>
+                  <div style={{ background: "#fff", borderRadius: 8, padding: "10px 12px", marginBottom: 10, border: `1px solid ${D.border}` }}>
+                    <p style={{ fontSize: 9, fontWeight: 700, color: D.dim, letterSpacing: "0.08em", margin: "0 0 5px", textTransform: "uppercase" }}>답변</p>
+                    <p style={{ fontSize: 12, color: "#495057", lineHeight: 1.8, margin: 0 }}>{qr.answer || "답변 내용 없음"}</p>
+                  </div>
+                  {qr.reasoning && (
+                    <div style={{ background: "#EFF6FF", borderRadius: 8, padding: "10px 12px", marginBottom: 10, borderLeft: "2px solid #3B82F6" }}>
+                      <p style={{ fontSize: 9, fontWeight: 700, color: "#3B82F6", letterSpacing: "0.08em", margin: "0 0 4px", textTransform: "uppercase" }}>평가 근거</p>
+                      <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.75, margin: 0 }}>{qr.reasoning}</p>
+                    </div>
+                  )}
+                  {(qr.strengths?.length > 0 || qr.improvements?.length > 0) && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                      {qr.strengths?.length > 0 && (
+                        <div style={{ background: "#F0FDF4", borderRadius: 8, padding: 10, border: "1px solid rgba(29,158,117,0.15)" }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: GREEN, margin: "0 0 5px" }}>강점</p>
+                          {qr.strengths.map((s, j) => <p key={j} style={{ fontSize: 11, color: "#374151", lineHeight: 1.6, margin: "0 0 3px" }}>· {s}</p>)}
+                        </div>
+                      )}
+                      {qr.improvements?.length > 0 && (
+                        <div style={{ background: "#FFF5F5", borderRadius: 8, padding: 10, border: "1px solid rgba(229,62,62,0.15)" }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: "#E53E3E", margin: "0 0 5px" }}>개선점</p>
+                          {qr.improvements.map((s, j) => <p key={j} style={{ fontSize: 11, color: "#374151", lineHeight: 1.6, margin: "0 0 3px" }}>· {s}</p>)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {isMentor && (
+                    <div style={{ borderTop: `1px solid ${D.border}`, paddingTop: 10 }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: hasComment ? GREEN : D.dim, margin: "0 0 6px", display: "flex", alignItems: "center", gap: 4 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        멘토 코멘트 {hasComment ? "✓" : ""}
+                      </p>
+                      <textarea
+                        value={mentorComments[commentKey] || ""}
+                        onChange={e => onCommentChange(commentKey, e.target.value)}
+                        placeholder="이 답변에 대한 코멘트를 입력해주세요..."
+                        style={{
+                          width: "100%", minHeight: 68, borderRadius: 8,
+                          border: `1px solid ${hasComment ? "rgba(29,158,117,0.4)" : "#D1D5DB"}`,
+                          background: hasComment ? "#F0FDF4" : "#fff",
+                          padding: "9px 12px", fontSize: 12, color: D.text,
+                          fontFamily: "inherit", lineHeight: 1.6, resize: "vertical",
+                          outline: "none", transition: "border-color 0.15s, background 0.15s",
+                          boxSizing: "border-box",
+                        }}
+                        onFocus={e => { e.target.style.borderColor = GREEN; }}
+                        onBlur={e => { e.target.style.borderColor = hasComment ? "rgba(29,158,117,0.4)" : "#D1D5DB"; }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
       </div>
     </div>
   );
@@ -411,451 +393,767 @@ function SharedReport({ report }) {
 
 // ─── 메인 페이지 ─────────────────────────────────────────────────
 export default function MentoringSessionPage() {
-  const navigate = useNavigate();
-  const { sessionId } = useParams(); // /session/:sessionId
-  const { user } = useAuthStore(); // { role: 'mentor' | 'mentee', name: '...' }
+  const navigate   = useNavigate();
+  const { sessionId } = useParams();
+  const { user }   = useAuthStore();
 
-  const [session] = useState(MOCK_SESSION);
-  const [elapsed, setElapsed] = useState(0);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCamOn, setIsCamOn] = useState(true);
-  const [isSharing, setIsSharing] = useState(true);
+  const [session, setSession]   = useState({ mentor: { name: "" }, title: "", date: "", time: "" });
+  const [reportData, setReportData] = useState(null);
+  // 멘티별 리포트 캐시 { [userId]: reportData }
+  const [menteeReports, setMenteeReports] = useState({});
+  const menteeReportsRef = useRef({});
+  const [elapsed, setElapsed]   = useState(0);
+  const [isMicOn, setIsMicOn]   = useState(true);
+  const [isCamOn, setIsCamOn]   = useState(true);
+  const [isFaceMaskOn, setIsFaceMaskOn] = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState(EMOJI_LIST[0].emoji);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const faceMaskRef = useRef(null);
+  const originalTrackRef = useRef(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [menteeSessionDone, setMenteeSessionDone] = useState(false);
+
+  const [menteeList, setMenteeList]         = useState([]);
+  const [currentMenteeIdx, setCurrentMenteeIdx] = useState(0);
+
+  /* 멘토 코멘트 */
+  const [mentorComments, setMentorComments] = useState({});
 
   const timerRef = useRef(null);
 
-  // 세션 타이머
+  /* ── WebRTC refs ── */
+  const localStreamRef      = useRef(null);
+  const socketRef           = useRef(null);
+  const deviceRef           = useRef(null);
+  const sendTransportRef    = useRef(null);
+  const recvTransportRef    = useRef(null);
+  const videoProducerRef    = useRef(null);
+  const audioProducerRef    = useRef(null);
+  const consumersRef        = useRef(new Map());
+  const audioCtxRef         = useRef(null);
+  const localAnalyserRef    = useRef(null);
+  const peerAnalysersRef    = useRef({});
+  const peersRef            = useRef({});
+  const pendingProducersRef = useRef([]);
+  const recvTransportReadyRef = useRef(false);
+
+  const [peerIds, setPeerIds]               = useState([]);
+  const [localMediaStream, setLocalMediaStream] = useState(null);
+  const [audioLevels, setAudioLevels]       = useState({});
+  const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+  const [peerMuteStates, setPeerMuteStates] = useState({}); // peerId → true(음소거)
+
+  /* ── 드로잉 ── */
+  const [drawMode, setDrawMode]   = useState(false);
+  const [drawTool, setDrawTool]   = useState("pen");
+  const [drawColor, setDrawColor] = useState("#FFD700");
+  const canvasRef          = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const isDrawingRef       = useRef(false);
+
+  const getPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
+  };
+  const startDraw = (e) => {
+    if (!drawMode) return;
+    e.preventDefault();
+    isDrawingRef.current = true;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const pos = getPos(e, canvas);
+    if (drawTool === "eraser") { ctx.globalCompositeOperation = "destination-out"; }
+    else { ctx.globalCompositeOperation = "source-over"; ctx.strokeStyle = drawColor; ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.lineJoin = "round"; }
+    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+  };
+  const draw = (e) => {
+    if (!drawMode || !isDrawingRef.current) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const pos = getPos(e, canvas);
+    if (drawTool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.beginPath(); ctx.arc(pos.x, pos.y, 16, 0, Math.PI * 2); ctx.fill(); }
+    else { ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+  };
+  const stopDraw  = () => { isDrawingRef.current = false; };
+  const clearCanvas = () => { const c = canvasRef.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); };
+  const initCanvas = useCallback((node) => {
+    if (!node) return;
+    canvasRef.current = node;
+    const parent = node.parentElement;
+    node.width  = parent.clientWidth;
+    node.height = parent.clientHeight;
+  }, []);
+
+  /* ── 세션 & 리포트 로드 ── */
   useEffect(() => {
-    timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    getSession(sessionId)
+      .then(data => {
+        const sessionMentees = (data.participants || []).filter(p => p.role !== 'mentor');
+        if (sessionMentees.length > 0) setMenteeList(sessionMentees.map(m => ({ ...m, report: null })));
+        setSession(prev => ({ ...prev, ...data, mentor: data.mentor || prev.mentor }));
+      })
+      .catch(() => {});
+    getSessionReport(sessionId)
+      .then(data => {
+        if (data?.ai_report) setReportData(data);
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  /* ── 멘티별 리포트 로드 (그룹 공유용) ── */
+  const loadReportForUser = useCallback((userId) => {
+    if (!userId || !sessionId) return;
+    if (menteeReportsRef.current[String(userId)]) return; // 이미 로드됨
+    getSessionReport(sessionId, userId)
+      .then(data => {
+        if (data) {
+          menteeReportsRef.current[String(userId)] = data;
+          setMenteeReports(prev => ({ ...prev, [String(userId)]: data }));
+        }
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  /* ── 멘티 네비게이션: 멘토가 전환 시 전원에게 sync ── */
+  const handleMenteeNav = useCallback((newIdx) => {
+    const clamped = Math.max(0, Math.min(newIdx, menteeList.length - 1));
+    setCurrentMenteeIdx(clamped);
+    const target = menteeList[clamped];
+    const targetUserId = target?.user_id ?? target?.userId ?? target?.id;
+    if (targetUserId) loadReportForUser(targetUserId);
+    socketRef.current?.emit("reportSync", { index: clamped, menteeUserId: targetUserId });
+  }, [menteeList, loadReportForUser]);
+
+  /* ── 멘티 목록 확정 시 모든 멘티 리포트 프리로드 ── */
+  useEffect(() => {
+    if (menteeList.length === 0) return;
+    menteeList.forEach(m => {
+      const uid = m.user_id ?? m.userId ?? m.id;
+      if (uid) loadReportForUser(uid);
+    });
+  }, [menteeList.length]); // eslint-disable-line
+
+  /* ── 코멘트 핸들러 ── */
+  const handleCommentChange = useCallback((questionId, value) => {
+    setMentorComments(prev => ({ ...prev, [questionId]: value }));
+  }, []);
+
+  /* ── 미디어 소비 ── */
+  const consumeProducer = useCallback((producerId, peerId, kind) => {
+    return new Promise((resolve) => {
+      const socket = socketRef.current;
+      const device = deviceRef.current;
+      const recvTransport = recvTransportRef.current;
+      if (!socket || !device || !recvTransport) { resolve(); return; }
+      socket.emit("consume", { producerId, rtpCapabilities: device.rtpCapabilities }, async (res) => {
+        if (res.error) { resolve(); return; }
+        try {
+          const consumer = await recvTransport.consume({ id: res.id, producerId: res.producerId, kind: res.kind, rtpParameters: res.rtpParameters });
+          consumersRef.current.set(consumer.id, consumer);
+          if (!peersRef.current[peerId]) peersRef.current[peerId] = new MediaStream();
+          peersRef.current[peerId].addTrack(consumer.track);
+          setPeerIds(prev => prev.includes(peerId) ? [...prev] : [...prev, peerId]);
+          if (consumer.track.kind === 'audio') {
+            try {
+              if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+              const analyser = audioCtxRef.current.createAnalyser();
+              analyser.fftSize = 256;
+              audioCtxRef.current.createMediaStreamSource(peersRef.current[peerId]).connect(analyser);
+              peerAnalysersRef.current[peerId] = analyser;
+            } catch {}
+            consumer.on('producerpause', () => setPeerMuteStates(prev => ({ ...prev, [peerId]: true })));
+            consumer.on('producerresume', () => setPeerMuteStates(prev => ({ ...prev, [peerId]: false })));
+            if (consumer.producerPaused) setPeerMuteStates(prev => ({ ...prev, [peerId]: true }));
+          }
+          socket.emit("resumeConsumer", { consumerId: consumer.id }, () => {});
+        } catch {}
+        resolve();
+      });
+    });
+  }, []);
+
+  /* ── WebRTC 초기화 ── */
+  useEffect(() => {
+    const user = getAuthUser();
+    const token = user?.accessToken;
+    if (!token) return;
+    let isCancelled = false;
+    let socket;
+
+    const init = async () => {
+      const preferredCameraId = localStorage.getItem('preferredCameraId');
+      const media = await openInterviewStream(preferredCameraId);
+      const localStream = media.stream;
+      const actualDeviceId = getStreamVideoDeviceId(localStream);
+      if (actualDeviceId) localStorage.setItem('preferredCameraId', actualDeviceId);
+      else if (preferredCameraId) localStorage.removeItem('preferredCameraId');
+      if (isCancelled) { localStream.getTracks().forEach(t => t.stop()); return; }
+      localStreamRef.current = localStream;
+      setLocalMediaStream(localStream);
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        const analyser = audioCtxRef.current.createAnalyser();
+        analyser.fftSize = 256;
+        audioCtxRef.current.createMediaStreamSource(localStream).connect(analyser);
+        localAnalyserRef.current = analyser;
+      } catch {}
+
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current   = [];
+
+      socket = io(MEDIA_SERVER, { path: MEDIA_SERVER_PATH, withCredentials: true });
+      socketRef.current = socket;
+
+      socket.emit("join", { sessionId, token }, async (res) => {
+        if (isCancelled || res.error) return;
+        const { rtpCapabilities, existingProducers } = res;
+        const device = new Device();
+        try { await device.load({ routerRtpCapabilities: rtpCapabilities }); } catch { return; }
+        if (isCancelled) return;
+        deviceRef.current = device;
+
+        socket.emit("createTransport", { direction: "send" }, async (sendRes) => {
+          if (isCancelled || sendRes.error) return;
+          const sendTransport = device.createSendTransport(sendRes);
+          sendTransportRef.current = sendTransport;
+          sendTransport.on("connect", ({ dtlsParameters }, cb, errback) => {
+            socket.emit("connectTransport", { transportId: sendTransport.id, dtlsParameters }, r => r.error ? errback(new Error(r.error)) : cb());
+          });
+          sendTransport.on("produce", ({ kind, rtpParameters }, cb, errback) => {
+            socket.emit("produce", { transportId: sendTransport.id, kind, rtpParameters }, r => r.error ? errback(new Error(r.error)) : cb({ id: r.producerId }));
+          });
+          const videoTrack = localStream.getVideoTracks()[0];
+          if (videoTrack) try { videoProducerRef.current = await sendTransport.produce({ track: videoTrack }); } catch {}
+          const audioTrack = localStream.getAudioTracks()[0];
+          if (audioTrack) try { audioProducerRef.current = await sendTransport.produce({ track: audioTrack }); } catch {}
+        });
+
+        socket.emit("createTransport", { direction: "recv" }, async (recvRes) => {
+          if (isCancelled || recvRes.error) return;
+          const recvTransport = device.createRecvTransport(recvRes);
+          recvTransportRef.current = recvTransport;
+          recvTransport.on("connect", ({ dtlsParameters }, cb, errback) => {
+            socket.emit("connectTransport", { transportId: recvTransport.id, dtlsParameters }, r => r.error ? errback(new Error(r.error)) : cb());
+          });
+          for (const { producerId, peerId, kind } of existingProducers) {
+            if (isCancelled) return;
+            await consumeProducer(producerId, peerId, kind);
+          }
+          recvTransportReadyRef.current = true;
+          for (const pending of pendingProducersRef.current) {
+            if (isCancelled) break;
+            await consumeProducer(pending.producerId, pending.peerId, pending.kind);
+          }
+          pendingProducersRef.current = [];
+        });
+      });
+
+      socket.on("newProducer", ({ producerId, peerId, kind }) => {
+        if (isCancelled) return;
+        if (!recvTransportReadyRef.current) pendingProducersRef.current.push({ producerId, peerId, kind });
+        else consumeProducer(producerId, peerId, kind);
+      });
+      socket.on("peerLeft", ({ peerId }) => {
+        delete peersRef.current[peerId];
+        delete peerAnalysersRef.current[peerId];
+        setPeerIds(prev => prev.filter(p => p !== peerId));
+        setPeerMuteStates(prev => { const next = { ...prev }; delete next[peerId]; return next; });
+      });
+      socket.on("reportSync", ({ index, menteeUserId }) => {
+        if (isCancelled) return;
+        setCurrentMenteeIdx(index);
+        if (menteeUserId) loadReportForUser(menteeUserId);
+      });
+    };
+
+    init();
+    return () => {
+      isCancelled = true;
+      recvTransportReadyRef.current = false;
+      pendingProducersRef.current   = [];
+      videoProducerRef.current?.close();
+      audioProducerRef.current?.close();
+      sendTransportRef.current?.close();
+      recvTransportRef.current?.close();
+      consumersRef.current.forEach(c => c.close());
+      consumersRef.current.clear();
+      localStreamRef.current?.getTracks().forEach(t => t.stop());
+      localAnalyserRef.current = null;
+      Object.keys(peerAnalysersRef.current).forEach(k => delete peerAnalysersRef.current[k]);
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
+      socket?.disconnect();
+    };
+  }, [sessionId, consumeProducer]);
+
+  /* ── 오디오 레벨 ── */
+  useEffect(() => {
+    const THRESHOLD = 0.025;
+    const getLevel = (an) => { const d = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); return d.reduce((a, b) => a + b, 0) / d.length / 255; };
+    const interval = setInterval(() => {
+      const levels = {};
+      if (localAnalyserRef.current) levels['__local'] = getLevel(localAnalyserRef.current);
+      Object.entries(peerAnalysersRef.current).forEach(([pid, an]) => { levels[pid] = getLevel(an); });
+      setAudioLevels(levels);
+      let maxLv = THRESHOLD, speaker = null;
+      Object.entries(levels).forEach(([id, lv]) => { if (lv > maxLv) { maxLv = lv; speaker = id; } });
+      setActiveSpeakerId(speaker);
+    }, 300);
+    return () => clearInterval(interval);
+  }, []);
+
+  /* ── 타이머 ── */
+  useEffect(() => {
+    timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
   const formatTime = (sec) => {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h > 0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
   };
 
-  // 세션 종료 처리
-  const handleEndSession = useCallback(() => {
-    clearInterval(timerRef.current);
+  const handleMicToggle = () => {
+    const next = !isMicOn;
+    setIsMicOn(next);
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = next; });
+    if (next) audioProducerRef.current?.resume();
+    else audioProducerRef.current?.pause();
+  };
+  const handleCamToggle = () => {
+    const next = !isCamOn;
+    setIsCamOn(next);
+    localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = next; });
+    if (next) videoProducerRef.current?.resume();
+    else videoProducerRef.current?.pause();
+  };
 
-    // ── API 연동 포인트 ────────────────────────────────────────────
-    // await api.endSession(session.sessionId);
-    // WebRTC 연결 해제: peerConnection.close();
-    // ──────────────────────────────────────────────────────────────
+  const getFaceMaskDisplayName = useCallback(() => {
+    const baseName = user?.nickname || user?.name || user?.username || user?.email?.split("@")[0] || "나";
+    const roleLabel = String(user?.role || "").toLowerCase().includes("mentor") ? "멘토" : "멘티";
+    return `${baseName} ${roleLabel}`;
+  }, [user?.email, user?.name, user?.nickname, user?.role, user?.username]);
 
-    if (user?.role === "mentor") {
-      navigate(`/mentor/feedback/${session.sessionId}`);
+  const handleFaceMaskToggle = useCallback(async () => {
+    if (!isFaceMaskOn) {
+      // 활성화
+      const stream = localStreamRef.current;
+      if (!stream || !stream.getVideoTracks().length) return;
+      try {
+        if (!faceMaskRef.current) faceMaskRef.current = new FaceMaskEffect();
+        faceMaskRef.current.emoji = selectedEmoji;
+        faceMaskRef.current.displayName = getFaceMaskDisplayName();
+        const maskedTrack = await faceMaskRef.current.start(stream);
+        if (!maskedTrack) return;
+        const previewTrack = faceMaskRef.current.getPreviewTrack() || maskedTrack;
+        originalTrackRef.current = stream.getVideoTracks()[0];
+        if (videoProducerRef.current) {
+          await videoProducerRef.current.replaceTrack({ track: maskedTrack });
+        }
+        // 로컬 프리뷰용 스트림도 교체
+        const maskedStream = new MediaStream([previewTrack, ...stream.getAudioTracks()]);
+        setLocalMediaStream(maskedStream);
+        setIsFaceMaskOn(true);
+      } catch (e) {
+        console.error("얼굴 가리기 활성화 실패:", e);
+      }
     } else {
-      // 멘티: 리포트 대기 화면 또는 마이페이지
-      navigate(`/report/ai-stream/${session.sessionId}`);
+      // 비활성화
+      const stream = localStreamRef.current;
+      const restoreTrack = faceMaskRef.current?.getSourceTrackClone() || originalTrackRef.current;
+      if (restoreTrack) restoreTrack.enabled = isCamOn;
+      if (restoreTrack && videoProducerRef.current) {
+        await videoProducerRef.current.replaceTrack({ track: restoreTrack });
+      }
+      faceMaskRef.current?.stop();
+      originalTrackRef.current = null;
+      if (stream && restoreTrack) {
+        const restoredStream = new MediaStream([restoreTrack, ...stream.getAudioTracks()]);
+        localStreamRef.current = restoredStream;
+        setLocalMediaStream(restoredStream);
+      } else if (stream) {
+        setLocalMediaStream(stream);
+      }
+      setIsFaceMaskOn(false);
     }
-  }, [navigate, session.sessionId, user?.role]);
+  }, [getFaceMaskDisplayName, isCamOn, isFaceMaskOn, selectedEmoji]);
 
-  const isMentor = user?.role === "mentor";
+  const handleEmojiChange = useCallback((emoji) => {
+    setSelectedEmoji(emoji);
+    if (faceMaskRef.current) {
+      faceMaskRef.current.emoji = emoji;
+    }
+    setShowEmojiPicker(false);
+  }, []);
+
+  const handleEndSession = useCallback(async () => {
+    clearInterval(timerRef.current);
+    const sid = session.sessionId || sessionId;
+    try { await updateSessionStatus(sid, "completed"); } catch {}
+    if (user?.role === "mentor") {
+      navigate(`/mentor/feedback/${sid}`);
+    } else {
+      setMenteeSessionDone(true);
+    }
+  }, [navigate, session.sessionId, sessionId, user?.role]);
+
+  const userRole = String(user?.role || "").toLowerCase();
+  const isMentor = userRole.includes("mentor");
+  const currentMentee = menteeList[currentMenteeIdx] || null;
+
+  // 현재 보여줄 리포트: 멘티별 캐시 우선, 없으면 전체 리포트
+  const currentMenteeUserId = currentMentee
+    ? String(currentMentee.user_id ?? currentMentee.userId ?? currentMentee.id ?? "")
+    : null;
+  const activeReport = (currentMenteeUserId && menteeReports[currentMenteeUserId])
+    ? menteeReports[currentMenteeUserId]
+    : reportData;
+
+  const getPeerName = (peerId) => {
+    // 멘티 목록에서 먼저 확인
+    const mentee = menteeList.find(m => String(m.user_id ?? m.userId ?? m.id ?? "") === String(peerId));
+    if (mentee) return mentee.name;
+    // 멘토 확인 (session.mentor 또는 participants)
+    const allParticipants = session?.participants ?? [];
+    const peer = allParticipants.find(p => String(p.user_id ?? p.userId ?? p.id ?? "") === String(peerId));
+    if (peer) {
+      const roleSuffix = (peer.role ?? "").toLowerCase() === "mentor" ? " (멘토)" : " (멘티)";
+      return `${peer.name}${roleSuffix}`;
+    }
+    return null;
+  };
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        background: "#F5F4F0",
-        fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
-        overflow: "hidden",
-      }}
-    >
-      {/* ══════════════════════════════════════════════════════════
-          상단 헤더
-      ══════════════════════════════════════════════════════════ */}
-      <header
-        style={{
-          background: "#F5F4F0",
-          borderBottom: "1px solid #E0DDD8",
-          padding: "0 28px",
-          height: 72,
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          flexShrink: 0,
-        }}
-      >
-        {/* 비디오 아이콘 */}
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            background: "#2563EB",
-            borderRadius: 11,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <svg width="22" height="16" viewBox="0 0 22 16" fill="white">
-            <rect x="0" y="2" width="14" height="12" rx="2" />
-            <path d="M15 5.5l7-3.5v12l-7-3.5V5.5z" />
-          </svg>
-        </div>
+    <>
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;800&display=swap');
+      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+      html,body{height:100%;overflow:hidden;margin:0}
+      #root{height:100%;overflow:hidden;min-height:0;width:100%;max-width:100%;margin:0;display:block;text-align:left}
+      body{font-family:'Noto Sans KR',sans-serif;background:#FAF8F4;color:#1A1818}
+      @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+      @keyframes speakPulse{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
+      ::-webkit-scrollbar{width:4px}
+      ::-webkit-scrollbar-track{background:transparent}
+      ::-webkit-scrollbar-thumb{background:#ddd;border-radius:4px}
+    `}</style>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Noto Sans KR', sans-serif", overflow: "hidden" }}>
 
-        {/* 세션 정보 */}
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 15, fontWeight: 700, color: "#111" }}>{session.title}</p>
-          <p style={{ fontSize: 12, color: "#888" }}>
-            {session.date} | {session.time} KST
-          </p>
-        </div>
-
-        {/* 참여자 아바타 */}
-        <div style={{ display: "flex", gap: -6 }}>
-          <Avatar name={session.mentor.name} size={36} bg={NAVY} />
-          <Avatar name={session.mentee.name} size={36} bg="#3A6A5A" />
-        </div>
-
-        {/* 참여자 정보 카드 */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            background: "white",
-            border: "1px solid #E0DDD8",
-            borderRadius: 12,
-            padding: "10px 16px",
-          }}
-        >
-          <Avatar name={session.mentor.name} size={36} bg={NAVY} />
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>
-              {session.mentor.name}
+      {/* ── 멘티 세션 종료 오버레이 ── */}
+      {menteeSessionDone && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(13,34,64,0.92)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: 24, padding: "48px 52px",
+            textAlign: "center", maxWidth: 440, width: "90%",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+          }}>
+            {/* 체크 아이콘 */}
+            <div style={{
+              width: 72, height: 72, borderRadius: "50%",
+              background: "#E6FCF5",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 24px",
+            }}>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M6 16l7 7 13-13" stroke={GREEN} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: NAVY, marginBottom: 12, letterSpacing: "-0.03em" }}>
+              멘토링 세션이 종료됐어요
+            </h2>
+            <p style={{ fontSize: 15, color: "#495057", lineHeight: 1.7, marginBottom: 8 }}>
+              멘토가 최종 리포트를 작성하고 있습니다.
             </p>
-            <p style={{ fontSize: 11, color: "#888" }}>{session.mentor.role}</p>
+            <p style={{ fontSize: 13, color: "#868E96", marginBottom: 36 }}>
+              작성이 완료되면 마이페이지에서 확인할 수 있어요.
+            </p>
+            <button
+              onClick={() => navigate("/dashboard/mentee")}
+              style={{
+                width: "100%", padding: "14px",
+                background: `linear-gradient(135deg, ${NAVY} 0%, #1B4F7A 100%)`,
+                color: "#fff", border: "none", borderRadius: 12,
+                fontSize: 15, fontWeight: 700, cursor: "pointer",
+                fontFamily: "inherit", letterSpacing: "-0.01em",
+                boxShadow: "0 6px 16px rgba(13,34,64,0.28)",
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >
+              대시보드로 이동하기 →
+            </button>
           </div>
-          {/* 더보기 버튼 */}
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "#999",
-              padding: "4px",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#999">
-              <circle cx="12" cy="5" r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="12" cy="19" r="1.5" />
-            </svg>
-          </button>
         </div>
+      )}
 
-        {/* 타이머 */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "#111",
-            borderRadius: 8,
-            padding: "6px 14px",
-          }}
-        >
-          <div
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: "#E24B4A",
-              animation: "blink 1.2s ease-in-out infinite",
-            }}
-          />
-          <span
-            style={{
-              color: "white",
-              fontSize: 14,
-              fontWeight: 700,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {formatTime(elapsed)}
-          </span>
+      {/* ── 헤더 ── */}
+      <header style={{ background: "#fff", borderBottom: "1px solid #E8E0D0", padding: "0 28px", height: 64, display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
+        <div style={{ width: 40, height: 40, background: NAVY, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="18" height="14" viewBox="0 0 22 16" fill="white"><rect x="0" y="2" width="14" height="12" rx="2"/><path d="M15 5.5l7-3.5v12l-7-3.5V5.5z"/></svg>
         </div>
-
-        <style>{`
-          @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
-        `}</style>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#111", margin: 0 }}>{session.title || "멘토링 세션"}</p>
+          <p style={{ fontSize: 11, color: "#888", margin: 0 }}>{session.date} {session.time && `| ${session.time} KST`}</p>
+        </div>
+        <div style={{ display: "flex", gap: 4 }}>
+          <Avatar name={session.mentor?.name || "멘토"} size={30} bg={NAVY} fontSize={10} />
+          {menteeList.map((m, i) => <Avatar key={m.id} name={m.name} size={30} bg={i === currentMenteeIdx ? GREEN : "#3A6A5A"} fontSize={10} />)}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#111", borderRadius: 8, padding: "6px 14px" }}>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#E24B4A", animation: "blink 1.2s ease-in-out infinite" }} />
+          <span style={{ color: "white", fontSize: 14, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{formatTime(elapsed)}</span>
+        </div>
       </header>
 
-      {/* ══════════════════════════════════════════════════════════
-          메인 콘텐츠 (공유 리포트 + 비디오 패널)
-      ══════════════════════════════════════════════════════════ */}
+      {/* ── 본문 ── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* 좌측: 공유 리포트 */}
-        <SharedReport report={session.report} />
 
-        {/* 우측: 비디오 + 공유 안내 */}
-        <div
-          style={{
-            width: 220,
-            background: "#111",
-            display: "flex",
-            flexDirection: "column",
-            flexShrink: 0,
-            borderLeft: "1px solid #222",
-          }}
-        >
-          {/* 멘토 비디오 */}
-          <VideoBox participant={session.mentor} isLocal={isMentor} />
+        {/* 좌측: 리포트 + 드로잉 레이어 */}
+        <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
-          {/* 멘티 비디오 */}
-          <VideoBox participant={session.mentee} isLocal={!isMentor} />
-
-          {/* 화면 공유 안내 */}
-          <div
-            style={{
-              background: "#1A1A1A",
-              padding: "14px 14px",
-              borderTop: "1px solid #333",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2">
-                <rect x="2" y="3" width="20" height="14" rx="2" />
-                <polyline points="8 21 12 17 16 21" />
-              </svg>
-              <span style={{ color: "#60A5FA", fontSize: 11, fontWeight: 700 }}>
-                스크린 공유 중
-              </span>
+          {/* 멘티 전환 네비게이터 — 그룹이면 스텝 강조 */}
+          <div style={{ background: menteeList.length > 1 ? "#F0F4FF" : "#fff", borderBottom: "1px solid #E8E0D0", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 16 }}>
+            <button onClick={() => handleMenteeNav(currentMenteeIdx - 1)} disabled={currentMenteeIdx === 0 || !isMentor}
+              style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${currentMenteeIdx === 0 || !isMentor ? "#D1D5DB" : NAVY}`, background: currentMenteeIdx === 0 || !isMentor ? "#F3F4F6" : NAVY, color: currentMenteeIdx === 0 || !isMentor ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx === 0 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
+              ← 이전
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {menteeList.length > 1 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", background: "#E0E7FF", borderRadius: 99, padding: "2px 10px" }}>
+                  그룹 면접 · {currentMenteeIdx + 1}/{menteeList.length}명
+                </span>
+              )}
+              {menteeList.map((m, i) => (
+                <button key={m.user_id ?? m.id ?? i} onClick={() => isMentor && handleMenteeNav(i)} title={m.name}
+                  style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${i === currentMenteeIdx ? NAVY : "#D1D5DB"}`, background: i === currentMenteeIdx ? NAVY : "#fff", color: i === currentMenteeIdx ? "#fff" : "#555", fontSize: 12, fontWeight: 700, cursor: isMentor ? "pointer" : "default", fontFamily: "inherit", transition: "all 0.15s" }}>
+                  {i + 1}
+                </button>
+              ))}
+              <div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{currentMentee?.name}</span>
+                <span style={{ fontSize: 12, color: "#6B7280", marginLeft: 4 }}>멘티 리포트</span>
+              </div>
+              {!isMentor && <span style={{ fontSize: 11, color: GREEN, fontWeight: 600 }}>· 멘토가 화면을 제어합니다</span>}
             </div>
-            <p style={{ color: "#888", fontSize: 11, lineHeight: 1.6 }}>
-              멘토가 리포트를 스크롤하면 멘티 화면도 동기화됩니다. 특정 구간 클릭 시 피드백을 나누세요.
-            </p>
+            <button onClick={() => handleMenteeNav(currentMenteeIdx + 1)} disabled={currentMenteeIdx >= menteeList.length - 1 || !isMentor}
+              style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#D1D5DB" : NAVY}`, background: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#F3F4F6" : NAVY, color: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 700, cursor: currentMenteeIdx >= menteeList.length - 1 || !isMentor ? "default" : "pointer", fontFamily: "inherit" }}>
+              다음 →
+            </button>
           </div>
-        </div>
-      </div>
 
-      {/* ══════════════════════════════════════════════════════════
-          하단 컨트롤 바
-      ══════════════════════════════════════════════════════════ */}
-      <div
-        style={{
-          background: "#1A1A1A",
-          borderTop: "1px solid #2A2A2A",
-          padding: "0 28px",
-          height: 60,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexShrink: 0,
-        }}
-      >
-        {/* 좌측: 미디어 컨트롤 */}
-        <div style={{ display: "flex", gap: 8 }}>
-          {/* 마이크 */}
-          <ControlButton
-            active={isMicOn}
-            onClick={() => setIsMicOn((v) => !v)}
-            label={isMicOn ? "마이크 끄기" : "마이크 켜기"}
-          >
-            {isMicOn ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="1" y1="1" x2="23" y2="23" />
-                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                <path d="M17 16.95A7 7 0 0 1 5 12v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-              </svg>
-            )}
-          </ControlButton>
+          {/* 리포트 스크롤 영역 */}
+          <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto" }}>
+            <SharedReport
+              report={activeReport}
+              isMentor={isMentor}
+              currentMentee={currentMentee}
+              mentorComments={mentorComments}
+              onCommentChange={handleCommentChange}
+              answerEvaluations={activeReport?.answer_evaluations || []}
+            />
+          </div>
 
-          {/* 카메라 */}
-          <ControlButton
-            active={isCamOn}
-            onClick={() => setIsCamOn((v) => !v)}
-            label={isCamOn ? "카메라 끄기" : "카메라 켜기"}
-          >
-            {isCamOn ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="23 7 16 12 23 17 23 7" />
-                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34" />
-                <line x1="1" y1="1" x2="23" y2="23" />
-              </svg>
-            )}
-          </ControlButton>
+          {/* 캔버스 오버레이 */}
+          <canvas
+            ref={initCanvas}
+            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: drawMode ? "auto" : "none", cursor: drawMode ? (drawTool === "eraser" ? "cell" : "crosshair") : "default", touchAction: "none" }}
+            onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+            onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
+          />
 
-          {/* 화면 공유 토글 (멘토 전용) */}
-          {isMentor && (
-            <ControlButton
-              active={isSharing}
-              onClick={() => setIsSharing((v) => !v)}
-              label={isSharing ? "공유 중지" : "화면 공유"}
-              activeColor="#2563EB"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="3" width="20" height="14" rx="2" />
-                <polyline points="8 21 12 17 16 21" />
-              </svg>
-            </ControlButton>
+          {/* 드로잉 툴바 */}
+          {drawMode && (
+            <div style={{ position: "absolute", top: 60, left: 14, background: "#fff", borderRadius: 14, padding: "8px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.18)", zIndex: 10, border: "1px solid #E8E0D0" }}>
+              {[["#111111","검정"],["#E24B4A","빨강"],["#2563EB","파랑"],["#1D9E75","초록"],["#F59E0B","주황"]].map(([c, name]) => (
+                <button key={c} title={name} onClick={() => { setDrawColor(c); setDrawTool("pen"); }} style={{ width: 22, height: 22, borderRadius: "50%", border: drawColor === c && drawTool === "pen" ? "3px solid #0D2240" : "2px solid #ddd", background: c, cursor: "pointer", padding: 0 }} />
+              ))}
+              <div style={{ width: 1, height: 20, background: "#E0DDD8" }} />
+              <button title="펜" onClick={() => setDrawTool("pen")} style={{ width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer", background: drawTool === "pen" ? NAVY : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={drawTool === "pen" ? "#fff" : "#555"} strokeWidth="2" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </button>
+              <button title="지우개" onClick={() => setDrawTool("eraser")} style={{ width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer", background: drawTool === "eraser" ? NAVY : "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={drawTool === "eraser" ? "#fff" : "#555"} strokeWidth="2" strokeLinecap="round"><path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/><path d="M6 14l4 4"/></svg>
+              </button>
+              <button title="전체 지우기" onClick={clearCanvas} style={{ width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer", background: "rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </button>
+            </div>
           )}
         </div>
 
-        {/* 중앙: 세션 정보 */}
-        <p style={{ color: "#666", fontSize: 12 }}>
-          {session.title} · {session.mentee.name} 멘티
-        </p>
+        {/* 우측: 비디오 + 프로필 패널 */}
+        <div style={{ width: 300, background: "#111", display: "flex", flexDirection: "column", flexShrink: 0, borderLeft: "1px solid #222", overflowY: "auto" }}>
 
-        {/* 우측: 세션 종료 */}
-        <button
-          onClick={() => setShowEndConfirm(true)}
-          style={{
-            padding: "9px 22px",
-            borderRadius: 9,
-            border: "none",
-            background: "#E24B4A",
-            color: "white",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            transition: "opacity 0.15s",
-          }}
-          onMouseEnter={(e) => (e.target.style.opacity = "0.85")}
-          onMouseLeave={(e) => (e.target.style.opacity = "1")}
-        >
-          {isMentor ? "세션 종료 → 코멘트 작성" : "세션 나가기"}
+          {/* 비디오 */}
+          <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "45vh" }}>
+            <div style={{ height: 155, flexShrink: 0, display: "flex" }}>
+              <VideoTile stream={localMediaStream} label={`나 (${isMentor ? "멘토" : "멘티"})`} mirror={!isFaceMaskOn} muted isSpeaking={(audioLevels["__local"] || 0) > 0.025} camOff={!isCamOn} />
+            </div>
+            {peerIds.map((pid, i) => (
+              <div key={pid} style={{ height: 155, flexShrink: 0, display: "flex", borderTop: "1px solid #222" }}>
+                <VideoTile stream={peersRef.current[pid] ?? null} label={getPeerName(pid) ?? `참여자 ${i + 1}`} isSpeaking={(audioLevels[pid] || 0) > 0.025} micOff={!!peerMuteStates[pid]} />
+              </div>
+            ))}
+          </div>
+
+          {/* 멘티 프로필 */}
+          <div style={{ background: NAVY, padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <Avatar name={currentMentee?.name || "?"} size={34} bg="#1E6A5A" fontSize={11} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", margin: 0 }}>{currentMentee?.name}</p>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", margin: 0 }}>멘티 {currentMenteeIdx + 1} / {menteeList.length}</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>AI 종합 점수</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: GREEN }}>
+                {toFivePointScore(reportData?.ai_report?.overall_score) || "--"}
+                <span style={{ fontSize: 10, fontWeight: 400, color: "rgba(255,255,255,0.4)", marginLeft: 2 }}>/5</span>
+              </span>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 99, height: 4 }}>
+              <div style={{ width: `${Math.min(toFivePointScore(reportData?.ai_report?.overall_score) * 20, 100)}%`, height: 4, borderRadius: 99, background: GREEN, transition: "width 0.5s ease" }} />
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
+              {(reportData?.ai_report?.fit_gap?.missing_requirements || []).slice(0, 3).map((req, i) => {
+                const label = parseFitGapItem(req).requirement;
+                return <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "rgba(226,75,74,0.18)", color: "#E24B4A", fontWeight: 600 }}>{label.length > 14 ? label.slice(0, 14) + "…" : label}</span>;
+              })}
+            </div>
+          </div>
+
+          {/* 코칭 포인트 */}
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <p style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>코칭 포인트</p>
+            {[
+              { emoji: "💡", text: "BEST 구간을 칭찬하고 자신감을 높여주세요" },
+              { emoji: "🔧", text: "WORST 구간은 구체적 개선 방향을 제시해주세요" },
+              { emoji: "📊", text: "수치 기반 성과 제시를 권장해주세요" },
+              { emoji: "🎯", text: "다음 면접 전략을 함께 수립해주세요" },
+            ].map((item, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
+                <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>{item.emoji}</span>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>{item.text}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* 멘토 메모 */}
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flex: 1, display: "flex", flexDirection: "column" }}>
+            <p style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>세션 메모</p>
+            <textarea
+              placeholder="세션 중 메모를 남겨두세요..."
+              style={{ flex: 1, minHeight: 72, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 12px", color: "rgba(255,255,255,0.8)", fontSize: 11, fontFamily: "inherit", lineHeight: 1.6, resize: "none", outline: "none" }}
+              onFocus={e => { e.target.style.borderColor = "rgba(29,158,117,0.5)"; }}
+              onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── 하단 컨트롤 바 ── */}
+      <div style={{ background: NAVY, borderTop: "1px solid rgba(255,255,255,0.1)", padding: "0 24px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <ControlButton active={isMicOn} onClick={handleMicToggle} label={isMicOn ? "마이크" : "음소거"}>
+            {isMicOn
+              ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+              : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            }
+          </ControlButton>
+          <ControlButton active={isCamOn} onClick={handleCamToggle} label={isCamOn ? "카메라" : "카메라 끔"}>
+            {isCamOn
+              ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            }
+          </ControlButton>
+          <ControlButton active={drawMode} onClick={() => setDrawMode(v => !v)} label={drawMode ? "그리기 끄기" : "펜"} activeColor="#F59E0B">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </ControlButton>
+          <div style={{ position: "relative" }}>
+            <ControlButton active={isFaceMaskOn} onClick={handleFaceMaskToggle} label={isFaceMaskOn ? "가리기 끔" : "얼굴 가리기"} activeColor="#8B5CF6">
+              <span style={{ fontSize: 15, lineHeight: 1 }}>{selectedEmoji}</span>
+            </ControlButton>
+            {isFaceMaskOn && (
+              <button
+                onClick={() => setShowEmojiPicker(v => !v)}
+                title="스티커 변경"
+                style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#8B5CF6", border: "2px solid #0D2240", color: "#fff", fontSize: 10, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+              >
+                ▼
+              </button>
+            )}
+            {showEmojiPicker && (
+              <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, background: "#1a1a2e", borderRadius: 12, padding: "8px 10px", display: "flex", flexWrap: "wrap", gap: 4, width: "max-content", maxWidth: "min(332px, calc(100vw - 32px))", boxShadow: "0 8px 32px rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.12)", zIndex: 50 }}>
+                {EMOJI_LIST.map(({ emoji, label }) => (
+                  <button
+                    key={emoji}
+                    title={label}
+                    onClick={() => handleEmojiChange(emoji)}
+                    style={{ width: 36, height: 36, borderRadius: 8, border: selectedEmoji === emoji ? "2px solid #8B5CF6" : "2px solid transparent", background: selectedEmoji === emoji ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.06)", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s", padding: 0 }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 11 }}>{session.title} · {currentMentee?.name} ({currentMenteeIdx + 1}/{menteeList.length})</p>
+
+        <button onClick={() => setShowEndConfirm(true)} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#E24B4A", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "opacity 0.15s" }}
+          onMouseEnter={e => { e.target.style.opacity = "0.85"; }} onMouseLeave={e => { e.target.style.opacity = "1"; }}>
+          세션 종료
         </button>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════
-          세션 종료 확인 모달 (position:fixed 대신 overlay div 사용)
-      ══════════════════════════════════════════════════════════ */}
+      {/* ── 종료 확인 모달 ── */}
       {showEndConfirm && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "rgba(0,0,0,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 100,
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              borderRadius: 18,
-              padding: "32px 36px",
-              width: 380,
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background: "#FFF5F5",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 16px",
-              }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2">
-                <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 9.88a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.34 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.32 8.91" />
-                <line x1="23" y1="1" x2="1" y2="23" />
+        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div style={{ background: "white", borderRadius: 18, padding: "32px 36px", width: 380, textAlign: "center" }}>
+            <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#FFF5F5", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2" strokeLinecap="round">
+                <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 9.88a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.34 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.32 8.91"/>
+                <line x1="23" y1="1" x2="1" y2="23"/>
               </svg>
             </div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111", marginBottom: 8 }}>
-              세션을 종료하시겠어요?
-            </h3>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111", marginBottom: 8 }}>세션을 종료하시겠어요?</h3>
             <p style={{ fontSize: 13, color: "#888", lineHeight: 1.7, marginBottom: 24 }}>
               {isMentor
-                ? "세션 종료 후 멘토 코멘트 작성 페이지로 이동합니다.\n코멘트 작성 후 최종 리포트가 멘티에게 자동 전달됩니다."
-                : "세션을 나가면 멘토가 최종 코멘트를 작성한 후 리포트가 전달됩니다."}
+                ? "세션 종료 후 최종 피드백 작성 페이지로 이동합니다."
+                : "세션을 나가면 멘토가 최종 코멘트 작성 후 리포트가 전달됩니다."}
             </p>
             <div style={{ display: "flex", gap: 10 }}>
-              <button
-                onClick={() => setShowEndConfirm(false)}
-                style={{
-                  flex: 1,
-                  padding: "12px",
-                  borderRadius: 10,
-                  border: "1px solid #D1D5DB",
-                  background: "white",
-                  color: "#555",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
+              <button onClick={() => setShowEndConfirm(false)} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid #D1D5DB", background: "white", color: "#555", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
                 취소
               </button>
-              <button
-                onClick={handleEndSession}
-                style={{
-                  flex: 1,
-                  padding: "12px",
-                  borderRadius: 10,
-                  border: "none",
-                  background: "#E24B4A",
-                  color: "white",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {isMentor ? "종료 후 코멘트 작성" : "나가기"}
+              <button onClick={handleEndSession} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: "#E24B4A", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                종료
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+    </>
   );
 }
 
-// ─── 컨트롤 버튼 (미디어 컨트롤용) ─────────────────────────────
 function ControlButton({ children, active, onClick, label, activeColor = GREEN }) {
   return (
-    <button
-      onClick={onClick}
-      title={label}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 3,
-        padding: "6px 12px",
-        borderRadius: 8,
-        border: "none",
-        background: active ? `${activeColor}22` : "rgba(255,255,255,0.06)",
-        color: active ? activeColor : "#888",
-        cursor: "pointer",
-        fontFamily: "inherit",
-        transition: "background 0.15s, color 0.15s",
-      }}
-    >
+    <button onClick={onClick} title={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "5px 12px", borderRadius: 8, border: "none", background: active ? `${activeColor}22` : "rgba(255,255,255,0.06)", color: active ? activeColor : "#888", cursor: "pointer", fontFamily: "inherit", transition: "background 0.15s, color 0.15s" }}>
       {children}
-      <span style={{ fontSize: 10 }}>{label}</span>
+      <span style={{ fontSize: 9 }}>{label}</span>
     </button>
   );
 }

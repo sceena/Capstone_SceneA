@@ -15,11 +15,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -40,7 +41,7 @@ class AuthControllerTest {
 
     @Test
     void 회원가입_성공_200() throws Exception {
-        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", Role.MENTEE);
+        SignupRequest request = new SignupRequest("test@test.com", "password", "홍길동", "길동이", null, Role.MENTEE, null);
         willDoNothing().given(authService).signup(any());
 
         mockMvc.perform(post("/api/auth/signup")
@@ -86,5 +87,45 @@ class AuthControllerTest {
     void 인증없이_보호된_엔드포인트_401() throws Exception {
         mockMvc.perform(delete("/api/auth/withdraw"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 소셜로그인_시작_구글_302_리다이렉트() throws Exception {
+        mockMvc.perform(get("/api/auth/oauth2/google").param("role", "MENTEE"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "/oauth2/authorization/google"));
+    }
+
+    @Test
+    void 소셜로그인_시작_role_쿠키_설정() throws Exception {
+        mockMvc.perform(get("/api/auth/oauth2/kakao").param("role", "MENTOR"))
+                .andExpect(status().isFound())
+                .andExpect(result -> {
+                    String setCookie = result.getResponse().getHeader("Set-Cookie");
+                    assertThat(setCookie).contains("oauth_role=MENTOR");
+                    assertThat(setCookie).contains("HttpOnly");
+                });
+    }
+
+    @Test
+    void 소셜로그인_role_기본값_MENTEE() throws Exception {
+        mockMvc.perform(get("/api/auth/oauth2/naver"))
+                .andExpect(status().isFound())
+                .andExpect(result -> {
+                    String setCookie = result.getResponse().getHeader("Set-Cookie");
+                    assertThat(setCookie).contains("oauth_role=MENTEE");
+                });
+    }
+
+    @Test
+    void 소셜로그인_지원하지않는_provider_400() throws Exception {
+        mockMvc.perform(get("/api/auth/oauth2/twitter").param("role", "MENTEE"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 소셜로그인_잘못된_role_400() throws Exception {
+        mockMvc.perform(get("/api/auth/oauth2/google").param("role", "ADMIN"))
+                .andExpect(status().isBadRequest());
     }
 }

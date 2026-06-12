@@ -173,32 +173,37 @@ class ReportControllerTest {
     // ===== 멘토 종합 피드백 작성 =====
 
     @Test
-    void 멘토_피드백_작성_성공_200() throws Exception {
+    void 멘토_피드백_작성_성공_201() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
-        MentorFeedbackRequest request = new MentorFeedbackRequest("전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.");
-        MentorFeedbackResponse response = new MentorFeedbackResponse(
-                10L, "final",
+        MentorFeedbackRequest request = new MentorFeedbackRequest(
                 "전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.",
+                4.2f
+        );
+        MentorFeedbackResponse response = new MentorFeedbackResponse(
+                20L, "final",
+                "전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다.",
+                4.2f,
                 LocalDateTime.now()
         );
 
         given(reportService.addMentorFeedback(any(), eq(42L), any())).willReturn(response);
 
-        mockMvc.perform(patch("/api/sessions/42/report/mentor-feedback")
+        mockMvc.perform(post("/api/sessions/42/report/mentor-feedback")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(10))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(20))
                 .andExpect(jsonPath("$.report_status").value("final"))
-                .andExpect(jsonPath("$.mentor_feedback").value("전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다."));
+                .andExpect(jsonPath("$.mentor_feedback").value("전반적으로 답변 구조가 잘 잡혀 있으나 구체적인 수치 제시가 부족합니다."))
+                .andExpect(jsonPath("$.mentor_score").value(4.2));
     }
 
     @Test
     void 멘토_피드백_작성_인증없이_401() throws Exception {
-        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백");
+        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
 
-        mockMvc.perform(patch("/api/sessions/42/report/mentor-feedback")
+        mockMvc.perform(post("/api/sessions/42/report/mentor-feedback")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
@@ -207,12 +212,12 @@ class ReportControllerTest {
     @Test
     void 멘토_피드백_작성_멘토외_접근_403() throws Exception {
         String token = jwtProvider.generateAccessToken(99L, "MENTEE");
-        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백");
+        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
 
         given(reportService.addMentorFeedback(any(), eq(42L), any()))
                 .willThrow(new CustomException(ErrorCode.ACCESS_DENIED));
 
-        mockMvc.perform(patch("/api/sessions/42/report/mentor-feedback")
+        mockMvc.perform(post("/api/sessions/42/report/mentor-feedback")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -222,9 +227,9 @@ class ReportControllerTest {
     @Test
     void 멘토_피드백_작성_빈문자열_400() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
-        MentorFeedbackRequest request = new MentorFeedbackRequest("");
+        MentorFeedbackRequest request = new MentorFeedbackRequest("", 4.0f);
 
-        mockMvc.perform(patch("/api/sessions/42/report/mentor-feedback")
+        mockMvc.perform(post("/api/sessions/42/report/mentor-feedback")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -234,12 +239,12 @@ class ReportControllerTest {
     @Test
     void 멘토_피드백_작성_리포트없음_404() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTOR");
-        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백");
+        MentorFeedbackRequest request = new MentorFeedbackRequest("피드백", 4.0f);
 
         given(reportService.addMentorFeedback(any(), eq(42L), any()))
                 .willThrow(new CustomException(ErrorCode.REPORT_NOT_FOUND));
 
-        mockMvc.perform(patch("/api/sessions/42/report/mentor-feedback")
+        mockMvc.perform(post("/api/sessions/42/report/mentor-feedback")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))

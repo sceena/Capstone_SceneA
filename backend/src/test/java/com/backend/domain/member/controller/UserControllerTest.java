@@ -1,6 +1,7 @@
 package com.backend.domain.member.controller;
 
 import com.backend.domain.member.dto.request.UserProfileUpdateRequest;
+import com.backend.domain.member.dto.response.MentorListResponse;
 import com.backend.domain.member.dto.response.MySessionHistoryResponse;
 import com.backend.domain.member.dto.response.SessionHistoryItemResponse;
 import com.backend.domain.member.dto.response.UserProfileResponse;
@@ -27,6 +28,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.springframework.http.HttpMethod;
+import org.springframework.mock.web.MockMultipartFile;
+
 @SpringBootTest
 @AutoConfigureMockMvc
 class UserControllerTest {
@@ -44,11 +48,76 @@ class UserControllerTest {
     private UserService userService;
 
     @Test
+    void 멘토_목록_조회_키워드없이_성공_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(
+                List.of(
+                        new MentorListResponse(10L, "박지훈", "지훈멘토", "네이버 백엔드 6년차", null,
+                                List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill")), List.of()),
+                        new MentorListResponse(11L, "이수연", "수연멘토", null, null, List.of(), List.of())
+                ), 2L, 1
+        );
+        given(userService.getMentors(any(), any())).willReturn(response);
+
+        mockMvc.perform(get("/api/users/mentors")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].id").value(10))
+                .andExpect(jsonPath("$.content[0].name").value("박지훈"))
+                .andExpect(jsonPath("$.content[0].bio").value("네이버 백엔드 6년차"))
+                .andExpect(jsonPath("$.content[0].tags[0].name").value("Spring"))
+                .andExpect(jsonPath("$.content[1].name").value("이수연"))
+                .andExpect(jsonPath("$.total_elements").value(2))
+                .andExpect(jsonPath("$.total_pages").value(1));
+    }
+
+    @Test
+    void 멘토_목록_조회_키워드로_검색_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(
+                List.of(new MentorListResponse(10L, "박지훈", "지훈멘토", "Spring 전문", null,
+                        List.of(new MentorListResponse.TagInfo(1L, "Spring", "job_skill")), List.of())),
+                1L, 1
+        );
+        given(userService.getMentors(any(), any())).willReturn(response);
+
+        mockMvc.perform(get("/api/users/mentors")
+                        .param("keyword", "Spring")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].tags[0].name").value("Spring"))
+                .andExpect(jsonPath("$.total_elements").value(1));
+    }
+
+    @Test
+    void 멘토_목록_조회_결과없으면_빈_페이지_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        MentorListResponse.PageResponse response = new MentorListResponse.PageResponse(List.of(), 0L, 0);
+        given(userService.getMentors(any(), any())).willReturn(response);
+
+        mockMvc.perform(get("/api/users/mentors")
+                        .param("keyword", "없는키워드")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.total_elements").value(0));
+    }
+
+    @Test
+    void 멘토_목록_조회_인증없이_401() throws Exception {
+        mockMvc.perform(get("/api/users/mentors"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void 내_프로필_조회_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
         UserProfileResponse response = new UserProfileResponse(
-                1L, "홍길동", "hong@test.com", "mentee",
+                1L, "홍길동", "hong@test.com", "mentee", null,
                 List.of(new UserProfileResponse.TagInfo(1L, "Spring", "job_skill")),
+                null,
                 LocalDateTime.now()
         );
         given(userService.getMyProfile(any())).willReturn(response);
@@ -72,16 +141,18 @@ class UserControllerTest {
     }
 
     @Test
-    void 내_프로필_수정_성공_200() throws Exception {
+    void 내_프로필_수정_이름만_성공_200() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null);
-        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "새이름", LocalDateTime.now());
-        given(userService.updateMyProfile(any(), any())).willReturn(response);
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("새이름", null, null, null);
+        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "새이름", null, null, LocalDateTime.now());
+        given(userService.updateMyProfile(any(), any(), any())).willReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+        MockMultipartFile dataPart = new MockMultipartFile("data", "", MediaType.APPLICATION_JSON_VALUE,
+                objectMapper.writeValueAsBytes(request));
+
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me")
+                        .file(dataPart)
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.name").value("새이름"))
@@ -89,24 +160,38 @@ class UserControllerTest {
     }
 
     @Test
+    void 내_프로필_수정_이미지만_성공_200() throws Exception {
+        String token = jwtProvider.generateAccessToken(1L, "MENTEE");
+        UserProfileUpdateResponse response = new UserProfileUpdateResponse(1L, "홍길동", null, "http://s3/photo.jpg", LocalDateTime.now());
+        given(userService.updateMyProfile(any(), any(), any())).willReturn(response);
+
+        MockMultipartFile imagePart = new MockMultipartFile("image", "photo.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me")
+                        .file(imagePart)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profile_image_url").value("http://s3/photo.jpg"));
+    }
+
+    @Test
     void 내_프로필_수정_수정할_필드_없음_400() throws Exception {
         String token = jwtProvider.generateAccessToken(1L, "MENTEE");
-        UserProfileUpdateRequest request = new UserProfileUpdateRequest(null, null);
-        given(userService.updateMyProfile(any(), any()))
+        given(userService.updateMyProfile(any(), any(), any()))
                 .willThrow(new CustomException(ErrorCode.INVALID_REQUEST));
 
-        mockMvc.perform(patch("/api/users/me")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+        MockMultipartFile dataPart = new MockMultipartFile("data", "", MediaType.APPLICATION_JSON_VALUE,
+                objectMapper.writeValueAsBytes(new UserProfileUpdateRequest(null, null, null, null)));
+
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me")
+                        .file(dataPart)
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void 내_프로필_수정_인증없이_401() throws Exception {
-        mockMvc.perform(patch("/api/users/me")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/users/me"))
                 .andExpect(status().isUnauthorized());
     }
 

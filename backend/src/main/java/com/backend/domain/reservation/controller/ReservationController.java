@@ -2,8 +2,11 @@ package com.backend.domain.reservation.controller;
 
 import com.backend.domain.reservation.dto.request.ReservationAcceptRequest;
 import com.backend.domain.reservation.dto.request.ReservationRequest;
+import com.backend.domain.reservation.dto.response.MenteeReservationResponse;
 import com.backend.domain.reservation.dto.response.ReservationAcceptResponse;
 import com.backend.domain.reservation.dto.response.ReservationResponse;
+import com.backend.domain.reservation.dto.response.ReservationSummaryResponse;
+import com.backend.domain.reservation.entity.ReservationStatus;
 import com.backend.domain.reservation.service.ReservationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -16,6 +19,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "예약", description = "예약 신청 / 수락·거절")
 @RestController
 @RequestMapping("/api/reservation")
@@ -24,6 +29,21 @@ import org.springframework.web.bind.annotation.*;
 public class ReservationController {
 
     private final ReservationService reservationService;
+
+    @Operation(summary = "내 예약 목록 조회 (멘티)", description = "멘티가 자신이 신청한 예약 목록을 조회. status 파라미터로 필터링 가능 (PENDING, CONFIRMED, CANCELLED)")
+    @GetMapping("/mentee")
+    public ResponseEntity<List<MenteeReservationResponse>> getMenteeReservations(
+            @AuthenticationPrincipal Long menteeId,
+            @RequestParam(required = false) ReservationStatus status) {
+        return ResponseEntity.ok(reservationService.getMenteeReservations(menteeId, status));
+    }
+
+    @GetMapping("/mentor")
+    public ResponseEntity<List<ReservationSummaryResponse>> getMentorReservations(
+            @AuthenticationPrincipal Long mentorId,
+            @RequestParam(required = false) ReservationStatus status) {
+        return ResponseEntity.ok(reservationService.getMentorReservations(mentorId, status));
+    }
 
     @Operation(summary = "예약 신청", description = "멘티가 멘토 가용 시간 슬롯에 예약 신청 (status: PENDING)")
     @ApiResponses({

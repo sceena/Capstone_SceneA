@@ -15,10 +15,10 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Member extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = true, unique = true)
     private String email;
 
-    @Column(nullable = false)
+    @Column
     private String password;
 
     @Column(nullable = false)
@@ -31,15 +31,33 @@ public class Member extends BaseEntity {
     @Column(nullable = false)
     private Role role;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MemberProvider provider;
+
+    @Column
+    private String providerId;
+
+    @Column(length = 100)
+    private String bio;
+
+    @Column
+    private String profileImageUrl;
+
     private LocalDateTime deletedAt;
 
     @Builder
-    public Member(String email, String password, String name, String nickname, Role role) {
+    public Member(String email, String password, String name, String nickname, String bio, Role role,
+                  MemberProvider provider, String providerId, String profileImageUrl) {
         this.email = email;
         this.password = password;
         this.name = name;
         this.nickname = nickname;
+        this.bio = bio;
         this.role = role;
+        this.provider = provider != null ? provider : MemberProvider.LOCAL;
+        this.providerId = providerId;
+        this.profileImageUrl = profileImageUrl;
     }
 
     public void softDelete() {
@@ -50,8 +68,13 @@ public class Member extends BaseEntity {
         return this.deletedAt != null;
     }
 
-    public void update(String name, String encodedPassword) {
+    public void update(String name, String encodedPassword, String bio) {
         if (name != null) this.name = name;
         if (encodedPassword != null) this.password = encodedPassword;
+        if (bio != null) this.bio = bio;
+    }
+
+    public void updateProfileImage(String url) {
+        this.profileImageUrl = url;
     }
 }

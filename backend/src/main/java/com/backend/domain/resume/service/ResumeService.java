@@ -1,6 +1,7 @@
 package com.backend.domain.resume.service;
 
 import com.backend.domain.interviewSession.entity.InterviewSession;
+import com.backend.domain.interviewSession.entity.SessionParticipant;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
 import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
 import com.backend.domain.member.entity.Member;
@@ -50,16 +51,67 @@ public class ResumeService {
         return ResumeSaveResponse.from(resumeRepository.save(resume));
     }
 
+    public ResumeSaveResponse getResume(Long memberId, Long sessionId) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+
+        boolean isMentor = session.getMentor().getId().equals(memberId);
+
+        Member targetMember;
+        if (isMentor) {
+            List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
+            if (participants.isEmpty()) {
+                throw new CustomException(ErrorCode.RESUME_NOT_FOUND);
+            }
+            targetMember = participants.get(0).getMember();
+        } else {
+            validateSessionAccess(memberId, session);
+            targetMember = memberRepository.findById(memberId)
+                    .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        }
+
+        Resume resume = resumeRepository.findByInterviewSessionAndMember(session, targetMember)
+                .orElseThrow(() -> new CustomException(ErrorCode.RESUME_NOT_FOUND));
+
+        return ResumeSaveResponse.from(resume);
+    }
+
+    public ResumeSaveResponse getResumeByMentee(Long memberId, Long sessionId, Long menteeId) {
+        InterviewSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+        validateSessionAccess(memberId, session);
+
+        Member mentee = memberRepository.findById(menteeId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        validateMenteeAccess(session, mentee);
+
+        Resume resume = resumeRepository.findByInterviewSessionAndMember(session, mentee)
+                .orElseThrow(() -> new CustomException(ErrorCode.RESUME_NOT_FOUND));
+
+        return ResumeSaveResponse.from(resume);
+    }
+
     public ResumeSkillsResponse getResumeSkills(Long memberId, Long sessionId) {
         InterviewSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
 
-        validateSessionAccess(memberId, session);
+        boolean isMentor = session.getMentor().getId().equals(memberId);
 
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        Member targetMember;
+        if (isMentor) {
+            // 멘토가 조회할 때는 세션 참여자(멘티)의 자소서를 반환
+            List<SessionParticipant> participants = participantRepository.findAllByInterviewSession(session);
+            if (participants.isEmpty()) {
+                throw new CustomException(ErrorCode.RESUME_NOT_FOUND);
+            }
+            targetMember = participants.get(0).getMember();
+        } else {
+            validateSessionAccess(memberId, session);
+            targetMember = memberRepository.findById(memberId)
+                    .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
+        }
 
-        Resume resume = resumeRepository.findByInterviewSessionAndMember(session, member)
+        Resume resume = resumeRepository.findByInterviewSessionAndMember(session, targetMember)
                 .orElseThrow(() -> new CustomException(ErrorCode.RESUME_NOT_FOUND));
 
         List<ResumeSkillDetailInfo> skills = resumeSkillRepository.findAllByResume(resume)
@@ -82,6 +134,10 @@ public class ResumeService {
 
     private void validateSessionAccess(Long memberId, InterviewSession session) {
         boolean isMentor = session.getMentor().getId().equals(memberId);
+        if (isMentor) {
+            return;
+        }
+
         boolean isParticipant = participantRepository
                 .findByInterviewSessionAndMember(session, memberRepository.getReferenceById(memberId))
                 .isPresent();

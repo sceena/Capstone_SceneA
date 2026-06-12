@@ -9,17 +9,17 @@ import { Link, useNavigate } from "react-router-dom";
 const C = {
   navy:      "#0D2240",
   navyMid:   "#1B4F7A",
-  cream:     "#F2EDE4",
-  creamDark: "#E8E0D0",
+  cream:     "#F0F4F8",
+  creamDark: "#E8EEF6",
   white:     "#FFFFFF",
   teal:      "#1D9E75",
-  text:      "#1A1818",
-  textSub:   "#6B6863",
-  textMuted: "#9E9B95",
-  border:    "#E8E0D0",
-  inputBg:   "#F2EDE4",
+  text:      "#1A1B1E",
+  textSub:   "#495057",
+  textMuted: "#868E96",
+  border:    "#E9ECEF",
+  inputBg:   "#F0F4F8",
   error:     "#D94040",
-  errorBg:   "#FCF0F0",
+  errorBg:   "#FFF5F5",
 };
 
 /* ──────────────────── 아이콘 모음 ──────────────────── */
@@ -119,7 +119,7 @@ const PwStrength = ({ pw }) => {
   ];
   const score = checks.filter(Boolean).length;
   const labels = ["", "약함", "보통", "좋음", "강함"];
-  const colors = ["#E8E0D0","#EF4444","#F59E0B","#1D9E75","#0F6E56"];
+  const colors = ["#E9ECEF","#EF4444","#F59E0B","#1D9E75","#0F6E56"];
   if (!pw) return null;
   return (
     <div style={{ marginTop:-4 }}>
@@ -127,7 +127,7 @@ const PwStrength = ({ pw }) => {
         {[1,2,3,4].map(i => (
           <div key={i} style={{
             flex:1, height:3, borderRadius:999,
-            background: i <= score ? colors[score] : C.creamDark,
+            background: i <= score ? colors[score] : "#E9ECEF",
             transition:"background 0.3s",
           }}/>
         ))}
@@ -168,7 +168,7 @@ const StepTabs = ({ current }) => {
                   }}><CheckIcon/></span>
                 : <span style={{
                     width:18, height:18, borderRadius:"50%",
-                    background: active ? C.navy : C.creamDark,
+                    background: active ? C.navy : "#DDD9D3",
                     color: active ? C.white : C.textMuted,
                     display:"inline-flex", alignItems:"center",
                     justifyContent:"center", fontSize:10, fontWeight:700, flexShrink:0,
@@ -252,7 +252,7 @@ const RoleCard = ({ role, selected, onClick }) => {
   const desc      = isMentor ? "면접 진행 및 피드백 제공" : "면접 연습 및 AI 분석 수령";
   const tagBg     = selected && isMentor  ? C.white
                   : selected && !isMentor ? C.navy
-                  : C.creamDark;
+                  : "#E8E4DC";
   const tagColor  = selected && isMentor  ? C.navy
                   : selected && !isMentor ? C.white
                   : C.textMuted;
@@ -323,70 +323,92 @@ const Step2 = ({ data, onChange, errors }) => (
       <p style={{ fontSize:12, fontWeight:600, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:14 }}>
         기본 정보
       </p>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <Field label="이름">
-          <TextInput
-            placeholder="홍길동"
-            value={data.name}
-            onChange={e => onChange("name", e.target.value)}
-            error={errors.name}
-          />
-        </Field>
-        <Field label="생년월일">
-          <TextInput
-            placeholder="YYYY.MM.DD"
-            value={data.birth}
-            onChange={e => onChange("birth", e.target.value)}
-            error={errors.birth}
-          />
-        </Field>
-      </div>
+      <Field label="이름">
+        <TextInput
+          placeholder="홍길동"
+          value={data.name}
+          onChange={e => onChange("name", e.target.value)}
+          error={errors.name}
+        />
+      </Field>
     </div>
   </div>
 );
 
 /* ──────────────────── STEP 3: 프로필 ──────────────────── */
-const Step3Mentee = ({ data, onChange, errors }) => (
-  <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-    <p style={{ fontSize:12, fontWeight:600, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
-      멘티 프로필
-    </p>
+const Step3Mentee = ({ data, onChange }) => (
+  <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
 
-    <Field label="목표 기업">
-      <TextInput
-        placeholder="예) 네이버, 카카오, 라인"
-        value={data.targetCompany}
-        onChange={e => onChange("targetCompany", e.target.value)}
-      />
-    </Field>
+    {/* 헤더 */}
+    <div style={{
+      paddingBottom: 14, marginBottom: 4,
+      borderBottom: `1px solid ${C.border}`,
+    }}>
+      <p style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+        멘티 프로필
+      </p>
+      <p style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+        입력하지 않은 항목은 가입 후 마이페이지에서 언제든 수정할 수 있습니다.
+      </p>
+    </div>
 
-    <Field label="지원 직무">
+    {/* 학교 · 전공 */}
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+      <Field label="학교">
+        <TextInput
+          placeholder="예) 한양대학교"
+          value={data.school || ""}
+          onChange={e => onChange("school", e.target.value)}
+        />
+      </Field>
+      <Field label="전공 · 학과">
+        <TextInput
+          placeholder="예) 컴퓨터공학과"
+          value={data.major || ""}
+          onChange={e => onChange("major", e.target.value)}
+        />
+      </Field>
+    </div>
+
+    {/* 관심 직무 */}
+    <Field label="관심 직무">
       <TextInput
-        placeholder="예) 백엔드 개발, 프론트엔드 개발"
+        placeholder="예) 백엔드 개발, 데이터 분석, UX 디자인"
         value={data.position}
         onChange={e => onChange("position", e.target.value)}
       />
     </Field>
 
-    <Field label="주요 기술 스택">
+    {/* 목표 기업 */}
+    <Field label="목표 기업 · 업계">
       <TextInput
-        placeholder="예) Java, Spring, React, TypeScript"
+        placeholder="예) 네이버, 카카오, IT 스타트업"
+        value={data.targetCompany}
+        onChange={e => onChange("targetCompany", e.target.value)}
+      />
+    </Field>
+
+    {/* 기술 도구 */}
+    <Field label="기술 스택">
+      <TextInput
+        placeholder="예) Python, Figma, Excel, Git"
         value={data.techStack}
         onChange={e => onChange("techStack", e.target.value)}
       />
     </Field>
 
-    <Field label="자기소개 한 줄" hint="멘토가 나를 더 잘 이해할 수 있도록 적어주세요">
+    {/* 자기소개 */}
+    <Field label="한 줄 소개">
       <textarea
-        placeholder="예) CS 기반 탄탄한 백엔드 개발자를 목표로 공부 중입니다."
+        placeholder="예) 개발에 관심 생긴 지 1년 된 컴공 3학년입니다!"
         value={data.bio}
         onChange={e => onChange("bio", e.target.value)}
-        rows={3}
+        rows={2}
         style={{
           width:"100%", padding:"13px 16px",
           background:C.inputBg, border:"1.5px solid transparent",
           borderRadius:10, fontSize:14, color:C.text,
-          outline:"none", fontFamily:"inherit", resize:"vertical",
+          outline:"none", fontFamily:"inherit", resize:"none",
           lineHeight:1.7, transition:"border-color 0.18s, background 0.18s",
         }}
         onFocus={e => { e.target.style.background=C.white; e.target.style.borderColor=C.navy; }}
@@ -398,9 +420,17 @@ const Step3Mentee = ({ data, onChange, errors }) => (
 
 const Step3Mentor = ({ data, onChange, errors }) => (
   <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-    <p style={{ fontSize:12, fontWeight:600, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
-      멘토 프로필
-    </p>
+    <div style={{
+      paddingBottom: 14,
+      borderBottom: `1px solid ${C.border}`,
+    }}>
+      <p style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+        멘토 프로필
+      </p>
+      <p style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+        입력하지 않은 항목은 가입 후 마이페이지에서 언제든 수정할 수 있습니다.
+      </p>
+    </div>
 
     <Field label="현 소속 기업">
       <TextInput
@@ -439,7 +469,7 @@ const Step3Mentor = ({ data, onChange, errors }) => (
       />
     </Field>
 
-    <Field label="멘토 소개" hint="멘티가 나를 더 잘 이해할 수 있도록 작성해주세요">
+    <Field label="멘토 소개">
       <textarea
         placeholder="면접에서 자주 나오는 포인트나 나만의 코칭 방식을 알려주세요."
         value={data.bio}
@@ -467,10 +497,10 @@ export default function Register() {
 
   /* 폼 데이터 */
   const [account, setAccount] = useState({ email:"", password:"", confirm:"" });
-  const [roleInfo, setRoleInfo] = useState({ role:"", name:"", birth:"" });
+  const [roleInfo, setRoleInfo] = useState({ role:"", name:"" });
   const [profile, setProfile] = useState({
     /* 멘티 */
-    targetCompany:"", position:"", techStack:"", bio:"",
+    school:"", major:"", targetCompany:"", position:"", techStack:"", bio:"",
     /* 멘토 */
     company:"", jobTitle:"", years:"",
   });
@@ -499,9 +529,14 @@ export default function Register() {
 
   const validateStep2 = () => {
     const errs = {};
-    if (!roleInfo.role)   errs.role  = "역할을 선택해주세요.";
-    if (!roleInfo.name)   errs.name  = "이름을 입력해주세요.";
-    if (!roleInfo.birth)  errs.birth = "생년월일을 입력해주세요.";
+    if (!roleInfo.role) errs.role = "역할을 선택해주세요.";
+
+    if (!roleInfo.name) {
+      errs.name = "이름을 입력해주세요.";
+    } else if (!/^[가-힣]{2,10}$/.test(roleInfo.name)) {
+      errs.name = "이름은 한글 2~10자로 입력해주세요.";
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -515,12 +550,56 @@ export default function Register() {
     document.getElementById("register-card")?.scrollTo({ top:0, behavior:"smooth" });
   };
 
+  const buildTags = () => {
+    const seen = new Set();
+    const tags = [];
+    const add = (name, category) => {
+      const trimmed = name?.trim();
+      // 태그 name이 전역 unique라서 이름 중복 시 백엔드 500 발생 → 이름 기준 중복 제거
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        tags.push({ name: trimmed, category });
+      }
+    };
+    const addList = (str, category) => {
+      str?.split(",").forEach(v => add(v, category));
+    };
+
+    if (roleInfo.role === "mentee") {
+      add(profile.school,        "학교");
+      add(profile.major,         "전공");
+      add(profile.position,      "관심직무");
+      add(profile.targetCompany, "목표기업");
+      addList(profile.techStack, "기술스택");
+    } else {
+      add(profile.company,   "소속기업");
+      add(profile.jobTitle,  "직무");
+      if (profile.years) add(`${profile.years}년`, "경력");
+      addList(profile.techStack, "기술스택");
+    }
+    return tags;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      /* TODO: 실제 회원가입 API 연동 */
-      await new Promise(r => setTimeout(r, 1000));
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: account.email,
+          password: account.password,
+          name: roleInfo.name,
+          nickname: roleInfo.name,
+          bio: (profile.bio || "").slice(0, 100),
+          role: roleInfo.role.toUpperCase(),
+          tags: buildTags(),
+        }),
+      });
+      if (!res.ok) throw new Error("signup failed");
+      localStorage.removeItem("scena_resume_draft");
+      localStorage.removeItem(`scena_resume_draft:${account.email}`);
       navigate("/auth/login");
     } catch {
       setErrors({ submit:"회원가입 중 오류가 발생했습니다. 다시 시도해주세요." });
@@ -532,15 +611,15 @@ export default function Register() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { height: 100%; }
-        body { font-family: 'Noto Sans KR', sans-serif; }
+        body { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 
         input:-webkit-autofill,
         input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0 1000px #F2EDE4 inset !important;
-          -webkit-text-fill-color: #1A1818 !important;
+          -webkit-box-shadow: 0 0 0 1000px #F0F4F8 inset !important;
+          -webkit-text-fill-color: #1A1B1E !important;
         }
 
         .reg-btn-primary {
@@ -589,7 +668,7 @@ export default function Register() {
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
       `}</style>
 
-      <div style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", overflowY:"auto", fontFamily:"'Noto Sans KR', sans-serif" }}>
+      <div style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", overflow:"hidden", fontFamily:"'Noto Sans KR', sans-serif" }}>
 
         {/* ════════ 왼쪽 네이비 패널 ════════ */}
         <div className="reg-left" style={{
@@ -662,11 +741,12 @@ export default function Register() {
             </div>
 
             <div style={{ marginTop:36, display:"flex", gap:8 }}>
-              {[1,0.35,0.2].map((op,i)=>(
-                <div key={i} style={{
+              {[1,2,3].map(s => (
+                <div key={s} style={{
                   height:3, borderRadius:999,
-                  background:`rgba(255,255,255,${op})`,
-                  width: i===0 ? 32 : 12,
+                  background: `rgba(255,255,255,${step > s ? 0.55 : step === s ? 1 : 0.2})`,
+                  width: step === s ? 32 : step > s ? 20 : 12,
+                  transition: "width 0.35s ease, background 0.35s ease",
                 }}/>
               ))}
             </div>
@@ -680,7 +760,7 @@ export default function Register() {
         {/* ════════ 오른쪽 폼 영역 ════════ */}
         <div className="reg-right" style={{
           flex:1, background:C.cream,
-          display:"flex", alignItems:"center",
+          display:"flex", alignItems:"flex-start",
           justifyContent:"center", padding:"40px 5%",
           overflowY:"auto",
         }}>
@@ -688,7 +768,7 @@ export default function Register() {
             width:"100%", maxWidth:460,
             background:C.creamDark,
             borderRadius:20, padding:"40px 36px",
-            boxShadow:"0 2px 24px rgba(13,34,68,0.07)",
+            boxShadow:"0 2px 16px rgba(13,34,68,0.09), 0 0 0 1px rgba(0,0,0,0.04)",
           }}>
 
             {/* 헤더 */}

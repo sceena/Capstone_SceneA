@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -62,7 +63,11 @@ public class SessionController {
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(sessionService.getMySessions(memberId, status, PageRequest.of(page, size)));
+        Sort sort = Sort.by(
+                Sort.Order.desc("scheduledAt"),
+                Sort.Order.desc("id")
+        );
+        return ResponseEntity.ok(sessionService.getMySessions(memberId, status, PageRequest.of(page, size, sort)));
     }
 
     @Operation(summary = "세션 상태 변경", description = "세션 상태를 변경한다. scheduled→in_progress→completed 순서만 허용.")

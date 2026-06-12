@@ -1,20 +1,29 @@
 package com.backend.domain.member.service;
 
 import com.backend.domain.analysisReport.entity.AnalysisReport;
+import com.backend.domain.analysisReport.entity.MenteeReportFeedback;
+import com.backend.domain.analysisReport.entity.ReportStatus;
 import com.backend.domain.analysisReport.repository.AnalysisReportRepository;
+import com.backend.domain.analysisReport.repository.MenteeReportFeedbackRepository;
 import com.backend.domain.interviewSession.entity.InterviewSession;
 import com.backend.domain.interviewSession.entity.SessionParticipant;
 import com.backend.domain.interviewSession.repository.InterviewSessionRepository;
 import com.backend.domain.interviewSession.repository.SessionParticipantRepository;
 import com.backend.domain.member.dto.request.UserProfileUpdateRequest;
+import com.backend.domain.member.dto.response.MentorListResponse;
 import com.backend.domain.member.dto.response.MySessionHistoryResponse;
 import com.backend.domain.member.dto.response.UserProfileResponse;
 import com.backend.domain.member.dto.response.UserProfileUpdateResponse;
 import com.backend.domain.member.entity.Member;
 import com.backend.domain.member.entity.Role;
 import com.backend.domain.member.repository.MemberRepository;
+import com.backend.domain.mentorAvailability.repository.MentorAvailabilityRepository;
+import com.backend.domain.tag.dto.TagRequest;
 import com.backend.domain.tag.entity.MemberTag;
+import com.backend.domain.tag.entity.Tag;
 import com.backend.domain.tag.repository.MemberTagRepository;
+import com.backend.domain.tag.repository.TagRepository;
+import com.backend.global.config.S3Service;
 import com.backend.global.exception.CustomException;
 import com.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +32,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -34,11 +44,21 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final MemberRepository memberRepository;
+    private final TagRepository tagRepository;
     private final MemberTagRepository memberTagRepository;
+    private final MentorAvailabilityRepository mentorAvailabilityRepository;
+    private final S3Service s3Service;
     private final InterviewSessionRepository sessionRepository;
     private final SessionParticipantRepository participantRepository;
     private final AnalysisReportRepository reportRepository;
+    private final MenteeReportFeedbackRepository menteeReportFeedbackRepository;
     private final PasswordEncoder passwordEncoder;
+
+    public MentorListResponse.PageResponse getMentors(String keyword, Pageable pageable) {
+        Page<MentorListResponse> page = memberRepository.findMentors(Role.MENTOR, keyword, pageable)
+                .map(m -> MentorListResponse.of(m, memberTagRepository.findAllByMember(m), mentorAvailabilityRepository.findAllByMentor(m)));
+        return MentorListResponse.PageResponse.of(page);
+    }
 
     public UserProfileResponse getMyProfile(Long memberId) {
         Member member = memberRepository.findById(memberId)
@@ -48,14 +68,37 @@ public class UserService {
     }
 
     @Transactional
-    public UserProfileUpdateResponse updateMyProfile(Long memberId, UserProfileUpdateRequest request) {
-        if (request.name() == null && request.password() == null) {
+    public UserProfileUpdateResponse updateMyProfile(Long memberId, UserProfileUpdateRequest request, MultipartFile image) {
+        boolean noData = request == null || (request.name() == null && request.password() == null && request.bio() == null && request.tags() == null);
+        boolean noImage = image == null || image.isEmpty();
+        if (noData && noImage) {
             throw new CustomException(ErrorCode.INVALID_REQUEST);
         }
+
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_NOT_FOUND));
-        String encodedPassword = request.password() != null ? passwordEncoder.encode(request.password()) : null;
-        member.update(request.name(), encodedPassword);
+
+        if (request != null) {
+            String encodedPassword = request.password() != null ? passwordEncoder.encode(request.password()) : null;
+            member.update(request.name(), encodedPassword, request.bio());
+
+            if (request.tags() != null) {
+                memberTagRepository.deleteAllByMember(member);
+                request.tags().forEach(t -> {
+                    Tag tag = tagRepository.findByNameAndCategory(t.name(), t.category())
+                            .orElseGet(() -> tagRepository.save(Tag.builder().name(t.name()).category(t.category()).build()));
+                    memberTagRepository.save(MemberTag.builder().member(member).tag(tag).build());
+                });
+            }
+        }
+
+        if (!noImage) {
+            if (member.getProfileImageUrl() != null) {
+                s3Service.deleteFile(member.getProfileImageUrl());
+            }
+            member.updateProfileImage(s3Service.uploadProfileImage(memberId, image));
+        }
+
         return UserProfileUpdateResponse.from(member);
     }
 
@@ -74,8 +117,16 @@ public class UserService {
         List<InterviewSession> sessions = sessionPage.getContent();
         Map<Long, AnalysisReport> reportMap = sessions.isEmpty() ? Map.of() :
                 reportRepository.findAllByInterviewSessionIn(sessions).stream()
-                        .collect(Collectors.toMap(r -> r.getInterviewSession().getId(), r -> r));
+                        .collect(Collectors.toMap(
+                                r -> r.getInterviewSession().getId(),
+                                r -> r,
+                                (a, b) -> b.getReportStatus() == ReportStatus.FINAL ? b : a
+                        ));
+        Map<Long, MenteeReportFeedback> feedbackMap = sessions.isEmpty() || member.getRole() == Role.MENTOR ? Map.of() :
+                menteeReportFeedbackRepository.findAllByInterviewSessionIn(sessions).stream()
+                        .filter(feedback -> feedback.getMentee().getId().equals(memberId))
+                        .collect(Collectors.toMap(feedback -> feedback.getInterviewSession().getId(), feedback -> feedback));
 
-        return MySessionHistoryResponse.of(sessionPage, reportMap);
+        return MySessionHistoryResponse.of(sessionPage, reportMap, feedbackMap);
     }
 }

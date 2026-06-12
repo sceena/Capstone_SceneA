@@ -1,174 +1,257 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-
-/* ============================================================
-   멘티 마이페이지  (pages/mentee/MyPage.jsx)
-   ============================================================ */
+import useAuthStore, { clearAuthUser, setAuthUser, getAuthUser } from "../../store/authStore";
+import { getMyProfile, updateMyProfile } from "../../api/users";
+import { getSessionReport, getMySessions } from "../../api/sessions";
+import { getMenteeReservations } from "../../api/reservations";
+import JobAvatar from "../../components/JobAvatar";
 
 const C = {
-  navy:"#0D2240", navyMid:"#1B4F7A",
-  cream:"#F2EDE4", creamDark:"#E8E0D0",
-  white:"#FFFFFF", teal:"#1D9E75", tealLight:"#E8F5EE",
-  text:"#1A1818", textSub:"#6B6863", textMuted:"#9E9B95",
-  border:"#E8E0D0", bg:"#FAF8F4",
-  orange:"#F59E0B", red:"#EF4444",
+  primary:      "#0D2240",
+  primaryLight: "#E8EEF6",
+  primaryGrad:  "linear-gradient(135deg, #0D2240 0%, #1B4F7A 100%)",
+  success:      "#0CA678",
+  successLight: "#E6FCF5",
+  warning:      "#E67700",
+  warningLight: "#FFF3BF",
+  danger:       "#E03131",
+  dangerLight:  "#FFF5F5",
+  text:         "#1A1B1E",
+  textSub:      "#495057",
+  textMuted:    "#868E96",
+  white:        "#FFFFFF",
+  bg:           "#F0F4F8",
+  border:       "#E9ECEF",
+  shadow:       "0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05)",
 };
 
-/* ── 로고 ── */
-const LogoIcon = ({ size=26, color=C.white }) => (
-  <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-    <circle cx="14" cy="14" r="2" fill={color}/>
-    {[0,45,90,135,180,225,270,315].map((deg,i)=>{
-      const r=deg*Math.PI/180;
-      return <line key={i} x1={14+2.5*Math.cos(r)} y1={14+2.5*Math.sin(r)} x2={14+10*Math.cos(r)} y2={14+10*Math.sin(r)} stroke={color} strokeWidth="1.5" strokeLinecap="round"/>;
-    })}
-    {[0,90,180,270].map((deg,i)=>{
-      const r=deg*Math.PI/180,mx=14+7*Math.cos(r),my=14+7*Math.sin(r),o=r+Math.PI/2;
-      return <g key={i}><line x1={mx} y1={my} x2={mx+3*Math.cos(o)} y2={my+3*Math.sin(o)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/><line x1={mx} y1={my} x2={mx-3*Math.cos(o)} y2={my-3*Math.sin(o)} stroke={color} strokeWidth="1.2" strokeLinecap="round"/></g>;
-    })}
-  </svg>
-);
-
-const Header = () => (
-  <header style={{ background:C.navy, padding:"0 5%", position:"sticky", top:0, zIndex:100 }}>
-    <nav style={{ maxWidth:1200, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", height:64 }}>
-      <span style={{ fontSize:15, fontWeight:600, color:C.white }}>안녕하세요 <span style={{ color:"rgba(255,255,255,0.75)" }}>김민준</span>님</span>
-      <Link to="/" style={{ textDecoration:"none" }}><LogoIcon size={28}/></Link>
-      <div style={{ display:"flex", gap:32 }}>
-        {[{l:"대시보드",to:"/dashboard/mentee"},{l:"멘토 탐색",to:"/mentor/search"},{l:"예약 확인",to:"#"},{l:"MyPage",to:"/mentee/mypage",bold:true}].map((x,i)=>(
-          <Link key={i} to={x.to} style={{ fontSize:14, fontWeight:x.bold?700:400, color:C.white, textDecoration:"none", opacity:x.bold?1:0.85 }}
-            onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=x.bold?1:0.85}>{x.l}</Link>
-        ))}
-      </div>
-    </nav>
-  </header>
-);
-
-/* ── 변화 스탯 카드 ── */
-const ChangeStatCard = ({ label, before, after, unit, note, noteColor }) => (
-  <div style={{ background:C.white, borderRadius:14, padding:"18px 20px", border:`1px solid ${C.border}`, flex:1, minWidth:0 }}>
-    <p style={{ fontSize:12, color:C.textMuted, marginBottom:8 }}>{label}</p>
-    {before ? (
-      <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:4 }}>
-        <span style={{ fontSize:14, color:C.textMuted }}>{before}</span>
-        <span style={{ fontSize:14, color:C.textMuted }}>→</span>
-        <span style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.03em" }}>{after}</span>
-      </div>
-    ) : (
-      <p style={{ fontSize:24, fontWeight:700, color:C.navy, letterSpacing:"-0.03em", marginBottom:4 }}>{after}</p>
-    )}
-    {note && <p style={{ fontSize:12, color:noteColor||C.teal, fontWeight:500 }}>{note}</p>}
-    {unit && !note && <p style={{ fontSize:12, color:C.textMuted }}>{unit}</p>}
-  </div>
-);
-
-/* ── 역량 성장 바 ── */
-const GrowthBar = ({ label, value, change, color }) => {
-  const isNeg = change < 0;
+/* ── 헤더 ── */
+const Header = ({ userName, accessToken }) => {
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } }); } catch {}
+    clearAuthUser(); navigate("/");
+  };
+  const initials = userName ? userName.slice(0, 2) : "멘";
   return (
-    <div style={{ marginBottom:14 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-        <span style={{ fontSize:13, color:C.text }}>{label}</span>
-        <span style={{ fontSize:12, fontWeight:700, color: isNeg?C.red:C.teal }}>
-          {isNeg?"":"+"}
-          {change}%
-        </span>
-      </div>
-      <div style={{ height:8, background:C.creamDark, borderRadius:999, overflow:"hidden" }}>
-        <div style={{
-          height:"100%", borderRadius:999,
-          background: isNeg?C.red:color,
-          width:`${Math.min(Math.abs(value),100)}%`,
-          transition:"width 0.6s ease",
-        }}/>
-      </div>
-    </div>
+    <header style={{
+      background: C.white, padding: "0 5%",
+      position: "sticky", top: 0, zIndex: 100,
+      boxShadow: "0 1px 0 #E9ECEF, 0 2px 8px rgba(0,0,0,0.04)",
+    }}>
+      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: C.primaryGrad, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,34,64,0.3)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 800, color: C.text, letterSpacing: "-0.03em" }}>
+            Scene<span style={{ color: C.primary }}>A</span>
+          </span>
+        </div>
+        {/* 우측: 네비게이션 + 로그아웃 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {[
+            { label: "대시보드", to: "/dashboard/mentee" },
+            { label: "멘토 탐색", to: "/mentor/search" },
+            { label: "마이페이지", to: "/mentee/mypage", active: true },
+          ].map(({ label, to, active }) => (
+            <Link key={label} to={to} style={{
+              fontSize: 14, fontWeight: active ? 600 : 400,
+              color: active ? C.primary : C.textSub,
+              textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+              background: active ? C.primaryLight : "transparent", transition: "all 0.15s",
+            }}
+              onMouseEnter={e => { if (!active) { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; } }}
+              onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; } }}
+            >{label}</Link>
+          ))}
+          <div style={{ width: 1, height: 24, background: C.border, margin: "0 8px" }} />
+          <button onClick={handleLogout} style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textSub, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.text; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textSub; }}
+          >로그아웃</button>
+        </div>
+      </nav>
+    </header>
   );
 };
 
-/* ── WPM 태그 색상 ── */
-const wpmColor = (level) => {
-  if(level==="안정") return { bg:C.tealLight, color:C.teal };
-  if(level==="양호") return { bg:"#E8F4FF", color:"#185FA5" };
-  if(level==="빠름") return { bg:"#FEF3C7", color:C.orange };
-  if(level==="매우 빠름") return { bg:"#FEF2F2", color:C.red };
-  return { bg:C.bg, color:C.textSub };
-};
+/* ── 레이더 차트 ── */
+function RadarChart({ data, size = 210 }) {
+  const cx = size / 2, cy = size / 2, R = size * 0.36, n = data.length;
+  const angle = i => (Math.PI * 2 * i) / n - Math.PI / 2;
+  const pt = (i, r) => ({ x: cx + r * Math.cos(angle(i)), y: cy + r * Math.sin(angle(i)) });
+  const poly = r => data.map((_, i) => `${pt(i, r).x},${pt(i, r).y}`).join(" ");
+  const dataPoints = data.map((d, i) => pt(i, R * (d.value / 100)));
+  const dataPath = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") + " Z";
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {[0.25, 0.5, 0.75, 1].map((lv, i) => <polygon key={i} points={poly(R * lv)} fill="none" stroke={C.border} strokeWidth="1" />)}
+      {data.map((_, i) => { const p = pt(i, R); return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke={C.border} strokeWidth="1" />; })}
+      <path d={dataPath} fill={C.primary} fillOpacity="0.12" stroke={C.primary} strokeWidth="2" strokeLinejoin="round" />
+      {dataPoints.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={4} fill={C.primary} />)}
+      {data.map((d, i) => {
+        const p = pt(i, R + 22);
+        return <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" fontSize="10" fill={C.textSub} fontFamily="'Noto Sans KR',sans-serif">{d.label}</text>;
+      })}
+    </svg>
+  );
+}
+
+/* ── 라인 차트 ── */
+function LineChart({ sessions }) {
+  const W = 800, H = 160, pad = { l: 36, r: 20, t: 16, b: 32 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+  const n = sessions.length;
+  if (n < 2) return (
+    <div style={{ textAlign: "center", padding: "28px 0", color: C.textMuted, fontSize: 13 }}>
+      2회 이상의 세션이 있어야 추이를 볼 수 있어요
+    </div>
+  );
+  const maxScore = 5;
+  const xs = i => pad.l + (i / (n - 1)) * iW;
+  const ys = v => pad.t + iH - (v / maxScore) * iH;
+  const pathD = sessions.map((s, i) => `${i === 0 ? "M" : "L"}${xs(i)},${ys(s.ai)}`).join(" ");
+  const fillD = pathD + ` L${xs(n - 1)},${pad.t + iH} L${xs(0)},${pad.t + iH} Z`;
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
+      {[1, 2, 3, 4, 5].map(v => (
+        <g key={v}>
+          <line x1={pad.l} y1={ys(v)} x2={pad.l + iW} y2={ys(v)} stroke={C.border} strokeWidth="0.8" strokeDasharray="4,4" />
+          <text x={pad.l - 6} y={ys(v)} textAnchor="end" dominantBaseline="central" fontSize="9" fill={C.textMuted}>{v}</text>
+        </g>
+      ))}
+      <path d={fillD} fill={C.primary} fillOpacity="0.07" />
+      <path d={pathD} fill="none" stroke={C.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {sessions.map((s, i) => (
+        <g key={i}>
+          <circle cx={xs(i)} cy={ys(s.ai)} r={5} fill={C.white} stroke={C.primary} strokeWidth="2.5" />
+          <text x={xs(i)} y={pad.t + iH + 14} textAnchor="middle" fontSize="9" fill={C.textMuted}>{s.date?.slice(5) || `${i + 1}회`}</text>
+          <text x={xs(i)} y={ys(s.ai) - 10} textAnchor="middle" fontSize="10" fontWeight="700" fill={C.primary}>{s.ai}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/* ── 도넛 차트 ── */
+function DonutChart({ matched, total, size = 140 }) {
+  const r = Math.round(size * 0.38);
+  const cx = size / 2, cy = size / 2;
+  const strokeW = Math.round(size * 0.12);
+  const circ = 2 * Math.PI * r;
+  const pct = total > 0 ? matched / total : 0;
+  const filled = pct * circ;
+  const gap = circ - filled;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {/* 배경 링 (미충족) */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.dangerLight} strokeWidth={strokeW} />
+      {/* 채워진 링 (충족) — rotate(-90)으로 12시 방향 시작 */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.primary} strokeWidth={strokeW}
+        strokeDasharray={`${filled} ${gap}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`}
+        style={{ transition: "stroke-dasharray 0.8s ease" }} />
+      <text x={cx} y={cy + 6} textAnchor="middle" dominantBaseline="middle"
+        fontSize={Math.round(size * 0.16)} fontWeight="800" fill={C.primary}
+        fontFamily="'Noto Sans KR',sans-serif">
+        {Math.round(pct * 100)}%
+      </text>
+      <text x={cx} y={cy + Math.round(size * 0.24)} textAnchor="middle"
+        fontSize={Math.round(size * 0.08)} fill={C.textMuted}
+        fontFamily="'Noto Sans KR',sans-serif">충족률</text>
+    </svg>
+  );
+}
+
+/* ── 문항별 점수 바 ── */
+function QuestionScoreBar({ questions }) {
+  if (!questions?.length) return <p style={{ fontSize: 13, color: C.textMuted, padding: "20px 0", textAlign: "center" }}>문항 데이터가 없어요</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {questions.map((q, i) => {
+        const pct = (q.score / 10) * 100;
+        const color = pct >= 70 ? C.success : pct >= 50 ? C.warning : C.danger;
+        return (
+          <div key={i}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+              <span style={{ fontSize: 12, color: C.textSub, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "82%" }}>
+                Q{i + 1}. {q.question?.slice(0, 32)}{q.question?.length > 32 ? "…" : ""}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color, marginLeft: 8, flexShrink: 0 }}>{q.score}</span>
+            </div>
+            <div style={{ height: 6, background: C.bg, borderRadius: 999, overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: color, transition: "width 0.8s ease" }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ── 히스토리 아이템 ── */
-const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, date, type, hasReport, hasAudio }) => {
-  const wc = wpmColor(wpmLevel);
+const WPM_COLOR = {
+  "안정":    { bg: "#E6FCF5", color: "#0CA678" },
+  "양호":    { bg: "#EEF2FF", color: "#4F46E5" },
+  "빠름":    { bg: "#FFF3BF", color: "#E67700" },
+  "매우 빠름": { bg: "#FFF5F5", color: "#E03131" },
+};
+
+const HistoryItem = ({ num, title, ai, mentor, date, isGroup, id, navigate }) => {
   return (
-    <div style={{ padding:"18px 0", borderBottom:`1px solid ${C.border}` }}>
-      <div style={{ display:"flex", alignItems:"flex-start", gap:14 }}>
-        {/* 번호 원 */}
+    <div style={{ padding: "18px 0", borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
         <div style={{
-          width:28, height:28, borderRadius:"50%", flexShrink:0,
-          background:C.teal+"18", border:`1.5px solid ${C.teal}`,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          fontSize:12, fontWeight:700, color:C.teal,
+          width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+          background: C.primaryLight, border: `1.5px solid ${C.primary}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 700, color: C.primary,
         }}>{num}</div>
-
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-            <p style={{ fontSize:15, fontWeight:700, color:C.text }}>{title}</p>
-            <span style={{ fontSize:11, padding:"3px 8px", borderRadius:999, background:C.tealLight, color:C.teal, fontWeight:600 }}>완료</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <p style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</p>
+            <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 99, background: C.successLight, color: C.success, fontWeight: 600 }}>완료</span>
           </div>
-
-          {/* 지표 태그들 */}
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
-            <span style={{ fontSize:11, padding:"3px 9px", borderRadius:999, background:wc.bg, color:wc.color, fontWeight:600 }}>
-              WPM {wpm} · {wpmLevel}
-            </span>
-            <span style={{ fontSize:11, padding:"3px 9px", borderRadius:999, background:C.bg, color:C.textSub }}>
-              STAR {star}
-            </span>
-            <span style={{ fontSize:11, padding:"3px 9px", borderRadius:999, background:C.bg, color:C.textSub }}>
-              AI {ai}점
-            </span>
-            {silence && (
-              <span style={{ fontSize:11, padding:"3px 9px", borderRadius:999, background:"#FEF2F2", color:C.red }}>
-                침묵 {silence}회
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            {mentor && (
+              <span style={{ fontSize: 12, color: C.textSub, display: "flex", alignItems: "center", gap: 3 }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                {mentor} 멘토
+              </span>
+            )}
+            {date && <span style={{ fontSize: 12, color: C.textMuted }}>· {date}</span>}
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+              background: isGroup ? "#FFF3BF" : C.primaryLight,
+              color: isGroup ? "#E67700" : C.primary,
+            }}>{isGroup ? "그룹" : "1:1"}</span>
+            {ai > 0 && (
+              <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 99, background: C.primaryLight, color: C.primary, fontWeight: 600 }}>
+                AI {ai}점
               </span>
             )}
           </div>
-
-          {/* 멘토 · 날짜 */}
-          <p style={{ fontSize:12, color:C.textMuted, marginBottom:10 }}>
-            멘토 {mentor} · {date} · {type}
-          </p>
-
-          {/* 버튼 */}
-          <div style={{ display:"flex", gap:8 }}>
-            <button style={{
-              padding:"7px 16px",
-              background:C.navy, color:C.white,
-              border:"none", borderRadius:8,
-              fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-              transition:"background 0.18s",
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => id && navigate(`/report/ai/${id}`)} style={{
+              padding: "8px 14px", background: C.white, color: C.primary,
+              border: `1px solid ${C.primary}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+              transition: "opacity 0.15s",
             }}
-              onMouseEnter={e=>e.currentTarget.style.background=C.navyMid}
-              onMouseLeave={e=>e.currentTarget.style.background=C.navy}
-            >리포트 보기</button>
-            {hasAudio && (
-              <button style={{
-                padding:"7px 16px",
-                background:C.white, color:C.text,
-                border:`1px solid ${C.border}`, borderRadius:8,
-                fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-                display:"flex", alignItems:"center", gap:5,
-                transition:"border-color 0.15s",
-              }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M4.5 4l4 2-4 2V4z" fill="currentColor"/>
-                </svg>
-                답변 다시 듣기
-              </button>
-            )}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >AI 리포트</button>
+            <button onClick={() => id && navigate(`/report/final/${id}`, { state: { sessionId: id, role: "mentee" } })} style={{
+              padding: "8px 14px", background: C.primaryGrad, color: C.white,
+              border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+              boxShadow: "0 4px 10px rgba(13,34,64,0.2)", transition: "opacity 0.15s",
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >최종 리포트 →</button>
           </div>
         </div>
       </div>
@@ -176,204 +259,829 @@ const HistoryItem = ({ num, title, wpm, wpmLevel, star, ai, silence, mentor, dat
   );
 };
 
+/* ── 멘토 신청 이력 아이템 ── */
+const RESERVATION_STATUS = {
+  PENDING:   { label: "대기 중", bg: "#FFF3BF", color: "#E67700" },
+  CONFIRMED: { label: "수락됨",  bg: "#E6FCF5", color: "#0CA678" },
+  CANCELLED: { label: "취소됨",  bg: C.bg,      color: C.textMuted },
+  DONE:      { label: "완료",    bg: "#F0F4FF", color: "#4C6EF5" },
+};
+
+const ReservationItem = ({ r }) => {
+  const reservStatus = r.status?.toUpperCase();
+  const scheduledAt = r.scheduled_at || r.scheduledAt;
+  const createdAt   = r.created_at   || r.createdAt;
+  // 수락됐고 예약 시간이 지났으면 "완료"
+  const isPast = scheduledAt && new Date(scheduledAt) < new Date();
+  const statusKey = (reservStatus === "CONFIRMED" && isPast) ? "DONE" : reservStatus;
+  const status = RESERVATION_STATUS[statusKey] || RESERVATION_STATUS.PENDING;
+  const formatDate  = v => v ? new Date(v).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+  return (
+    <div style={{ padding: "18px 0", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{
+        width: 46, height: 46, borderRadius: 12, flexShrink: 0,
+        background: C.primaryLight,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.primary} strokeWidth="2" strokeLinecap="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+            {r.mentor_name || r.mentorName || "멘토"} 멘토
+          </p>
+          <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 99, background: status.bg, color: status.color }}>
+            {status.label}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: C.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M4 1v2M8 1v2M1.5 5h9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+            면접 일정 {scheduledAt ? formatDate(scheduledAt) : "미정"}
+          </span>
+          <span style={{ fontSize: 12, color: C.textMuted }}>신청일 {formatDate(createdAt)}</span>
+          {(r.session_type || r.sessionType) && (
+            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, background: C.bg, color: C.textSub }}>
+              {r.session_type || r.sessionType}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── AI 리포트 데이터 파생 ── */
+function deriveRadarFromReport(qr) {
+  if (!qr?.length) return null;
+  const n = qr.length;
+  const avg = fn => qr.reduce((s, q) => s + fn(q), 0) / n;
+  const starScore    = avg(q => { const s = q.metrics_summary?.star_structure || ""; return s.includes("충족") ? 90 : s.includes("부족") ? 40 : 65; });
+  const speedScore   = avg(q => { const s = q.metrics_summary?.speaking_speed || ""; return s === "적정" ? 90 : s === "양호" ? 72 : 55; });
+  const clarityScore = avg(q => { const s = q.metrics_summary?.sentence_clarity || ""; return s === "명확" ? 90 : s === "짧음" ? 52 : 68; });
+  const silenceScore = avg(q => { const s = q.metrics_summary?.silence || ""; return s.includes("없음") ? 92 : s.includes("1") ? 72 : 45; });
+  const avgScorePct  = (qr.reduce((s, q) => s + (q.score || 0), 0) / n) * 10;
+  return [
+    { label: "STAR 구조화", value: Math.round(starScore) },
+    { label: "말하기 안정성", value: Math.round(speedScore) },
+    { label: "논리적 답변", value: Math.round(avgScorePct) },
+    { label: "문장 간결성", value: Math.round(clarityScore) },
+    { label: "직무 역량", value: Math.round(avgScorePct * 0.85) },
+    { label: "면접 전달력", value: Math.round((speedScore + silenceScore) / 2) },
+  ];
+}
+
+/* ── 프로필 수정 모달 ── */
+function EditProfileModal({ onClose, userEmail, onImageChange, initialBio, profile, onProfileRefresh, onNameSaved }) {
+  const [tab, setTab] = useState("name");
+  const [name, setName] = useState("");
+  const [bio, setBio] = useState(initialBio || "");
+  const [school, setSchool] = useState(() => profile?.tags?.find(t => t.category === "학교")?.name || "");
+  const [major, setMajor] = useState(() => profile?.tags?.find(t => t.category === "전공")?.name || "");
+  const [position, setPosition] = useState(() => profile?.tags?.find(t => t.category === "관심직무")?.name || "");
+  const [targetCompany, setTargetCompany] = useState(() => profile?.tags?.find(t => t.category === "목표기업")?.name || "");
+  const [techStack, setTechStack] = useState(() => profile?.tags?.filter(t => t.category === "기술스택").map(t => t.name).join(", ") || "");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [imgPreview, setImgPreview] = useState(null);
+  const [imgFile, setImgFile] = useState(null);
+
+  const handleImageFile = e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImgFile(file);
+    const reader = new FileReader();
+    reader.onload = ev => setImgPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveImage = async () => {
+    if (!imgFile) { setError("이미지를 선택해주세요."); return; }
+    setSaving(true);
+    try {
+      await updateMyProfile({}, imgFile);
+      // S3 URL은 img 태그에서 인증 없이 로드 불가 → base64 미리보기를 localStorage에 저장하고 즉시 표시
+      onImageChange?.(imgPreview);
+      try { if (imgPreview) localStorage.setItem(`profile_img_${userEmail}`, imgPreview); } catch {}
+      await onProfileRefresh?.();
+      setDone(true); setTimeout(onClose, 900);
+    } catch { setError("이미지 저장에 실패했습니다."); setSaving(false); }
+  };
+
+  const handleSave = async () => {
+    setError("");
+    const data = {};
+    if (tab === "name") {
+      if (!name.trim()) { setError("이름을 입력해주세요."); return; }
+      data.name = name.trim();
+    } else if (tab === "bio") {
+      data.bio = bio.trim();
+    } else if (tab === "info") {
+      const seen = new Set();
+      const tags = [];
+      const add = (val, category) => {
+        const trimmed = val?.trim();
+        if (trimmed && !seen.has(trimmed)) { seen.add(trimmed); tags.push({ name: trimmed, category }); }
+      };
+      add(school, "학교");
+      add(major, "전공");
+      add(position, "관심직무");
+      add(targetCompany, "목표기업");
+      techStack.split(",").forEach(v => add(v, "기술스택"));
+      data.tags = tags;
+    } else {
+      if (pwNew.length < 8) { setError("비밀번호는 8자 이상이어야 합니다."); return; }
+      if (pwNew !== pwConfirm) { setError("비밀번호가 일치하지 않습니다."); return; }
+      data.password = pwNew;
+    }
+    setSaving(true);
+    try {
+      await updateMyProfile(data);
+      if (tab === "name" && data.name) onNameSaved?.(data.name);
+      await onProfileRefresh?.();
+      setDone(true); setTimeout(onClose, 900);
+    }
+    catch (e) { setError(e?.status === 401 ? "로그인이 만료되었습니다." : "저장에 실패했습니다."); setSaving(false); }
+  };
+
+  const inp = { width: "100%", padding: "11px 14px", borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 14, fontFamily: "inherit", outline: "none", background: C.bg, boxSizing: "border-box" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: C.white, borderRadius: 20, padding: "32px 36px", width: 420, boxShadow: "0 12px 48px rgba(13,34,64,0.18)" }}>
+        <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 20 }}>프로필 수정</h3>
+        {done ? (
+          <div style={{ textAlign: "center", padding: "24px 0" }}>
+            <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.successLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 11l5 5 9-9" stroke={C.success} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <p style={{ color: C.success, fontWeight: 700, fontSize: 15 }}>저장되었습니다</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 22 }}>
+              {[{ k: "name", l: "이름" }, { k: "bio", l: "소개" }, { k: "info", l: "프로필" }, { k: "password", l: "비밀번호" }, { k: "image", l: "사진" }].map(t => (
+                <button key={t.k} onClick={() => { setTab(t.k); setError(""); }} style={{
+                  flex: 1, padding: "10px 0", background: "transparent", border: "none",
+                  borderBottom: `2.5px solid ${tab === t.k ? C.primary : "transparent"}`,
+                  fontSize: 12, fontWeight: tab === t.k ? 700 : 400,
+                  color: tab === t.k ? C.primary : C.textMuted, cursor: "pointer", fontFamily: "inherit", marginBottom: -1,
+                }}>{t.l}</button>
+              ))}
+            </div>
+            {tab === "name" && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 7 }}>새 이름</label>
+                <input value={name} onChange={e => setName(e.target.value)} placeholder="변경할 이름" style={inp}
+                  onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+              </div>
+            )}
+            {tab === "bio" && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 7 }}>한줄 소개 ({bio.length}/100)</label>
+                <textarea value={bio} onChange={e => setBio(e.target.value.slice(0, 100))} placeholder="나를 간단히 소개해주세요" rows={3}
+                  style={{ ...inp, resize: "none", lineHeight: 1.6 }}
+                  onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+              </div>
+            )}
+            {tab === "info" && (
+              <div style={{ marginBottom: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>학교</label>
+                    <input value={school} onChange={e => setSchool(e.target.value)} placeholder="예) 한양대학교" style={inp}
+                      onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>전공</label>
+                    <input value={major} onChange={e => setMajor(e.target.value)} placeholder="예) 컴퓨터공학과" style={inp}
+                      onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>관심 직무</label>
+                  <input value={position} onChange={e => setPosition(e.target.value)} placeholder="예) 백엔드 개발, 데이터 분석" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>목표 기업</label>
+                  <input value={targetCompany} onChange={e => setTargetCompany(e.target.value)} placeholder="예) 네이버, 카카오, IT 스타트업" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>기술 스택</label>
+                  <input value={techStack} onChange={e => setTechStack(e.target.value)} placeholder="예) Python, React, Java (쉼표로 구분)" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+              </div>
+            )}
+            {tab === "password" && (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 7 }}>새 비밀번호</label>
+                  <input type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} placeholder="8자 이상" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 7 }}>비밀번호 확인</label>
+                  <input type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} placeholder="다시 입력" style={inp}
+                    onFocus={e => e.target.style.borderColor = C.primary} onBlur={e => e.target.style.borderColor = C.border} />
+                  {pwConfirm && pwNew === pwConfirm && pwNew.length >= 8 && <p style={{ fontSize: 11, color: C.success, marginTop: 5 }}>비밀번호가 일치합니다</p>}
+                </div>
+              </>
+            )}
+            {tab === "image" && (
+              <div style={{ marginBottom: 20, textAlign: "center" }}>
+                {imgPreview
+                  ? <img src={imgPreview} alt="preview" style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `2px solid ${C.border}`, margin: "0 auto 12px", display: "block" }} />
+                  : <div style={{ width: 80, height: 80, borderRadius: "50%", background: C.bg, border: `2px dashed ${C.border}`, margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><path d="M12 5v14M5 12h14"/></svg>
+                    </div>
+                }
+                <label style={{ display: "inline-block", padding: "8px 18px", borderRadius: 8, border: `1.5px solid ${C.border}`, fontSize: 13, fontWeight: 600, color: C.primary, cursor: "pointer" }}>
+                  이미지 선택 <input type="file" accept="image/*" onChange={handleImageFile} style={{ display: "none" }} />
+                </label>
+                <p style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>JPG, PNG · 최대 5MB</p>
+              </div>
+            )}
+            {error && <p style={{ fontSize: 12, color: C.danger, marginBottom: 14, textAlign: "center" }}>{error}</p>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.white, color: C.textSub, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>취소</button>
+              <button onClick={tab === "image" ? handleSaveImage : handleSave} disabled={saving} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: C.primaryGrad, color: C.white, fontSize: 14, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
+                {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════ 메인 ══════════════ */
 export default function MenteeMyPage() {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("all");
+  const navigate  = useNavigate();
+  const { user }  = useAuthStore();
+  const userName  = user?.name || user?.email?.split("@")[0] || "사용자";
 
-  const historyAll = [
-    { num:5, title:"백엔드 개발자 모의 면접", wpm:118, wpmLevel:"안정", star:"4/4", ai:4.4, silence:2, mentor:"박지훈", date:"2026.04.02", type:"1:1", hasAudio:true },
-    { num:4, title:"프론트엔드 그룹 면접 연습", wpm:129, wpmLevel:"양호", star:"3/4", ai:4.1, silence:null, mentor:"이수연", date:"2026.03.20", type:"그룹 3인", hasAudio:true },
-    { num:3, title:"인성 면접 집중 코칭", wpm:141, wpmLevel:"양호", star:"3/4", ai:3.9, silence:4, mentor:"박지훈", date:"2026.03.05", type:"1:1", hasAudio:true },
-    { num:2, title:"기술 면접 기초 세션", wpm:158, wpmLevel:"빠름", star:"2/4", ai:3.5, silence:null, mentor:"김도현", date:"2026.02.18", type:"1:1", hasAudio:false },
-    { num:1, title:"첫 모의 면접 세션", wpm:182, wpmLevel:"매우 빠름", star:"1/4", ai:2.8, silence:7, mentor:"박지훈", date:"2026.02.01", type:"1:1", hasAudio:false },
+  const [activeTab, setActiveTab]     = useState("dashboard");
+  const [profile, setProfile]         = useState(user?.profileData || null);
+  const [apiSessions, setApiSessions] = useState([]);
+  const [latestReport, setLatestReport] = useState(null);
+  const [recentReports, setRecentReports] = useState([]);
+  const [mentorScoreTrend, setMentorScoreTrend] = useState([]);
+  const [reservations, setReservations] = useState([]);
+
+  const hasResume = (() => {
+    try {
+      const key = `scena_resume_draft:${user?.email || user?.id || "anonymous"}`;
+      const job = localStorage.getItem(`${key}:job`);
+      const items = localStorage.getItem(key);
+      if (job) { const p = JSON.parse(job); if (p?.requirements || p?.looking_for) return true; }
+      if (items) { const arr = JSON.parse(items); if (arr?.some(i => i.content?.trim())) return true; }
+    } catch {}
+    return false;
+  })();
+  const [showEdit, setShowEdit]       = useState(false);
+  const [profileImage, setProfileImage] = useState(() => {
+    const stored = localStorage.getItem(`profile_img_${user?.email}`);
+    // data: URL(업로드) 또는 https:// URL(카카오 등 외부 CDN) 모두 허용
+    return (stored?.startsWith("data:") || stored?.startsWith("https://")) ? stored : null;
+  });
+
+  useEffect(() => {
+    getMyProfile().then(p => {
+      setProfile(p);
+      const stored = localStorage.getItem(`profile_img_${user?.email}`);
+      const hasCached = stored?.startsWith("data:") || stored?.startsWith("https://");
+      if (!hasCached && p?.profile_image_url) {
+        const url = p.profile_image_url.replace(/^http:\/\//i, "https://");
+        // fetch로 base64 변환 시도 → CORS 차단(카카오 등) 시 URL 그대로 저장
+        fetch(url)
+          .then(r => r.ok ? r.blob() : null)
+          .then(blob => {
+            if (!blob) throw new Error("no blob");
+            const reader = new FileReader();
+            reader.onload = e => {
+              const b64 = e.target.result;
+              try { localStorage.setItem(`profile_img_${user?.email}`, b64); } catch {}
+              setProfileImage(b64);
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => {
+            // CORS 등으로 fetch 불가 → URL 직접 사용 (img 태그는 CORS 없이 로드 가능)
+            try { localStorage.setItem(`profile_img_${user?.email}`, url); } catch {}
+            setProfileImage(url);
+          });
+      }
+    }).catch(() => {});
+
+    getMySessions().then(async data => {
+      if (!data?.length) return;
+      // 완료된 세션만, 최신순
+      const completed = [...data]
+        .filter(s => (s.status ?? "").toLowerCase() === "completed")
+        .sort((a, b) => new Date(b.scheduledAt ?? b.scheduled_at ?? 0) - new Date(a.scheduledAt ?? a.scheduled_at ?? 0));
+      setApiSessions(completed);
+
+      // 최근 3개 리포트 fetch (역량 종합 분석 평균용 + 최신 리포트)
+      const top3 = completed.slice(0, 3);
+      if (top3.length > 0) {
+        const reports = await Promise.all(
+          top3.map(s => getSessionReport(s.id).catch(() => null))
+        );
+        const validReports = reports.filter(Boolean);
+        if (validReports.length > 0) setLatestReport(validReports[0]);
+        setRecentReports(validReports);
+      }
+
+      // 최종 리포트가 있는 세션들의 mentor_score로 추이 구성 (오래된 순)
+      const finalSessions = [...completed]
+        .filter(s => (s.reportStatus ?? s.report_status) === "final")
+        .reverse();
+      if (finalSessions.length > 0) {
+        const reports = await Promise.all(
+          finalSessions.map(s => getSessionReport(s.id).catch(() => null))
+        );
+        const trend = reports
+          .map((report, i) => ({
+            ai:   report?.mentor_score ?? null,
+            date: (finalSessions[i].scheduledAt ?? finalSessions[i].scheduled_at ?? "").slice(0, 10).replace(/-/g, "."),
+          }))
+          .filter(item => item.ai != null);
+        setMentorScoreTrend(trend);
+      }
+    }).catch(() => {});
+
+    getMenteeReservations().then(setReservations).catch(() => {});
+  }, []);
+
+  const historyAll = apiSessions.map((s, i, arr) => {
+    const jobCat    = s.jobCategory ?? s.job_category ?? "";
+    const mentorName = s.mentorName ?? s.mentor_name ?? "";
+    const sessionType = s.sessionType ?? s.session_type ?? "1:1 면접";
+    const isGroup   = sessionType.includes("그룹");
+    const title     = jobCat ? `${jobCat} 모의 면접` : "모의 면접";
+    const dateStr   = (s.scheduledAt ?? s.scheduled_at ?? s.startedAt ?? s.started_at ?? "").slice(0, 10).replace(/-/g, ".");
+    return {
+      id:      s.id,
+      num:     arr.length - i,
+      title,
+      ai:      s.aiScore ?? 0,
+      mentor:  mentorName,
+      date:    dateStr,
+      type:    sessionType,
+      isGroup,
+    };
+  });
+
+  const displayName    = profile?.name ?? userName;
+  const aiReport       = latestReport?.ai_report;
+  const qReports       = aiReport?.question_reports || [];
+  const fitGapRaw      = aiReport?.fit_gap;
+
+  const radarDataList = recentReports
+    .map(r => deriveRadarFromReport(r?.ai_report?.question_reports || []))
+    .filter(Boolean);
+  const radarData = radarDataList.length > 0
+    ? radarDataList[0].map((item, i) => ({
+        label: item.label,
+        value: Math.round(
+          radarDataList.reduce((sum, d) => sum + (d[i]?.value ?? 0), 0) / radarDataList.length
+        ),
+      }))
+    : [
+        { label: "STAR 구조화", value: 0 },
+        { label: "말하기 안정성", value: 0 },
+        { label: "논리적 답변", value: 0 },
+        { label: "문장 간결성", value: 0 },
+        { label: "직무 역량", value: 0 },
+        { label: "면접 전달력", value: 0 },
+      ];
+  const hasRadar = radarDataList.length > 0;
+
+  const recentQuestions = qReports.length > 0
+    ? qReports.map(q => ({ question: q.question, score: q.score }))
+    : [];
+
+  const matchedCount = fitGapRaw?.matched_requirements?.length ?? 0;
+  const missingCount = fitGapRaw?.missing_requirements?.length ?? 0;
+  const fitGap = { matched: matchedCount, missing: missingCount, total: matchedCount + missingCount };
+  const hasFitGap = fitGap.total > 0;
+
+  const fitMatchedItems = fitGapRaw?.matched_requirements?.map(i => i.split(" / ")[0]?.replace(/^요구사항:\s*/, "") || i) ?? [];
+  const fitMissingItems = fitGapRaw?.missing_requirements?.map(i => i.split(" / ")[0]?.replace(/^요구사항:\s*/, "") || i) ?? [];
+
+  const latestSession  = historyAll[0];
+
+  const latestWpm       = historyAll[0]?.wpm ?? "-";
+  const latestMentorScore = mentorScoreTrend.length > 0 ? mentorScoreTrend[mentorScoreTrend.length - 1].ai : null;
+  const firstMentorScore  = mentorScoreTrend.length > 0 ? mentorScoreTrend[0].ai : null;
+
+  const handleWithdraw = async () => {
+    if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
+    try { await fetch("/api/auth/withdraw", { method: "DELETE", headers: { Authorization: `Bearer ${user?.accessToken}` } }); } catch {}
+    clearAuthUser(); navigate("/");
+  };
+
+  const TABS = [
+    { k: "dashboard", l: "대시보드" },
+    { k: "reservations", l: "신청 이력", count: reservations.length },
+    { k: "history", l: "면접 히스토리", count: historyAll.length },
   ];
 
-  const historyUnread = historyAll.slice(0,1);
+  const Card = ({ children, style }) => (
+    <div style={{ background: C.white, borderRadius: 20, padding: "22px 24px", boxShadow: C.shadow, ...style }}>
+      {children}
+    </div>
+  );
 
-  const growthData = [
-    { label:"STAR 구조화",    value:75, change:28, color:C.teal },
-    { label:"말하기 안정성",   value:80, change:31, color:C.teal },
-    { label:"논리적 답변",     value:65, change:19, color:"#185FA5" },
-    { label:"문장 간결성",     value:60, change:14, color:C.orange },
-    { label:"반응 속도",       value:70, change:22, color:C.teal },
-    { label:"직무 역량 커버리지",value:40, change:-5, color:C.red },
-  ];
+  const CardHeader = ({ label, title, sub }) => (
+    <div style={{ marginBottom: 16 }}>
+      {label && <p style={{ fontSize: 10, fontWeight: 800, color: C.primary, letterSpacing: "0.1em", marginBottom: 4 }}>{label}</p>}
+      <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0 }}>{title}</h3>
+      {sub && <p style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>{sub}</p>}
+    </div>
+  );
 
-  const comments = [
-    { initials:"박J", name:"박지훈 멘토", bg:"#1B4F7A", date:"04.02",
-      session:"5회차 · 백엔드 개발자 모의 면접",
-      text:"수치 기반 답변이 훨씬 자연스러워졌어요. 이제 MSA처럼 경험 없는 영역은 학습 의지를 보여주는 방향으로 연습하면 다음 면접 충분히 통과할 수 있을 것 같아요." },
-    { initials:"이S", name:"이수연 멘토", bg:"#0F6E56", date:"03.20",
-      session:"4회차 · 프론트엔드 그룹 면접 연습",
-      text:"STAR 구조가 많이 잡혔어요! Result 부분을 항상 수치나 구체적 성과로 마무리하는 습관만 들이면 완벽할 것 같습니다." },
-  ];
+  const EmptyState = ({ icon, title, sub }) => (
+    <div style={{ textAlign: "center", padding: "36px 0" }}>
+      <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+        {icon}
+      </div>
+      <p style={{ fontSize: 14, fontWeight: 600, color: C.textSub, marginBottom: 4 }}>{title}</p>
+      {sub && <p style={{ fontSize: 12, color: C.textMuted }}>{sub}</p>}
+    </div>
+  );
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Noto Sans KR',sans-serif;background:${C.bg}}
-        @media(max-width:900px){.mypage-layout{flex-direction:column!important}.mypage-sidebar{width:100%!important}}
-        @media(max-width:600px){.stat-grid{grid-template-columns:1fr 1fr!important}.growth-grid{grid-template-columns:1fr!important}}
+        body{font-family:'Inter','Noto Sans KR',-apple-system,sans-serif;background:${C.bg}}
+        @media(max-width:900px){.mp-layout{flex-direction:column!important}.mp-sidebar{width:100%!important}}
+        @media(max-width:640px){.stat-grid{grid-template-columns:1fr 1fr!important}.chart-grid{grid-template-columns:1fr!important}}
       `}</style>
 
-      <Header/>
+      <Header userName={userName} accessToken={user?.accessToken} />
 
-      <main style={{ maxWidth:1100, margin:"0 auto", padding:"36px 5% 60px" }}>
+      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 5% 72px" }}>
 
-        {/* 페이지 타이틀 */}
-        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:28 }}>
-          <div>
-            <h1 style={{ fontSize:22, fontWeight:700, color:C.text, letterSpacing:"-0.02em", marginBottom:4 }}>마이페이지</h1>
-            <p style={{ fontSize:13, color:C.textMuted }}>나의 면접 성장 기록을 확인하세요</p>
-          </div>
-          <button style={{
-            padding:"10px 18px",
-            background:C.white, color:C.text,
-            border:`1.5px solid ${C.border}`, borderRadius:8,
-            fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
-            transition:"border-color 0.15s",
-          }}
-            onMouseEnter={e=>e.currentTarget.style.borderColor=C.navy}
-            onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
-          >프로필 수정</button>
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text, letterSpacing: "-0.04em", marginBottom: 6 }}>마이페이지</h1>
+          <p style={{ fontSize: 14, color: C.textMuted }}>나의 면접 성장 기록을 확인하세요</p>
         </div>
 
-        <div className="mypage-layout" style={{ display:"flex", gap:24, alignItems:"flex-start" }}>
+        <div className="mp-layout" style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
 
           {/* ── 사이드바 ── */}
-          <div className="mypage-sidebar" style={{ width:210, flexShrink:0 }}>
-            <div style={{ background:C.white, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}` }}>
-              {/* 아바타 */}
-              <div style={{ textAlign:"center", marginBottom:16 }}>
-                <div style={{
-                  width:68, height:68, borderRadius:"50%",
-                  background:C.teal, margin:"0 auto 10px",
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:22, fontWeight:700, color:C.white,
-                }}>김M</div>
-                <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>김민준</p>
-                <p style={{ fontSize:12, color:C.textSub }}>백엔드 개발자 지망 · 신입</p>
+          <div className="mp-sidebar" style={{ width: 224, flexShrink: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+
+            {/* 프로필 카드 */}
+            <div style={{ background: C.white, borderRadius: 20, padding: "24px 20px", boxShadow: C.shadow }}>
+              <div style={{ textAlign: "center", marginBottom: 18 }}>
+                {profileImage
+                  ? <img src={profileImage} alt="profile" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px", display: "block", border: `2px solid ${C.border}` }} onError={e => { e.currentTarget.style.display = "none"; setProfileImage(null); }} />
+                  : <JobAvatar jobStr={profile?.tags?.find(t => t.category === "관심직무")?.name || ""} size={72} style={{ margin: "0 auto 12px" }} />
+                }
+                <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 2 }}>{displayName}</p>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99, background: C.primaryLight, color: C.primary }}>멘티</span>
+                {profile?.bio && <p style={{ fontSize: 12, color: C.textSub, marginTop: 8, lineHeight: 1.6 }}>{profile.bio}</p>}
               </div>
 
-              {/* 목표 기업 */}
-              <div style={{ background:C.bg, borderRadius:10, padding:"10px 12px", marginBottom:14 }}>
-                <p style={{ fontSize:10, color:C.textMuted, marginBottom:4 }}>목표 직무 & 기업</p>
-                <p style={{ fontSize:13, fontWeight:700, color:C.navy }}>백엔드 개발자</p>
-                <p style={{ fontSize:11, color:C.textSub, marginTop:2 }}>카카오 · 네이버 · 라인</p>
-              </div>
+              {/* 학교 · 전공 · 관심직무 · 목표기업 */}
+              {(() => {
+                const rows = [
+                  { label: "관심 직무", cat: "관심직무" },
+                  { label: "목표 기업", cat: "목표기업" },
+                  { label: "학교",     cat: "학교" },
+                  { label: "전공",     cat: "전공" },
+                ].map(r => ({ ...r, value: profile?.tags?.find(t => t.category === r.cat)?.name }))
+                  .filter(r => r.value);
+                if (!rows.length) return null;
+                return (
+                  <div style={{ background: C.bg, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+                    {rows.map((r, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+                        <span style={{ fontSize: 11, color: C.textMuted }}>{r.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{r.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
-              {/* 스탯 리스트 */}
-              <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:14 }}>
+              {/* 스탯 */}
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 0 }}>
                 {[
-                  {l:"총 세션",    v:"5회"},
-                  {l:"평균 AI 점수", v:"3.8 → 4.4"},
-                  {l:"최근 WPM",   v:"118 WPM"},
-                  {l:"STAR 달성률", v:"92%"},
-                  {l:"보유 포인트", v:"320 P"},
-                ].map((r,i)=>(
-                  <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 0", borderBottom:i<4?`1px solid ${C.border}`:"none" }}>
-                    <span style={{ fontSize:12, color:C.textMuted }}>{r.l}</span>
-                    <span style={{ fontSize:12, fontWeight:700, color:C.navy }}>{r.v}</span>
+                  { l: "총 세션", v: `${historyAll.length}회` },
+                  { l: "멘토 평점", v: latestMentorScore != null ? `${latestMentorScore}점` : "-" },
+                  { l: "최근 WPM", v: latestWpm !== "-" ? `${latestWpm}` : "-" },
+                  { l: "Fit 충족률", v: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-" },
+                  { l: "신청 이력", v: `${reservations.length}건` },
+                ].map((r, i, arr) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ fontSize: 12, color: C.textMuted }}>{r.l}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: C.primary }}>{r.v}</span>
                   </div>
                 ))}
               </div>
+
+              {/* 프로필 수정 버튼 — 프로필 카드 안에 배치 */}
+              <button onClick={() => setShowEdit(true)} style={{
+                marginTop: 14, width: "100%", padding: "10px",
+                borderRadius: 10, border: `1px solid ${C.border}`,
+                background: C.white, color: C.text,
+                fontSize: 13, fontWeight: 500, cursor: "pointer",
+                fontFamily: "inherit", transition: "all 0.15s",
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text; }}
+              >프로필 수정</button>
             </div>
+
+            {/* 면접 정보 카드 — 미등록 시 등록 유도, 등록 시 수정 링크 */}
+            <div style={{ background: C.primaryGrad, borderRadius: 16, padding: "18px 18px", boxShadow: "0 6px 20px rgba(13,34,64,0.2)" }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 4 }}>
+                {hasResume ? "면접 정보 관리" : "면접 정보 등록"}
+              </p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.6, marginBottom: 14 }}>
+                {hasResume
+                  ? "등록한 채용공고·자소서를 수정할 수 있어요"
+                  : "채용공고와 자소서를 등록하면 AI가 맞춤 질문을 생성해요"}
+              </p>
+              <Link to="/mentee/resume" style={{
+                display: "block", textAlign: "center",
+                padding: "9px", borderRadius: 8,
+                background: C.white, color: C.primary,
+                fontSize: 12, fontWeight: 700, textDecoration: "none",
+                transition: "opacity 0.15s",
+              }}
+                onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+                onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+              >{hasResume ? "수정하러 가기 →" : "등록하러 가기 →"}</Link>
+            </div>
+
+            {/* 회원탈퇴 */}
+            <button onClick={handleWithdraw} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = C.danger; e.currentTarget.style.color = C.danger; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMuted; }}
+            >회원탈퇴</button>
           </div>
 
           {/* ── 메인 콘텐츠 ── */}
-          <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:20 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
 
-            {/* 스탯 4개 */}
-            <div className="stat-grid" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
-              <ChangeStatCard label="총 면접 횟수" after="5회" unit="누적"/>
-              <ChangeStatCard label="AI 종합점수 변화" before="3.8" after="4.4" note="+0.6 성장"/>
-              <ChangeStatCard label="평균 WPM 변화" before="162" after="118" note="안정화됨" noteColor={C.teal}/>
-              <ChangeStatCard label="침묵 횟수 변화" before="7" after="2" note="Dead Air 감소" noteColor={C.teal}/>
-            </div>
-
-            {/* 역량별 성장 현황 */}
-            <div style={{ background:C.white, borderRadius:16, padding:"24px", border:`1px solid ${C.border}` }}>
-              <div style={{ marginBottom:18 }}>
-                <h3 style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:2 }}>역량별 성장 현황</h3>
-                <p style={{ fontSize:12, color:C.textMuted }}>5회 면접 기준 누적 평균</p>
-              </div>
-              <div className="growth-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 32px" }}>
-                {growthData.map((g,i)=>(
-                  <GrowthBar key={i} {...g}/>
-                ))}
-              </div>
-            </div>
-
-            {/* 히스토리 탭 */}
-            <div style={{ background:C.white, borderRadius:16, border:`1px solid ${C.border}`, overflow:"hidden" }}>
-              {/* 탭 */}
-              <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-                {[
-                  {k:"all",    l:`전체 히스토리`, count:historyAll.length},
-                  {k:"unread", l:`리포트 미확인`,  count:historyUnread.length, accent:true},
-                ].map(t=>(
-                  <button key={t.k} onClick={()=>setActiveTab(t.k)} style={{
-                    padding:"14px 24px", background:"transparent", border:"none",
-                    borderBottom:`2.5px solid ${activeTab===t.k?C.navy:"transparent"}`,
-                    fontSize:14, fontWeight:activeTab===t.k?700:400,
-                    color:activeTab===t.k?C.navy:C.textMuted,
-                    cursor:"pointer", fontFamily:"inherit", transition:"all 0.18s",
-                    display:"flex", alignItems:"center", gap:6,
-                  }}>
-                    {t.l}
-                    <span style={{
-                      fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:999,
-                      background:t.accent ? (activeTab===t.k?C.red:"#FEF2F2") : (activeTab===t.k?C.navy:C.bg),
-                      color:t.accent ? C.red : (activeTab===t.k?C.white:C.textMuted),
-                    }}>{t.count}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* 히스토리 리스트 */}
-              <div style={{ padding:"0 24px 8px" }}>
-                {(activeTab==="all"?historyAll:historyUnread).map((h,i)=>(
-                  <HistoryItem key={i} {...h}/>
-                ))}
-              </div>
-            </div>
-
-            {/* 멘토 코멘트 모음 */}
-            <div style={{ background:C.white, borderRadius:16, padding:"24px", border:`1px solid ${C.border}` }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
-                <h3 style={{ fontSize:16, fontWeight:700, color:C.text }}>멘토 코멘트 모음</h3>
-                <Link to="#" style={{ fontSize:13, color:C.textMuted, textDecoration:"none" }}>전체보기 →</Link>
-              </div>
-
-              {comments.map((c,i)=>(
-                <div key={i} style={{
-                  background:C.bg, borderRadius:12, padding:"16px 18px",
-                  marginBottom: i<comments.length-1?14:0,
+            {/* 탭 */}
+            <div style={{ background: C.white, borderRadius: 16, padding: "4px", boxShadow: C.shadow, marginBottom: 20, display: "flex", gap: 4 }}>
+              {TABS.map(t => (
+                <button key={t.k} onClick={() => setActiveTab(t.k)} style={{
+                  flex: 1, padding: "10px 8px",
+                  background: activeTab === t.k ? C.primaryGrad : "transparent",
+                  color: activeTab === t.k ? C.white : C.textSub,
+                  border: "none", borderRadius: 12,
+                  fontSize: 13, fontWeight: activeTab === t.k ? 700 : 500,
+                  cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  boxShadow: activeTab === t.k ? "0 4px 12px rgba(13,34,64,0.25)" : "none",
                 }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                      <div style={{
-                        width:34, height:34, borderRadius:"50%",
-                        background:c.bg, flexShrink:0,
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontSize:12, fontWeight:700, color:C.white,
-                      }}>{c.initials}</div>
-                      <p style={{ fontSize:14, fontWeight:700, color:C.text }}>{c.name}</p>
-                    </div>
-                    <span style={{ fontSize:12, color:C.textMuted }}>{c.date}</span>
-                  </div>
-                  <p style={{ fontSize:13, color:C.text, lineHeight:1.75, marginBottom:8 }}>{c.text}</p>
-                  <p style={{ fontSize:11, color:C.textMuted }}>{c.session}</p>
-                </div>
+                  {t.l}
+                  {t.count !== undefined && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 99,
+                      background: activeTab === t.k ? "rgba(255,255,255,0.2)" : C.bg,
+                      color: activeTab === t.k ? C.white : C.textMuted,
+                    }}>{t.count}</span>
+                  )}
+                </button>
               ))}
             </div>
+
+            {/* ══ 탭 콘텐츠 — 최소 높이 고정 ══ */}
+            <div style={{ minHeight: 900 }}>
+
+            {/* ══ 대시보드 탭 ══ */}
+            {activeTab === "dashboard" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                {/* 핵심 스탯 4개 */}
+                <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
+                  {[
+                    { label: "총 면접 횟수", value: `${historyAll.length}회`, sub: historyAll.length > 0 ? "면접 완료" : "면접 미완료", icon: "📋" },
+                    { label: "멘토 평점", value: latestMentorScore != null ? `${latestMentorScore}점` : "-", sub: mentorScoreTrend.length >= 2 ? `${firstMentorScore}점 → ${latestMentorScore}점` : "최종 리포트 기준", accent: C.success },
+                    { label: "최근 WPM", value: latestWpm !== "-" ? `${latestWpm}` : "-", sub: "최근 세션 기준", accent: C.primary },
+                    { label: "Fit 충족률", value: hasFitGap ? `${Math.round((fitGap.matched / fitGap.total) * 100)}%` : "-", sub: hasFitGap ? `${fitGap.matched}/${fitGap.total} 충족` : "AI 리포트 기반", accent: C.warning },
+                  ].map((s, i) => (
+                    <div key={i} style={{ background: C.white, borderRadius: 16, padding: "18px 18px", boxShadow: C.shadow }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <p style={{ fontSize: 11, color: C.textMuted }}>{s.label}</p>
+                        {s.icon && <span style={{ fontSize: 16 }}>{s.icon}</span>}
+                      </div>
+                      <p style={{ fontSize: 24, fontWeight: 800, color: s.accent || C.primary, letterSpacing: "-0.04em", marginBottom: 4 }}>{s.value}</p>
+                      <p style={{ fontSize: 11, color: C.textMuted }}>{s.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 최종 리포트 도착 배너 — final이고 아직 안 본 경우만 */}
+                {(() => {
+                  if (!latestSession || latestReport?.report_status !== "final") return null;
+                  const viewed = (() => { try { return JSON.parse(localStorage.getItem("scena_viewed_finals") || "[]"); } catch { return []; } })();
+                  if (viewed.includes(String(latestSession.id))) return null;
+                  const markViewed = () => {
+                    try {
+                      const next = [...new Set([...viewed, String(latestSession.id)])];
+                      localStorage.setItem("scena_viewed_finals", JSON.stringify(next));
+                    } catch {}
+                  };
+                  return (
+                    <div style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #1B4F7A 100%)`, borderRadius: 16, padding: "20px 22px", boxShadow: "0 6px 20px rgba(13,34,64,0.22)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, position: "relative" }}>
+                      {/* X 버튼 */}
+                      <button onClick={markViewed} style={{ position: "absolute", top: 10, right: 12, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 26, height: 26, color: C.white, cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: C.success, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 4px 12px rgba(12,166,120,0.4)" }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                        </div>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, background: C.success, color: "white", padding: "2px 8px", borderRadius: 99 }}>NEW</span>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: C.white, margin: 0 }}>최종 리포트가 도착했어요</p>
+                          </div>
+                          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", margin: 0 }}>
+                            {latestSession.mentor ? `${latestSession.mentor} 멘토` : "멘토"}의 코멘트 + AI 분석이 합쳐진 최종 리포트를 확인하세요
+                          </p>
+                        </div>
+                      </div>
+                      <button onClick={() => { markViewed(); navigate(`/report/final/${latestSession.id}`, { state: { sessionId: latestSession.id, role: "mentee" } }); }} style={{
+                        padding: "10px 20px", borderRadius: 10, border: "none", background: C.success,
+                        color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                        flexShrink: 0, whiteSpace: "nowrap", boxShadow: "0 4px 12px rgba(12,166,120,0.4)", transition: "opacity 0.15s",
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+                        onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                      >지금 확인하기 →</button>
+                    </div>
+                  );
+                })()}
+
+                {/* 레이더 + Fit-Gap */}
+                <div className="chart-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+
+                  <Card>
+                    <CardHeader label="CAPABILITY RADAR" title="역량 종합 분석" sub={hasRadar ? `최근 ${radarDataList.length}회 세션 평균` : "AI 리포트 데이터 없음"} />
+                    {hasRadar ? (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "center" }}>
+                          <RadarChart data={radarData} size={210} />
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, justifyContent: "center" }}>
+                          {radarData.map((d, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <div style={{ width: 6, height: 6, borderRadius: "50%", background: d.value >= 70 ? C.success : d.value >= 50 ? C.warning : C.danger }} />
+                              <span style={{ fontSize: 10, color: C.textSub }}>{d.label} {d.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <EmptyState
+                        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><polygon points="12 2 22 20 2 20"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>}
+                        title="아직 AI 리포트가 없어요"
+                        sub="면접을 완료하면 역량 분석 차트가 표시됩니다"
+                      />
+                    )}
+                  </Card>
+
+                  <Card>
+                    <CardHeader label="FIT-GAP ANALYSIS" title="채용 요구사항 충족도" sub={hasFitGap ? `AI 리포트 기반 · ${latestSession?.title?.slice(0, 14) || "최근 세션"}` : "AI 리포트 기반"} />
+                    {hasFitGap ? (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 16 }}>
+                          <DonutChart matched={fitGap.matched} total={fitGap.total} size={140} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.primary }} />
+                              <span style={{ fontSize: 13, color: C.text }}>충족</span>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: C.primary, marginLeft: "auto" }}>{fitGap.matched}개</span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.danger }} />
+                              <span style={{ fontSize: 13, color: C.text }}>미충족</span>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: C.danger, marginLeft: "auto" }}>{fitGap.missing}개</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <div style={{ background: "#F0FDF4", borderRadius: 10, padding: "10px 12px" }}>
+                            <p style={{ fontSize: 10, fontWeight: 800, color: C.success, marginBottom: 6 }}>충족</p>
+                            {fitMatchedItems.map((it, i) => <p key={i} style={{ fontSize: 11, color: "#3F5F4B", lineHeight: 1.6, marginBottom: 3 }}>✓ {it}</p>)}
+                          </div>
+                          <div style={{ background: "#FFF5F5", borderRadius: 10, padding: "10px 12px" }}>
+                            <p style={{ fontSize: 10, fontWeight: 800, color: C.danger, marginBottom: 6 }}>보완 필요</p>
+                            {fitMissingItems.map((it, i) => <p key={i} style={{ fontSize: 11, color: "#6F4545", lineHeight: 1.6, marginBottom: 3 }}>✗ {it}</p>)}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <EmptyState
+                        icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>}
+                        title="Fit-Gap 데이터 없음"
+                        sub="AI 리포트 생성 후 채용공고 매칭 결과가 표시됩니다"
+                      />
+                    )}
+                  </Card>
+                </div>
+
+                {/* 멘토 평점 추이 — 전체 너비 */}
+                <Card>
+                  <CardHeader label="MENTOR SCORE TREND" title="멘토 최종 평점 추이"
+                    sub={mentorScoreTrend.length >= 2
+                      ? `${mentorScoreTrend[0].ai}점 → ${mentorScoreTrend[mentorScoreTrend.length - 1].ai}점 · ${mentorScoreTrend.length}회`
+                      : mentorScoreTrend.length === 1 ? "최종 리포트 1회 기준"
+                      : "멘토 최종 리포트 완성 후 표시됩니다"}
+                  />
+                  <LineChart sessions={mentorScoreTrend} />
+                </Card>
+              </div>
+            )}
+
+            {/* ══ 신청 이력 탭 ══ */}
+            {activeTab === "reservations" && (
+              <Card>
+                <CardHeader title="멘토 신청 이력" sub="내가 멘토에게 신청한 면접 예약 목록입니다" />
+                {reservations.length > 0 ? (
+                  <div>
+                    {reservations.map((r, i) => <ReservationItem key={r.id || i} r={r} />)}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>}
+                    title="신청 이력이 없어요"
+                    sub="멘토 탐색에서 신청하면 여기에 표시됩니다"
+                  />
+                )}
+                {reservations.length === 0 && (
+                  <div style={{ textAlign: "center", marginTop: 12 }}>
+                    <Link to="/mentor/search" style={{ fontSize: 13, fontWeight: 700, color: C.primary, textDecoration: "none", padding: "10px 24px", borderRadius: 10, background: C.primaryLight, display: "inline-block", transition: "all 0.15s" }}
+                      onMouseEnter={e => { e.currentTarget.style.background = C.primary; e.currentTarget.style.color = C.white; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = C.primaryLight; e.currentTarget.style.color = C.primary; }}
+                    >멘토 탐색하러 가기 →</Link>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {/* ══ 면접 히스토리 탭 ══ */}
+            {activeTab === "history" && (
+              <Card>
+                <CardHeader title="면접 히스토리" sub={`총 ${historyAll.length}회 면접 완료`} />
+                {historyAll.length > 0 ? (
+                  <div>
+                    {historyAll.map((h, i) => <HistoryItem key={i} {...h} navigate={navigate} />)}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5"><rect x="3" y="5" width="16" height="14" rx="2"/><path d="M7 3v4M15 3v4M3 10h16" strokeLinecap="round"/></svg>}
+                    title="완료된 면접이 없어요"
+                    sub="첫 면접을 완료하면 여기에 기록됩니다"
+                  />
+                )}
+              </Card>
+            )}
+
+
+            </div> {/* minHeight 래퍼 닫기 */}
 
           </div>
         </div>
       </main>
+
+      {showEdit && <EditProfileModal
+        onClose={() => setShowEdit(false)}
+        userEmail={user?.email}
+        onImageChange={img => setProfileImage(img)}
+        initialBio={profile?.bio || ""}
+        profile={profile}
+        onNameSaved={(newName) => {
+          const cur = getAuthUser();
+          setAuthUser({ ...cur, name: newName });
+          setProfile(prev => prev ? { ...prev, name: newName } : prev);
+        }}
+        onProfileRefresh={() => getMyProfile().then(setProfile).catch(() => {})}
+      />}
     </>
   );
 }

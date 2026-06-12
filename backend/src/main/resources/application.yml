@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: backend
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+jwt:
+  access-token-expiration: 3600000
+  refresh-token-expiration: 1209600000
+
+ai:
+  server:
+    base-url: ${AI_SERVER_BASE_URL:https://crib-mutilator-uncle.ngrok-free.dev}
+
+oauth:
+  redirect-uri: ${OAUTH_REDIRECT_URI:http://localhost:3000/oauth-callback}
+
+app:
+  callback-base-url: ${CALLBACK_BASE_URL:http://54.116.176.242:8080}
